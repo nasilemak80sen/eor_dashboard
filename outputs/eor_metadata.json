@@ -1,0 +1,81 @@
+{
+  "seed": 42,
+  "MIN_COUNT": 10,
+  "trainable_classes": [
+    "Miscible CO2",
+    "Polymer",
+    "Miscible HC",
+    "Steam",
+    "Combustion"
+  ],
+  "rare_classes": [
+    "Hot water",
+    "Miscible acid gas"
+  ],
+  "numeric_features": [
+    "depth_ft_mid",
+    "porosity_pct_mid",
+    "perm_md_mid",
+    "api_mid",
+    "visc_cp_mid",
+    "so_pct_mid",
+    "depth_ft_span",
+    "porosity_pct_span",
+    "perm_md_span",
+    "api_span",
+    "visc_cp_span",
+    "so_pct_span",
+    "log_perm_mid",
+    "log_visc_mid",
+    "log_perm_span",
+    "log_visc_span"
+  ],
+  "formation_features": [
+    "form_Carbonates",
+    "form_Sandstone",
+    "form_Unconsolidated sands"
+  ],
+  "fuzzy_features": [
+    "fuzzy_Combustion",
+    "fuzzy_Hot water",
+    "fuzzy_Microbial",
+    "fuzzy_Miscible CO2",
+    "fuzzy_Miscible HC",
+    "fuzzy_Miscible acid gas",
+    "fuzzy_Nitrates",
+    "fuzzy_Polymer",
+    "fuzzy_Steam",
+    "fuzzy_Surfactants"
+  ],
+  "FEATURES_ALL": [
+    "depth_ft_mid",
+    "porosity_pct_mid",
+    "perm_md_mid",
+    "api_mid",
+    "visc_cp_mid",
+    "so_pct_mid",
+    "depth_ft_span",
+    "porosity_pct_span",
+    "perm_md_span",
+    "api_span",
+    "visc_cp_span",
+    "so_pct_span",
+    "log_perm_mid",
+    "log_visc_mid",
+    "log_perm_span",
+    "log_visc_span",
+    "form_Carbonates",
+    "form_Sandstone",
+    "form_Unconsolidated sands",
+    "fuzzy_Combustion",
+    "fuzzy_Hot water",
+    "fuzzy_Microbial",
+    "fuzzy_Miscible CO2",
+    "fuzzy_Miscible HC",
+    "fuzzy_Miscible acid gas",
+    "fuzzy_Nitrates",
+    "fuzzy_Polymer",
+    "fuzzy_Steam",
+    "fuzzy_Surfactants"
+  ]
+}
