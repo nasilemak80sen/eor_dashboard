@@ -1,0 +1,190 @@
+{
+  "model_info": {
+    "name": "EOR Screening Neural Network",
+    "version": "1.0.0",
+    "algorithm": "Dense Neural Network",
+    "framework": "TensorFlow/Keras",
+    "created": "2026-09-01"
+  },
+  "training_data": {
+    "source": "Compiled EOR screening database",
+    "size": "TBD",
+    "features": 26,
+    "classes": 7,
+    "class_names": [
+      "ASP",
+      "CO2 WAG",
+      "Hot water",
+      "IWAG",
+      "Miscible acid gas",
+      "Polymer",
+      "Steam"
+    ]
+  },
+  "performance": {
+    "train": {},
+    "validation": {},
+    "test": {
+      "accuracy": 0.14666666666666667,
+      "macro_f1": 0.11779194436395247,
+      "weighted_f1": 0.11953391931485238,
+      "macro_precision": 0.11609285451390716,
+      "weighted_precision": 0.12379855232486814,
+      "macro_recall": 0.15362970362970363,
+      "weighted_recall": 0.14666666666666667
+    }
+  },
+  "technique_performance": {
+    "ASP": {
+      "technique": "ASP",
+      "precision": 0.25,
+      "recall": 0.07692307692307693,
+      "f1": 0.11764705882352941,
+      "support": 13
+    },
+    "CO2 WAG": {
+      "technique": "CO2 WAG",
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 10
+    },
+    "Hot water": {
+      "technique": "Hot water",
+      "precision": 0.09090909090909091,
+      "recall": 0.25,
+      "f1": 0.13333333333333333,
+      "support": 4
+    },
+    "IWAG": {
+      "technique": "IWAG",
+      "precision": 0.16,
+      "recall": 0.26666666666666666,
+      "f1": 0.2,
+      "support": 15
+    },
+    "Miscible acid gas": {
+      "technique": "Miscible acid gas",
+      "precision": 0.15789473684210525,
+      "recall": 0.3,
+      "f1": 0.20689655172413793,
+      "support": 10
+    },
+    "Polymer": {
+      "technique": "Polymer",
+      "precision": 0.15384615384615385,
+      "recall": 0.18181818181818182,
+      "f1": 0.16666666666666666,
+      "support": 11
+    },
+    "Steam": {
+      "technique": "Steam",
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "support": 12
+    }
+  },
+  "confusion_matrix": {
+    "matrix": [
+      [
+        1,
+        0,
+        4,
+        3,
+        5,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        3,
+        2,
+        2,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        2,
+        4,
+        5,
+        4,
+        0
+      ],
+      [
+        0,
+        2,
+        0,
+        4,
+        3,
+        1,
+        0
+      ],
+      [
+        1,
+        0,
+        0,
+        7,
+        1,
+        2,
+        0
+      ],
+      [
+        1,
+        0,
+        1,
+        4,
+        2,
+        4,
+        0
+      ]
+    ],
+    "classes": [
+      "ASP",
+      "CO2 WAG",
+      "Hot water",
+      "IWAG",
+      "Miscible acid gas",
+      "Polymer",
+      "Steam"
+    ],
+    "interpretation": {
+      "total_samples": 75,
+      "diagonal_sum": 11,
+      "high_confusion_classes": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ]
+    }
+  },
+  "limitations": [
+    "Model trained on limited dataset",
+    "Performance varies by formation type",
+    "Requires valid fuzzy envelope data",
+    "Should be calibrated on new reservoir types"
+  ],
+  "recommendations": [
+    "Use model confidence thresholds >= 0.60",
+    "Always validate against engineering rules",
+    "Update model with new screening cases quarterly",
+    "Monitor performance metrics in production",
+    "Consider retraining if accuracy drops below 80%"
+  ]
+}
