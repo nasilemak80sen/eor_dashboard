@@ -1,18 +1,4 @@
-Absolutely. I looked at the current repository rather than writing a generic README. The repo is public, currently Python-based, and already contains the modular `src/` architecture, EOR screening workbook, ML/fuzzy documentation, database, and implementation notes.
-
-One thing I would **not** do is market this as "production-ready AI for EOR." Your own review has already identified important gaps around data completeness, engineering-rule validation, fuzzy scoring, ML validation, and governance. The stronger portfolio story is:
-
-> **An engineering decision-support platform that combines deterministic EOR screening, fuzzy expert knowledge, and machine learning — built from a legacy Excel/Power BI workflow toward a governed Python application.**
-
-That is actually a much more impressive engineering story.
-
-Also, one serious point before you make the repository highly visible: **the repo is public and currently contains `EOR_Screening_Tool_2026.xlsx` and EOR-related PDFs.**  If any of those contain PETRONAS-confidential, proprietary, internal, or copyrighted material, don't use the public repo as-is. Replace them with sanitized/sample datasets before promoting it on LinkedIn or your CV.
-
-Here is the README I would use.
-
----
-
-# Recommended `README.md`
+# `README.md`
 
 ````markdown
 # EOR Atlas — Enhanced Oil Recovery Screening & Decision Support Platform
