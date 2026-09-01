@@ -12,7 +12,6 @@ Phase 0-2 Implementation:
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
 import json
 from pathlib import Path
 
@@ -548,177 +547,6 @@ def display_recommendation_section(result):
     
     st.info(f"**Mode:** {result.mode} | **Strategy:** {reasoning.get('strategy', 'N/A')}")
 
-@st.cache_data
-def load_field_map():
-    """
-    Load and normalize field coordinate data.
-
-    Expected logical fields:
-        Field
-        Latitude
-        Longitude
-
-    Additional columns are preserved for EOR visualization.
-    """
-
-    path = settings.data_dir / "field_map.xlsx"
-
-    if not path.exists():
-        raise FileNotFoundError(
-            f"Field map dataset not found: {path}"
-        )
-
-    df = pd.read_excel(path)
-
-    # Normalize column names
-    df.columns = (
-        df.columns
-        .astype(str)
-        .str.strip()
-        .str.lower()
-        .str.replace(" ", "_")
-        .str.replace("-", "_")
-    )
-
-    # Flexible column matching
-    column_aliases = {
-        "field": [
-            "field",
-            "field_name",
-            "fieldname",
-        ],
-        "latitude": [
-            "latitude",
-            "lat",
-        ],
-        "longitude": [
-            "longitude",
-            "lon",
-            "lng",
-        ],
-    }
-
-    resolved = {}
-
-    for logical_name, aliases in column_aliases.items():
-
-        for alias in aliases:
-            if alias in df.columns:
-                resolved[logical_name] = alias
-                break
-
-    missing = [
-        name
-        for name in ["field", "latitude", "longitude"]
-        if name not in resolved
-    ]
-
-    if missing:
-        raise ValueError(
-            f"Field map is missing required columns: {missing}. "
-            f"Available columns: {list(df.columns)}"
-        )
-
-    df = df.rename(
-        columns={
-            resolved["field"]: "Field",
-            resolved["latitude"]: "Latitude",
-            resolved["longitude"]: "Longitude",
-        }
-    )
-
-    # Convert coordinates to numeric
-    df["Latitude"] = pd.to_numeric(
-        df["Latitude"],
-        errors="coerce",
-    )
-
-    df["Longitude"] = pd.to_numeric(
-        df["Longitude"],
-        errors="coerce",
-    )
-
-    # Remove invalid coordinates
-    df = df.dropna(
-        subset=[
-            "Field",
-            "Latitude",
-            "Longitude",
-        ]
-    ).copy()
-
-    # Malaysia / regional coordinate sanity check
-    df = df[
-        df["Latitude"].between(-90, 90)
-        & df["Longitude"].between(-180, 180)
-    ]
-
-    return df
-
-def render_field_opportunity_map():
-
-    st.subheader("🗺️ Field Opportunity Map")
-    st.caption(
-        "Geographical distribution of EOR fields and screening opportunities"
-    )
-
-    try:
-        map_df = load_field_map()
-
-    except Exception as exc:
-        st.error(
-            f"Unable to load field map: {exc}"
-        )
-        return
-
-    if map_df.empty:
-        st.warning(
-            "No valid field coordinates were found."
-        )
-        return
-
-    # Default opportunity attributes
-    if "EOR_Status" not in map_df.columns:
-        map_df["EOR_Status"] = "Field"
-
-    if "RF_Gap" not in map_df.columns:
-        map_df["RF_Gap"] = 0
-
-    # Create map
-    fig = px.scatter_map(
-        map_df,
-        lat="Latitude",
-        lon="Longitude",
-        hover_name="Field",
-        hover_data=[
-            column
-            for column in [
-                "EOR_Status",
-                "RF_Gap",
-            ]
-            if column in map_df.columns
-        ],
-        color="EOR_Status",
-        size="RF_Gap" if map_df["RF_Gap"].sum() > 0 else None,
-        zoom=4.5,
-        height=550,
-    )
-
-    fig.update_layout(
-        map_style="open-street-map",
-        margin={
-            "l": 0,
-            "r": 0,
-            "t": 0,
-            "b": 0,
-        },
-        legend_title_text="EOR Status",
-    )
-
-    st.plotly_chart(
-        fig,
-        width="stretch",
-    )
 
 def render_executive_overview_section():
     """Executive overview aligned to the PDF portfolio dashboard."""
@@ -736,8 +564,39 @@ def render_executive_overview_section():
                 unsafe_allow_html=True,
             )
 
-    render_field_opportunity_map()
-    
+    map_df = pd.DataFrame(
+        {
+            "Field": ["Angsi", "Barton", "Dulang", "Tapis", "Baram"],
+            "Latitude": [4.3, 4.1, 3.9, 3.8, 5.0],
+            "Longitude": [103.1, 103.3, 103.6, 103.2, 112.0],
+            "EOR_Status": ["Candidate", "Multiple", "Historical", "Candidate", "Historical"],
+            "RF_Gap": [120, 95, 80, 66, 105],
+        }
+    )
+
+    st.subheader("Field Opportunity Map")
+    if pdk is not None:
+        st.pydeck_chart(
+            pdk.Deck(
+                map_style="mapbox://styles/mapbox/light-v9",
+                initial_view_state=pdk.ViewState(latitude=4.3, longitude=103.4, zoom=5, pitch=30),
+                layers=[
+                    pdk.Layer(
+                        "ScatterplotLayer",
+                        data=map_df,
+                        get_position="[Longitude, Latitude]",
+                        get_color=[255, 120, 60, 200],
+                        get_radius="RF_Gap",
+                        pickable=True,
+                    )
+                ],
+            )
+        )
+    else:
+        st.map(map_df[["Latitude", "Longitude"]])
+
+    st.subheader("Portfolio Summary Table")
+    st.dataframe(map_df, width="stretch")
 
 
 def render_eor_screening_tab(services):
