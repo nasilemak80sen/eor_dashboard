@@ -32,7 +32,7 @@ import joblib
 from ml.feature_engineering import FeaturePipeline, DataPreprocessor
 from ml.model_assessment import ModelAssessment, CalibrationAnalysis
 from ml.model_versioning import ModelVersionTracker
-from config.settings import settings
+from EORWEBDEV.src.tests.settings import settings
 from utils.logging_config import logger
 
 # Set random seeds for reproducibility

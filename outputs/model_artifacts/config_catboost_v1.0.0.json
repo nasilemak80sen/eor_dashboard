@@ -1,0 +1,65 @@
+{
+  "model_name": "EOR CatBoost",
+  "version": "1.0.0",
+  "algorithm": "CatBoostClassifier",
+  "framework": "CatBoost",
+  "pipeline": [
+    "CatBoostClassifier"
+  ],
+  "input_schema_version": "EOR_ATLAS_ML_V2",
+  "feature_count": 17,
+  "feature_names": [
+    "depth_mid_ft",
+    "depth_span_ft",
+    "porosity_mid_pct",
+    "porosity_span_pct",
+    "perm_mid_md",
+    "perm_span_md",
+    "api_mid",
+    "api_span",
+    "visc_mid_cp",
+    "visc_span_cp",
+    "so_mid_pct",
+    "so_span_pct",
+    "log10_perm_mid",
+    "log10_visc_mid",
+    "formation_sandstone",
+    "formation_carbonates",
+    "formation_unconsolidated_sands"
+  ],
+  "classes": [
+    "Combustion",
+    "HC immiscible",
+    "Hot water",
+    "Miscible CO2",
+    "Miscible HC",
+    "Miscible acid gas",
+    "Nitrogen immiscible",
+    "Polymer",
+    "Steam"
+  ],
+  "training_rows": 526,
+  "training_source": {
+    "path": "c:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\src\\notebooks\\ml_data\\OGJ2014_extracted_vs_Table1.xlsx",
+    "sheet": "OGJ2014_Extracted_Rows",
+    "rows": 624,
+    "columns": 15,
+    "target_column": "technique",
+    "formation_column": "formation_category",
+    "range_column_hits": 12
+  },
+  "fuzzy_used_as_model_feature": false,
+  "selected_from_benchmark": true,
+  "exported_at": "2026-09-02T16:37:49.229738",
+  "catboost": {
+    "iterations": null,
+    "depth": null,
+    "learning_rate": null,
+    "loss_function": null,
+    "eval_metric": null,
+    "random_seed": 56,
+    "l2_leaf_reg": 1,
+    "random_strength": null,
+    "border_count": null
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "model_name": "EOR CatBoost",
+  "algorithm": "CatBoostClassifier",
+  "model_path": "c:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\outputs\\model_artifacts\\eor_catboost_v1.0.0.joblib",
+  "encoder_path": "c:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\outputs\\model_artifacts\\label_encoder_catboost_v1.0.0.joblib",
+  "config_path": "c:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\outputs\\model_artifacts\\config_catboost_v1.0.0.json",
+  "feature_count": 17,
+  "class_count": 9,
+  "created": "2026-09-02T16:37:58.765197"
+}

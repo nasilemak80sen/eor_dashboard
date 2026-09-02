@@ -1,284 +1,431 @@
 """
 Production ML inference service for EOR Atlas.
 
-Supports the exported research KNN classifier.
+Active model:
+    CatBoostClassifier
 
-Architecture:
-    dashboard inputs
-        ↓
-    deterministic feature builder
-        ↓
-    persisted scaler
-        ↓
-    persisted KNN model
-        ↓
-    class probabilities
-        ↓
-    Top-N EOR techniques
+Responsibilities:
+    - Load persisted CatBoost model
+    - Load label encoder
+    - Load model configuration
+    - Build the exact feature vector expected by research pipeline
+    - Run probability inference
+    - Return Top-N EOR techniques
 
-Important:
-- This service does NOT decide engineering feasibility.
-- This service does NOT replace Excel screening.
-- This service does NOT combine ML and fuzzy scores.
+Important architecture rule:
+
+    Excel Screening != Fuzzy Engine != CatBoost
+
+This service does NOT:
+    - determine engineering feasibility
+    - modify Excel screening results
+    - combine fuzzy and ML scores
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 import joblib
 import numpy as np
-
-from config.settings import settings
 from utils.logging_config import logger
-
+from config.settings import settings
 
 class ModelService:
-    """Production inference service for the exported EOR ML model."""
+    """Production inference service for EOR CatBoost model."""
 
     def __init__(self) -> None:
         self.model = None
-        self.scaler = None
         self.label_encoder = None
         self.config: Dict[str, Any] = {}
         self._loaded = False
 
-    # ------------------------------------------------------------------
-    # MODEL LOADING
-    # ------------------------------------------------------------------
+    # ============================================================
+    # LOAD
+    # ============================================================
 
     def load(self) -> bool:
-        """Load persisted KNN model and supporting artifacts."""
+        """Load CatBoost model and supporting artifacts."""
 
         try:
-            logger.info("Loading EOR ML artifacts...")
+            logger.info("Loading EOR CatBoost artifacts...")
 
             model_path = Path(settings.model_path)
-            scaler_path = Path(settings.scaler_path)
-            label_encoder_path = Path(settings.label_encoder_path)
+            encoder_path = Path(settings.label_encoder_path)
+            config_path = Path(settings.config_path)
 
             logger.info("Model: %s", model_path)
-            logger.info("Scaler: %s", scaler_path)
-            logger.info("Label encoder: %s", label_encoder_path)
+            logger.info("Encoder: %s", encoder_path)
+            logger.info("Config: %s", config_path)
+
+            # ----------------------------------------------------
+            # Validate paths
+            # ----------------------------------------------------
 
             if not model_path.exists():
                 raise FileNotFoundError(
-                    f"KNN model not found: {model_path}"
+                    f"CatBoost model not found: {model_path}"
                 )
 
-            if not scaler_path.exists():
+            if not encoder_path.exists():
                 raise FileNotFoundError(
-                    f"Scaler not found: {scaler_path}"
+                    f"Label encoder not found: {encoder_path}"
                 )
 
-            if not label_encoder_path.exists():
+            if not config_path.exists():
                 raise FileNotFoundError(
-                    f"Label encoder not found: {label_encoder_path}"
+                    f"CatBoost config not found: {config_path}"
                 )
+
+            # ----------------------------------------------------
+            # Load artifacts
+            # ----------------------------------------------------
 
             self.model = joblib.load(model_path)
-            self.scaler = joblib.load(scaler_path)
-            self.label_encoder = joblib.load(label_encoder_path)
 
-            # Configuration is optional but strongly recommended.
-            self.config = dict(
-                getattr(settings, "ml_config", {}) or {}
+            self.label_encoder = joblib.load(
+                encoder_path
             )
+
+            with open(
+                config_path,
+                "r",
+                encoding="utf-8",
+            ) as f:
+                import json
+                self.config = json.load(f)
+
+            # ----------------------------------------------------
+            # Validate compatibility
+            # ----------------------------------------------------
 
             self._validate_artifacts()
 
             self._loaded = True
 
             logger.info(
-                "EOR ML model loaded successfully: %s",
-                type(self.model).__name__,
+                "CatBoost model loaded successfully."
             )
 
             return True
 
         except Exception as exc:
+
             logger.exception(
-                "Failed to load EOR ML artifacts: %s",
+                "Failed to load CatBoost artifacts: %s",
                 exc,
             )
 
             self._loaded = False
+
             return False
 
-    # ------------------------------------------------------------------
+    # ============================================================
     # VALIDATION
-    # ------------------------------------------------------------------
+    # ============================================================
 
     def _validate_artifacts(self) -> None:
-        """Validate compatibility of persisted ML artifacts."""
+        """Validate persisted CatBoost artifacts."""
 
         if self.model is None:
-            raise ValueError("Model is None.")
-
-        if self.scaler is None:
-            raise ValueError("Scaler is None.")
+            raise ValueError(
+                "CatBoost model is None."
+            )
 
         if self.label_encoder is None:
-            raise ValueError("Label encoder is None.")
+            raise ValueError(
+                "Label encoder is None."
+            )
 
-        # Verify scaler feature count where available.
-        scaler_features = getattr(
-            self.scaler,
+        # --------------------------------------------------------
+        # Model type
+        # --------------------------------------------------------
+
+        model_type = type(self.model).__name__
+
+        if model_type != "CatBoostClassifier":
+            raise ValueError(
+                "Expected CatBoostClassifier, "
+                f"received {model_type}."
+            )
+
+        # --------------------------------------------------------
+        # Probability support
+        # --------------------------------------------------------
+
+        if not hasattr(
+            self.model,
+            "predict_proba",
+        ):
+            raise ValueError(
+                "CatBoost model does not support "
+                "predict_proba()."
+            )
+
+        # --------------------------------------------------------
+        # Feature count
+        # --------------------------------------------------------
+
+        expected_features = self.config.get(
+            "feature_count"
+        )
+
+        actual_features = getattr(
+            self.model,
             "n_features_in_",
             None,
         )
 
-        if scaler_features is not None:
-            logger.info(
-                "Scaler expects %s features.",
-                scaler_features,
-            )
-
-        # KNN should expose classes_.
-        model_classes = getattr(
-            self.model,
-            "classes_",
-            None,
+        logger.info(
+            "Configured feature count: %s",
+            expected_features,
         )
 
-        if model_classes is None:
+        logger.info(
+            "Model feature count: %s",
+            actual_features,
+        )
+
+        if (
+            expected_features is not None
+            and actual_features is not None
+            and int(expected_features)
+            != int(actual_features)
+        ):
             raise ValueError(
-                "Loaded model does not expose classes_. "
-                "Expected a fitted sklearn classifier."
+                "CatBoost feature-count mismatch: "
+                f"config={expected_features}, "
+                f"model={actual_features}"
+            )
+
+        # --------------------------------------------------------
+        # Class validation
+        # --------------------------------------------------------
+
+        configured_classes = self.config.get(
+            "classes",
+            [],
+        )
+
+        encoder_classes = list(
+            self.label_encoder.classes_
+        )
+
+        logger.info(
+            "Configured classes: %s",
+            configured_classes,
+        )
+
+        logger.info(
+            "Encoder classes: %s",
+            encoder_classes,
+        )
+
+        if (
+            configured_classes
+            and configured_classes != encoder_classes
+        ):
+            raise ValueError(
+                "Configuration classes do not match "
+                "label encoder classes."
+            )
+
+        # --------------------------------------------------------
+        # Feature-name validation
+        # --------------------------------------------------------
+
+        feature_names = self.config.get(
+            "feature_names",
+            [],
+        )
+
+        if not feature_names:
+            logger.warning(
+                "No feature_names found in CatBoost config."
             )
 
         logger.info(
-            "Model classes: %s",
-            list(model_classes),
+            "CatBoost artifact validation passed."
         )
 
-        logger.info(
-            "Label encoder classes: %s",
-            list(self.label_encoder.classes_),
-        )
-
-    # ------------------------------------------------------------------
+    # ============================================================
     # STATUS
-    # ------------------------------------------------------------------
+    # ============================================================
 
     def is_loaded(self) -> bool:
-        """Return whether the model is ready for inference."""
+        """Return whether the CatBoost service is ready."""
 
         return self._loaded
 
-    # ------------------------------------------------------------------
+    # ============================================================
     # FEATURE ENGINEERING
-    # ------------------------------------------------------------------
+    # ============================================================
 
     def build_features(
         self,
         values: Dict[str, float],
         formation: str,
-        techs_all: Sequence[str],
-        fuzzy_scores: Optional[Dict[str, float]] = None,
     ) -> np.ndarray:
         """
-        Build the exact feature vector expected by the research model.
+        Build the 17-feature vector used by the research pipeline.
 
-        IMPORTANT:
-        This must remain aligned with the notebook training pipeline.
+        Feature layout:
+
+            1-6:
+                depth
+                porosity
+                permeability
+                API
+                viscosity
+                oil saturation
+
+            7-12:
+                uncertainty spans
+
+            13-14:
+                log permeability
+                log viscosity
+
+            15-17:
+                formation one-hot
         """
 
-        fuzzy_scores = fuzzy_scores or {}
+        # --------------------------------------------------------
+        # Required inputs
+        # --------------------------------------------------------
 
-        depth_mid = float(values["depth_ft"])
-        por_mid = float(values["porosity_pct"])
-        perm_mid = float(values["perm_md"])
-        api_mid = float(values["api"])
-        visc_mid = float(values["visc_cp"])
-        so_mid = float(values["so_pct"])
+        depth = float(
+            values["depth_ft"]
+        )
 
-        # --------------------------------------------------------------
-        # Uncertainty spans
-        # --------------------------------------------------------------
+        porosity = float(
+            values["porosity_pct"]
+        )
+
+        permeability = float(
+            values["perm_md"]
+        )
+
+        api = float(
+            values["api"]
+        )
+
+        viscosity = float(
+            values["visc_cp"]
+        )
+
+        oil_saturation = float(
+            values["so_pct"]
+        )
+
+        # --------------------------------------------------------
+        # Point-estimate spans
+        #
+        # Current dashboard provides point values rather than
+        # uncertainty ranges, so spans are zero.
+        # --------------------------------------------------------
+
         depth_span = 0.0
-        por_span = 0.0
-        perm_span = 0.0
+        porosity_span = 0.0
+        permeability_span = 0.0
         api_span = 0.0
-        visc_span = 0.0
-        so_span = 0.0
+        viscosity_span = 0.0
+        oil_saturation_span = 0.0
+
+        # --------------------------------------------------------
+        # Log features
+        # --------------------------------------------------------
 
         eps = 1e-6
 
-        numeric = np.array(
-            [
-                depth_mid,
-                por_mid,
-                perm_mid,
-                api_mid,
-                visc_mid,
-                so_mid,
-
-                depth_span,
-                por_span,
-                perm_span,
-                api_span,
-                visc_span,
-                so_span,
-
-                np.log10(max(perm_mid, 0.0) + eps),
-                np.log10(max(visc_mid, 0.0) + eps),
-                np.log10(perm_span + 1.0 + eps),
-                np.log10(visc_span + 1.0 + eps),
-            ],
-            dtype=float,
+        log_permeability = np.log10(
+            max(permeability, 0.0) + eps
         )
 
-        # --------------------------------------------------------------
-        # Formation one-hot
-        # --------------------------------------------------------------
+        log_viscosity = np.log10(
+            max(viscosity, 0.0) + eps
+        )
+
+        # --------------------------------------------------------
+        # Formation encoding
+        # --------------------------------------------------------
+
         formation_names = [
             "Sandstone",
             "Carbonates",
             "Unconsolidated sands",
         ]
 
-        formation_onehot = np.array(
+        formation_onehot = [
+            1.0 if formation == name else 0.0
+            for name in formation_names
+        ]
+
+        # --------------------------------------------------------
+        # Final feature vector
+        # --------------------------------------------------------
+
+        features = np.array(
             [
-                1.0 if formation == name else 0.0
-                for name in formation_names
+                depth,
+                porosity,
+                permeability,
+                api,
+                viscosity,
+                oil_saturation,
+
+                depth_span,
+                porosity_span,
+                permeability_span,
+                api_span,
+                viscosity_span,
+                oil_saturation_span,
+
+                log_permeability,
+                log_viscosity,
+
+                *formation_onehot,
             ],
             dtype=float,
         )
 
-        # --------------------------------------------------------------
-        # Fuzzy features
-        # --------------------------------------------------------------
-        fuzzy_vector = np.array(
-            [
-                float(fuzzy_scores.get(technique, 0.0))
-                for technique in techs_all
-            ],
-            dtype=float,
+        # --------------------------------------------------------
+        # Validate count
+        # --------------------------------------------------------
+
+        expected = self.config.get(
+            "feature_count",
+            len(features),
         )
 
-        features = np.concatenate(
-            [
-                numeric,
-                formation_onehot,
-                fuzzy_vector,
-            ]
-        )
+        if len(features) != int(expected):
+            raise ValueError(
+                "Feature engineering produced "
+                f"{len(features)} features, "
+                f"but model expects {expected}."
+            )
 
         return features
 
-    # ------------------------------------------------------------------
-    # PREDICTION
-    # ------------------------------------------------------------------
+    # ============================================================
+    # PREDICT
+    # ============================================================
 
     def predict(
         self,
         features: np.ndarray,
         top_n: int = 3,
-    ) -> Tuple[np.ndarray, List[Tuple[str, float]]]:
+    ) -> Tuple[
+        np.ndarray,
+        List[Tuple[str, float]],
+    ]:
         """
-        Run inference and return probabilities + Top-N predictions.
+        Run CatBoost probability inference.
+
+        Returns:
+            probabilities,
+            ranked Top-N predictions
         """
 
         if not self._loaded:
@@ -291,104 +438,102 @@ class ModelService:
             dtype=float,
         ).reshape(1, -1)
 
-        expected_features = getattr(
-            self.scaler,
-            "n_features_in_",
-            None,
+        expected = self.config.get(
+            "feature_count"
         )
 
         if (
-            expected_features is not None
-            and features.shape[1] != expected_features
+            expected is not None
+            and features.shape[1]
+            != int(expected)
         ):
             raise ValueError(
                 "Feature mismatch: "
-                f"model expects {expected_features}, "
-                f"but received {features.shape[1]}."
+                f"expected {expected}, "
+                f"received {features.shape[1]}."
             )
 
-        # --------------------------------------------------------------
-        # Scaling
-        # --------------------------------------------------------------
-        scaled_features = self.scaler.transform(
+        # --------------------------------------------------------
+        # CatBoost probability prediction
+        # --------------------------------------------------------
+
+        probabilities = self.model.predict_proba(
             features
         )
-
-        # --------------------------------------------------------------
-        # Probability prediction
-        # --------------------------------------------------------------
-        probabilities = self.model.predict_proba(
-            scaled_features
-        )[0]
 
         probabilities = np.asarray(
             probabilities,
             dtype=float,
-        )
+        )[0]
 
-        # --------------------------------------------------------------
-        # IMPORTANT:
-        # sklearn probability columns correspond to model.classes_,
-        # NOT necessarily label_encoder indices.
-        # --------------------------------------------------------------
-        model_class_ids = np.asarray(
+        # --------------------------------------------------------
+        # CatBoost class IDs
+        # --------------------------------------------------------
+
+        model_classes = np.asarray(
             self.model.classes_
         )
 
+        # --------------------------------------------------------
+        # Rank
+        # --------------------------------------------------------
+
         ranking_indices = np.argsort(
             probabilities
-        )[::-1]
+        )[::-1][:top_n]
 
-        ranking_indices = ranking_indices[:top_n]
+        top_predictions: List[
+            Tuple[str, float]
+        ] = []
 
-        top_predictions: List[Tuple[str, float]] = []
+        for index in ranking_indices:
 
-        for idx in ranking_indices:
+            class_id = model_classes[index]
 
-            class_id = model_class_ids[idx]
+            label = self.label_encoder.inverse_transform(
+                [class_id]
+            )[0]
 
-            try:
-                label = self.label_encoder.inverse_transform(
-                    [class_id]
-                )[0]
-            except Exception:
-                label = str(class_id)
+            probability = float(
+                probabilities[index]
+            )
 
             top_predictions.append(
                 (
                     str(label),
-                    float(probabilities[idx]),
+                    probability,
                 )
             )
 
-        return probabilities, top_predictions
+        return (
+            probabilities,
+            top_predictions,
+        )
 
-    # ------------------------------------------------------------------
-    # CONVENIENCE API
-    # ------------------------------------------------------------------
+    # ============================================================
+    # HIGH-LEVEL API
+    # ============================================================
 
     def predict_from_inputs(
         self,
         values: Dict[str, float],
         formation: str,
-        techs_all: Sequence[str],
-        fuzzy_scores: Optional[Dict[str, float]] = None,
         top_n: int = 3,
     ) -> Dict[str, Any]:
         """
-        Build features and predict in one call.
+        Build features and return CatBoost predictions.
         """
 
         features = self.build_features(
             values=values,
             formation=formation,
-            techs_all=techs_all,
-            fuzzy_scores=fuzzy_scores,
         )
 
-        probabilities, top_predictions = self.predict(
-            features=features,
-            top_n=top_n,
+        probabilities, top_predictions = (
+            self.predict(
+                features=features,
+                top_n=top_n,
+            )
         )
 
         return {
@@ -397,12 +542,14 @@ class ModelService:
             "features": features,
         }
 
-    # ------------------------------------------------------------------
-    # MODEL INFORMATION
-    # ------------------------------------------------------------------
+    # ============================================================
+    # MODEL INFO
+    # ============================================================
 
-    def get_model_info(self) -> Dict[str, Any]:
-        """Return production model metadata."""
+    def get_model_info(
+        self,
+    ) -> Dict[str, Any]:
+        """Return model metadata for UI/logging."""
 
         if not self._loaded:
             return {
@@ -412,35 +559,40 @@ class ModelService:
 
         return {
             "loaded": True,
-            "model_type": type(self.model).__name__,
+
             "model_name": self.config.get(
                 "model_name",
-                "EOR KNN",
+                "EOR CatBoost",
             ),
-            "num_classes": len(
-                self.label_encoder.classes_
+
+            "version": self.config.get(
+                "version",
+                "1.0.0",
             ),
+
+            "model_type": type(
+                self.model
+            ).__name__,
+
+            "algorithm": self.config.get(
+                "algorithm",
+                "CatBoostClassifier",
+            ),
+
+            "feature_count": self.config.get(
+                "feature_count"
+            ),
+
             "classes": list(
                 self.label_encoder.classes_
             ),
-            "feature_count": getattr(
-                self.scaler,
-                "n_features_in_",
-                None,
+
+            "class_count": len(
+                self.label_encoder.classes_
             ),
-            "n_neighbors": getattr(
-                self.model,
-                "n_neighbors",
-                None,
-            ),
-            "weights": getattr(
-                self.model,
-                "weights",
-                None,
-            ),
-            "metric": getattr(
-                self.model,
-                "metric",
-                None,
+
+            "catboost": self.config.get(
+                "catboost",
+                {},
             ),
         }

@@ -39,12 +39,12 @@ except Exception:  # pragma: no cover - optional dependency
 # EXISTING APPLICATION SERVICES
 # =============================================================================
 
-from config.settings import settings
+from EORWEBDEV.src.tests.settings import settings
 from utils.logging_config import logger
 from utils.validators import InputValidator
 from domain.fuzzy_engine import FuzzyEngine
 from domain.rule_engine import EligibilityStatus
-from ml.model_service import ModelService
+from EORWEBDEV.src.tests.model_service import ModelService
 from data.repositories import EnvelopeRepository, WorkbookRepository
 from data.queries import RepositoryFactory
 
@@ -361,6 +361,7 @@ def initialize_services() -> Optional[Dict[str, Any]]:
         )
 
         model_service = ModelService()
+        model_loaded = model_service.load()
 
         if not model_service.load():
             logger.warning(
@@ -374,6 +375,7 @@ def initialize_services() -> Optional[Dict[str, Any]]:
             "env": env,
             "techs_all": techs_all,
             "workbook_sheets": workbook_sheets,
+            "model_loaded":model_loaded,
         }
 
     except Exception:
@@ -2466,6 +2468,10 @@ def main() -> None:
         )
 
     services = initialize_services()
+
+    fuzzy_engine = services["fuzzy_engine"]
+    model_service = services["model_service"]
+    techs_all = services["techs_all"]
 
     if services is None:
         st.error(

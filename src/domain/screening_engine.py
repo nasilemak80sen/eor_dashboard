@@ -10,7 +10,7 @@ from enum import Enum
 
 from domain.fuzzy_engine import FuzzyEngine
 from domain.rule_engine import RuleEngine, EligibilityStatus
-from ml.model_service import ModelService
+from EORWEBDEV.src.tests.model_service import ModelService
 from data.queries import ScreeningRepository, AuditRepository
 from utils.validators import InputValidator, ValidationStatus
 from utils.logging_config import logger

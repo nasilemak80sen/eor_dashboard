@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 
-class Settings:
+class settings:
     """EOR Atlas application settings."""
     
     def __init__(self):
@@ -23,11 +23,32 @@ class Settings:
         self.data_dir = self.root_dir / "data"
         self.workbook_path = self.root_dir / "EOR_Screening_Tool_2026.xlsx"
         
-        # KNN production candidate
-        self.model_path = (self.model_dir / "eor_research_best.joblib")
-        self.scaler_path = (self.model_dir / "scaler_v1.0.0.joblib")
-        self.label_encoder_path = (self.model_dir / "label_encoder_v1.0.0.joblib")
-        self.config_path = (self.model_dir / "config_v1.0.0.json")
+        # ============================================================
+        # ACTIVE ML MODEL
+        # ============================================================
+
+        self.model_name = "EOR CatBoost"
+        self.model_version = "1.0.0"
+
+        self.model_path = (
+            self.model_dir
+            / "eor_catboost_v1.0.0.joblib"
+        )
+
+        self.label_encoder_path = (
+            self.model_dir
+            / "label_encoder_catboost_v1.0.0.joblib"
+        )
+
+        self.config_path = (
+            self.model_dir
+            / "config_catboost_v1.0.0.json"
+        )
+
+        self.model_manifest_path = (
+            self.model_dir
+            / "model_manifest_catboost_v1.0.0.json"
+        )
         
         # Data paths
         self.ranges_path = self.data_dir / "NeuroFuzzy_EOR_Extracted_Tables.xlsx"
@@ -67,8 +88,8 @@ class Settings:
                     return json.load(f)
             except Exception as e:
                 print(f"Warning: Could not load ML config from {self.config_path}: {e}")
-                return {"alpha": 0.30, "model_name": "NN_alpha_0.3"}
-        return {"alpha": 0.30, "model_name": "NN_alpha_0.3"}
+                return {"model_name":self.model_name, "version": self.model_version}
+        return {"model_name":self.model_name, "version": self.model_version}
     
     def update_ml_config(self, config: Dict[str, Any]) -> None:
         """Update and persist ML configuration."""
@@ -97,4 +118,4 @@ class Settings:
 
 
 # Global settings instance
-settings = Settings()
+settings = settings()
