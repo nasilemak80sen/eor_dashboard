@@ -16,8 +16,6 @@ except Exception:
 from config.settings import settings
 from utils.logging_config import logger
 from domain.fuzzy_engine import FuzzyEngine
-from domain.rule_engine import RuleEngine
-from domain.decision import reconcile_prediction
 from data.repositories import EnvelopeRepository, WorkbookRepository
 from data.queries import RepositoryFactory
 from ml.model_service import ModelService
@@ -232,7 +230,7 @@ def initialize_services() -> Optional[Dict[str, Any]]:
         )
 
         model_service = ModelService()
-        model_loaded = model_service.is_loaded()
+        model_loaded = model_service.load()
 
         return {
             "env": env,
@@ -241,7 +239,6 @@ def initialize_services() -> Optional[Dict[str, Any]]:
             "fuzzy_engine": fuzzy_engine,
             "model_service": model_service,
             "model_loaded": model_loaded,
-            "rule_engine": RuleEngine(),
         }
 
     except Exception:
@@ -1604,45 +1601,40 @@ def run_eor_intelligence(
 
     ml_top3 = []
     ml_probabilities = {}
-    ml_result = None
-    engineering_assessment = None
 
     if model_service.is_loaded():
-        reservoir = {
-            "depth_min_ft": values["depth_ft"],
-            "porosity_min_pct": values["porosity_pct"],
-            "perm_min_md": values["perm_md"],
-            "api_min": values["api"],
-            "visc_min_cp": values["visc_cp"],
-            "so_min_pct": values["so_pct"],
-        }
-        reservoir.update({
-            key.replace("_min_", "_max_"): value
-            for key, value in reservoir.items()
-        })
-        reservoir["formation_category"] = (
-            "Carbonates" if formation == "Carbonate" else formation
+        ml_result = (
+            model_service.predict_from_inputs(
+                values=values,
+                formation=formation,
+                top_n=3,
+            )
         )
-        ml_result = model_service.predict(reservoir)
-        ml_top3 = [
-            (candidate.technique, candidate.probability)
-            for candidate in ml_result.top_n(3)
-        ]
-        ml_probabilities = {
-            candidate.technique: candidate.probability
-            for candidate in ml_result.candidates
-        }
 
-        rule_engine = services["rule_engine"]
-        eligibility = rule_engine.evaluate_all(
-            list(ml_probabilities),
-            values,
+        ml_top3 = ml_result[
+            "top_predictions"
+        ]
+
+        probabilities = np.asarray(
+            ml_result["probabilities"],
+            dtype=float,
         )
-        engineering_assessment = reconcile_prediction(
-            ml_result,
-            eligibility,
-            fuzzy_scores,
+
+        classes = list(
+            model_service
+            .label_encoder
+            .classes_
         )
+
+        if len(
+            classes
+        ) == len(probabilities):
+            ml_probabilities = dict(
+                zip(
+                    classes,
+                    probabilities,
+                )
+            )
 
     return {
         "formation": formation,
@@ -1651,11 +1643,6 @@ def run_eor_intelligence(
         "ml_available": model_service.is_loaded(),
         "ml_top3": ml_top3,
         "ml_probabilities": ml_probabilities,
-        "ml_result": ml_result,
-        "engineering_assessment": engineering_assessment,
-        "engineering_eligibility": (
-            eligibility if model_service.is_loaded() else {}
-        ),
     }
 
 
