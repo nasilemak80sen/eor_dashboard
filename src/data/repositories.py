@@ -8,7 +8,7 @@ from typing import Dict, Tuple
 import pandas as pd
 from pathlib import Path
 
-from EORWEBDEV.src.tests.settings import settings
+from config.settings import settings
 from utils.logging_config import logger
 
 

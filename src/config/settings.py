@@ -109,7 +109,6 @@ class settings:
         """Validate that all required paths exist."""
         return {
             "model": self.model_path.exists(),
-            "scaler": self.scaler_path.exists(),
             "label_encoder": self.label_encoder_path.exists(),
             "config": self.config_path.exists(),
             "ranges": self.ranges_path.exists(),
