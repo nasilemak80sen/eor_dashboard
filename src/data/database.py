@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from EORWEBDEV.src.tests.settings import settings
+from config.settings import settings
 from utils.logging_config import logger
 
 # Create declarative base

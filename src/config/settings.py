@@ -1,121 +1,233 @@
 """
-Central configuration management for EOR Atlas.
+EOR Atlas
+Central application configuration.
 
-This module provides a single source of truth for all application settings,
-model paths, and engineering parameters.
+This module contains:
+- project paths
+- ML artifact configuration
+- engineering configuration
+- UI configuration
+
+No Streamlit logic should live here.
 """
+
+from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 
-class settings:
-    """EOR Atlas application settings."""
-    
-    def __init__(self):
-        """Initialize settings from configuration files and environment."""
-        self.base_dir = Path(__file__).resolve().parent.parent
-        self.root_dir = self.base_dir.parent
-        
-        # Directory paths
-        self.model_dir = self.root_dir / "outputs" / "model_artifacts"
-        self.data_dir = self.root_dir / "data"
-        self.workbook_path = self.root_dir / "EOR_Screening_Tool_2026.xlsx"
-        
-        # ============================================================
-        # ACTIVE ML MODEL
-        # ============================================================
+class Settings:
+    """Central configuration for EOR Atlas."""
+
+    def __init__(self) -> None:
+
+        # ================================================================
+        # PROJECT PATHS
+        # ================================================================
+
+        self.src_dir = Path(__file__).resolve().parent
+
+        self.project_root = self.src_dir.parent.parent
+
+        self.data_dir = self.project_root / "data"
+
+        self.outputs_dir = self.project_root / "outputs"
+
+        self.model_dir = self.outputs_dir / "model_artifacts"
+
+        # ================================================================
+        # WORKBOOK
+        # ================================================================
+
+        self.workbook_path = (
+            self.project_root /
+            "EOR_Screening_Tool_2026.xlsx"
+        )
+
+        self.ranges_path = (
+            self.data_dir /
+            "NeuroFuzzy_EOR_Extracted_Tables.xlsx"
+        )
+
+        self.ranges_sheet = "Table1_Ranges"
+
+        # ================================================================
+        # ACTIVE MODEL
+        # ================================================================
 
         self.model_name = "EOR CatBoost"
+
         self.model_version = "1.0.0"
 
         self.model_path = (
-            self.model_dir
-            / "eor_catboost_v1.0.0.joblib"
+            self.model_dir /
+            "eor_catboost_v1.0.0.joblib"
         )
 
         self.label_encoder_path = (
-            self.model_dir
-            / "label_encoder_catboost_v1.0.0.joblib"
+            self.model_dir /
+            "label_encoder_catboost_v1.0.0.joblib"
         )
 
         self.config_path = (
-            self.model_dir
-            / "config_catboost_v1.0.0.json"
+            self.model_dir /
+            "config_catboost_v1.0.0.json"
         )
 
         self.model_manifest_path = (
-            self.model_dir
-            / "model_manifest_catboost_v1.0.0.json"
+            self.model_dir /
+            "model_manifest_catboost_v1.0.0.json"
         )
-        
-        # Data paths
-        self.ranges_path = self.data_dir / "NeuroFuzzy_EOR_Extracted_Tables.xlsx"
-        self.ranges_sheet = "Table1_Ranges"
-        
-        # ML Configuration
-        self.ml_config: Dict[str, Any] = self._load_ml_config()
-        self.fuzzy_alpha = self.ml_config.get("alpha", 0.30)
-        
-        # Engineering parameters (NOT exposed to UI)
+
+        # ================================================================
+        # ML CONFIGURATION
+        # ================================================================
+
+        self.ml_config = self._load_ml_config()
+
+        self.fuzzy_alpha = self.ml_config.get(
+            "alpha",
+            0.30,
+        )
+
+        # ================================================================
+        # ENGINEERING PARAMETERS
+        # ================================================================
+
         self.engineering_params = {
+
+            "confidence_threshold": 0.60,
+
+            "high_confidence_threshold": 0.75,
+
             "rare_class_override_enabled": True,
+
             "rare_threshold": 0.90,
-            "nn_conf_threshold": 0.60,
-            "rare_candidates": ["Hot water", "Miscible acid gas"],
+
+            "rare_candidates": [
+                "Hot water",
+                "Miscible acid gas",
+            ],
         }
-        
-        # UI Configuration
+
+        # ================================================================
+        # UI
+        # ================================================================
+
         self.ui_config = {
-            "page_title": "EOR Atlas – Decision Support Platform",
-            "page_icon": "📈",
-            "layout": "wide",
-            "formation_categories": ["Sandstone", "Carbonates", "Unconsolidated sands"],
-            "default_formation": "Sandstone",
+
+            "page_title":
+                "EOR Atlas – Decision Support Platform",
+
+            "page_icon":
+                "📈",
+
+            "layout":
+                "wide",
+
+            "formation_categories": [
+                "Sandstone",
+                "Carbonates",
+                "Unconsolidated sands",
+            ],
+
+            "default_formation":
+                "Sandstone",
         }
-        
-        # Application metadata
+
+        # ================================================================
+        # APPLICATION METADATA
+        # ================================================================
+
         self.app_name = "EOR Atlas"
-        self.app_version = "V1.0.0"
+
+        self.app_version = "1.0.0"
+
         self.environment = "development"
-    
-    def _load_ml_config(self) -> Dict[str, Any]:
-        """Load ML configuration from artifact path."""
-        if self.config_path.exists():
-            try:
-                with open(self.config_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"Warning: Could not load ML config from {self.config_path}: {e}")
-                return {"model_name":self.model_name, "version": self.model_version}
-        return {"model_name":self.model_name, "version": self.model_version}
-    
-    def update_ml_config(self, config: Dict[str, Any]) -> None:
-        """Update and persist ML configuration."""
-        self.ml_config.update(config)
-        if self.config_path.exists():
-            try:
-                with open(self.config_path, "w", encoding="utf-8") as f:
-                    json.dump(self.ml_config, f, indent=2)
-            except Exception as e:
-                print(f"Warning: Could not save ML config: {e}")
-    
-    def get_engineering_param(self, key: str, default: Any = None) -> Any:
-        """Get engineering parameter (not user-tunable)."""
-        return self.engineering_params.get(key, default)
-    
-    def validate_paths(self) -> Dict[str, bool]:
-        """Validate that all required paths exist."""
+
+    # ====================================================================
+    # ML CONFIG
+    # ====================================================================
+
+    def _load_ml_config(self) -> dict[str, Any]:
+
+        if not self.config_path.exists():
+
+            return {
+                "model_name": self.model_name,
+                "version": self.model_version,
+            }
+
+        try:
+
+            with self.config_path.open(
+                "r",
+                encoding="utf-8",
+            ) as file:
+
+                return json.load(file)
+
+        except (OSError, json.JSONDecodeError) as exc:
+
+            print(
+                f"Warning: Could not load ML config: {exc}"
+            )
+
+            return {
+                "model_name": self.model_name,
+                "version": self.model_version,
+            }
+
+    # ====================================================================
+    # ENGINEERING PARAMETER
+    # ====================================================================
+
+    def get_engineering_param(
+        self,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+
+        return self.engineering_params.get(
+            key,
+            default,
+        )
+
+    # ====================================================================
+    # PATH VALIDATION
+    # ====================================================================
+
+    def validate_paths(self) -> dict[str, bool]:
+
         return {
-            "model": self.model_path.exists(),
-            "scaler": self.scaler_path.exists(),
-            "label_encoder": self.label_encoder_path.exists(),
-            "config": self.config_path.exists(),
-            "ranges": self.ranges_path.exists(),
-            "workbook": self.workbook_path.exists(),
+
+            "project_root":
+                self.project_root.exists(),
+
+            "model_dir":
+                self.model_dir.exists(),
+
+            "model":
+                self.model_path.exists(),
+
+            "label_encoder":
+                self.label_encoder_path.exists(),
+
+            "config":
+                self.config_path.exists(),
+
+            "ranges":
+                self.ranges_path.exists(),
+
+            "workbook":
+                self.workbook_path.exists(),
         }
 
 
-# Global settings instance
-settings = settings()
+# ========================================================================
+# GLOBAL SETTINGS INSTANCE
+# ========================================================================
+
+settings = Settings()
