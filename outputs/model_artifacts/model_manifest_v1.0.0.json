@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "timestamp": "2026-09-01T05:31:24.285107",
+  "timestamp": "2026-09-02T02:39:10.978642",
   "model_path": "C:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\outputs\\model_artifacts\\eor_nn_v1.0.0.keras",
   "scaler_path": "C:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\outputs\\model_artifacts\\scaler_v1.0.0.joblib",
   "encoder_path": "C:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\outputs\\model_artifacts\\label_encoder_v1.0.0.joblib",
