@@ -1,0 +1,11 @@
+{
+  "raw_to_canonical_template": {
+    "Steam": "Steam Flood",
+    "Miscible CO2": "CO2 Miscible Flood",
+    "Miscible HC": "HC Gas Miscible Flood",
+    "Polymer": "Polymer (HPAM)",
+    "ASP": "ASP",
+    "SP": "SP"
+  },
+  "note": "Template only. Validate every mapping against the source dataset and engineering taxonomy before training a production model."
+}

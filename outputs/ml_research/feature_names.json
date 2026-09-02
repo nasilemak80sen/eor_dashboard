@@ -1,0 +1,19 @@
+[
+  "depth_mid_ft",
+  "depth_span_ft",
+  "porosity_mid_pct",
+  "porosity_span_pct",
+  "perm_mid_md",
+  "perm_span_md",
+  "api_mid",
+  "api_span",
+  "visc_mid_cp",
+  "visc_span_cp",
+  "so_mid_pct",
+  "so_span_pct",
+  "log10_perm_mid",
+  "log10_visc_mid",
+  "formation_sandstone",
+  "formation_carbonates",
+  "formation_unconsolidated_sands"
+]

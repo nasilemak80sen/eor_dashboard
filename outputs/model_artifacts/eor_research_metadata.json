@@ -1,0 +1,69 @@
+{
+  "feature_names": [
+    "depth_mid_ft",
+    "depth_span_ft",
+    "porosity_mid_pct",
+    "porosity_span_pct",
+    "perm_mid_md",
+    "perm_span_md",
+    "api_mid",
+    "api_span",
+    "visc_mid_cp",
+    "visc_span_cp",
+    "so_mid_pct",
+    "so_span_pct",
+    "log10_perm_mid",
+    "log10_visc_mid",
+    "formation_sandstone",
+    "formation_carbonates",
+    "formation_unconsolidated_sands"
+  ],
+  "model_name": "KNN",
+  "training_rows": 526,
+  "classes": [
+    "Combustion",
+    "HC immiscible",
+    "Hot water",
+    "Miscible CO2",
+    "Miscible HC",
+    "Miscible acid gas",
+    "Nitrogen immiscible",
+    "Polymer",
+    "Steam"
+  ],
+  "input_schema_version": "EOR_ATLAS_ML_V2",
+  "primary_features": [
+    "depth_mid_ft",
+    "depth_span_ft",
+    "porosity_mid_pct",
+    "porosity_span_pct",
+    "perm_mid_md",
+    "perm_span_md",
+    "api_mid",
+    "api_span",
+    "visc_mid_cp",
+    "visc_span_cp",
+    "so_mid_pct",
+    "so_span_pct",
+    "log10_perm_mid",
+    "log10_visc_mid",
+    "formation_sandstone",
+    "formation_carbonates",
+    "formation_unconsolidated_sands"
+  ],
+  "fuzzy_used_as_model_feature": false,
+  "trained_from": {
+    "path": "c:\\Users\\mnabielizzuddin.radz\\OneDrive - PETRONAS\\Reservoir Engineering\\Programming_Python_Projects\\EOR ATLAS\\EORWEB\\EORWEBDEV\\src\\notebooks\\ml_data\\OGJ2014_extracted_vs_Table1.xlsx",
+    "sheet": "OGJ2014_Extracted_Rows",
+    "rows": 624,
+    "columns": 15,
+    "target_column": "technique",
+    "formation_column": "formation_category",
+    "range_column_hits": 12
+  },
+  "notes": [
+    "Research model only; deterministic Excel screening remains independent.",
+    "Fuzzy suitability is calculated separately at inference time.",
+    "Validate generalization with field/project-grouped data when IDs become available."
+  ]
+}

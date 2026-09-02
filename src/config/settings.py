@@ -23,11 +23,11 @@ class Settings:
         self.data_dir = self.root_dir / "data"
         self.workbook_path = self.root_dir / "EOR_Screening_Tool_2026.xlsx"
         
-        # Model artifact paths
-        self.model_path = self.model_dir / "eor_nn_alpha03.keras"
-        self.scaler_path = self.model_dir / "scaler_alpha03.joblib"
-        self.label_encoder_path = self.model_dir / "label_encoder.joblib"
-        self.config_path = self.model_dir / "config_alpha03.json"
+        # KNN production candidate
+        self.model_path = (self.model_dir / "eor_research_best.joblib")
+        self.scaler_path = (self.model_dir / "scaler_v1.0.0.joblib")
+        self.label_encoder_path = (self.model_dir / "label_encoder_v1.0.0.joblib")
+        self.config_path = (self.model_dir / "config_v1.0.0.json")
         
         # Data paths
         self.ranges_path = self.data_dir / "NeuroFuzzy_EOR_Extracted_Tables.xlsx"
@@ -48,7 +48,7 @@ class Settings:
         # UI Configuration
         self.ui_config = {
             "page_title": "EOR Atlas – Decision Support Platform",
-            "page_icon": "🛢️",
+            "page_icon": "📈",
             "layout": "wide",
             "formation_categories": ["Sandstone", "Carbonates", "Unconsolidated sands"],
             "default_formation": "Sandstone",
@@ -56,7 +56,7 @@ class Settings:
         
         # Application metadata
         self.app_name = "EOR Atlas"
-        self.app_version = "2.0.0"
+        self.app_version = "V1.0.0"
         self.environment = "development"
     
     def _load_ml_config(self) -> Dict[str, Any]:
