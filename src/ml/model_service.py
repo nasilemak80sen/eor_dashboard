@@ -20,13 +20,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from src.config.settings import settings
-from src.ml.feature_builder import FEATURE_COUNT, FEATURE_NAMES, build_features
-from src.ml.prediction import (
-    PredictionCandidate,
-    PredictionResult,
-)
-from src.ml.validators import validate_feature_matrix, validate_reservoir_input
+from config.settings import settings
+from ml.feature_builder import FEATURE_COUNT, FEATURE_NAMES, build_features
+from ml.prediction import (PredictionCandidate,PredictionResult)
+from ml.validators import validate_feature_matrix, validate_reservoir_input
 
 
 class ModelService:

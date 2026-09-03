@@ -26,7 +26,7 @@ from utils.logging_config import logger
 Base = declarative_base()
 
 # Database path
-DB_PATH = settings.root_dir / "eor_atlas.db"
+DB_PATH = settings.project_root / "eor_atlas.db"
 
 
 class Field(Base):

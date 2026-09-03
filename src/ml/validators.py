@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from src.ml.feature_builder import FEATURE_COUNT, FEATURE_NAMES
+from ml.feature_builder import FEATURE_COUNT, FEATURE_NAMES
 
 
 REQUIRED_RESERVOIR_FIELDS = [

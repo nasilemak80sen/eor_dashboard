@@ -230,7 +230,7 @@ def initialize_services() -> Optional[Dict[str, Any]]:
         )
 
         model_service = ModelService()
-        model_loaded = model_service.load()
+        model_loaded = model_service.is_loaded()
 
         return {
             "env": env,
@@ -1561,18 +1561,168 @@ def render_eor_input_form(
 
     return values, formation
 
+def build_eor_ml_input(
+    values: Dict[str, Any],
+    formation: str,
+) -> Dict[str, Any]:
+    """
+    Convert EOR Atlas UI values into the exact range-based
+    input schema expected by the production CatBoost model.
+    """
+
+    # ============================================================
+    # Formation normalization
+    # ============================================================
+
+    formation_map = {
+        "Sandstone": "Sandstone",
+        "Carbonate": "Carbonates",
+        "Carbonates": "Carbonates",
+        "Unconsolidated sands": "Unconsolidated sands",
+    }
+
+    if formation not in formation_map:
+        raise ValueError(
+            f"Formation '{formation}' is not supported by "
+            f"the active CatBoost model. "
+            f"Supported formations: "
+            f"{list(formation_map.keys())}"
+        )
+
+    # ============================================================
+    # Actual EOR Intelligence input keys
+    # ============================================================
+
+    required_keys = [
+        "depth_ft",
+        "porosity_pct",
+        "perm_md",
+        "api",
+        "visc_cp",
+        "so_pct",
+    ]
+
+    missing = [
+        key
+        for key in required_keys
+        if key not in values
+    ]
+
+    if missing:
+        raise KeyError(
+            "Missing EOR Intelligence inputs: "
+            f"{missing}. "
+            f"Available keys: {list(values.keys())}"
+        )
+
+    # ============================================================
+    # Read values
+    # ============================================================
+
+    depth = float(
+        values["depth_ft"]
+    )
+
+    porosity = float(
+        values["porosity_pct"]
+    )
+
+    permeability = float(
+        values["perm_md"]
+    )
+
+    api = float(
+        values["api"]
+    )
+
+    viscosity = float(
+        values["visc_cp"]
+    )
+
+    oil_saturation = float(
+        values["so_pct"]
+    )
+
+    # ============================================================
+    # Basic validation
+    # ============================================================
+
+    if depth <= 0:
+        raise ValueError(
+            "Depth must be greater than zero."
+        )
+
+    if not 0 <= porosity <= 100:
+        raise ValueError(
+            "Porosity must be between 0 and 100%."
+        )
+
+    if permeability <= 0:
+        raise ValueError(
+            "Permeability must be greater than zero."
+        )
+
+    if not 0 <= api <= 100:
+        raise ValueError(
+            "API gravity must be between 0 and 100°."
+        )
+
+    if viscosity <= 0:
+        raise ValueError(
+            "Viscosity must be greater than zero."
+        )
+
+    if not 0 <= oil_saturation <= 100:
+        raise ValueError(
+            "Oil saturation must be between 0 and 100%."
+        )
+
+    # ============================================================
+    # Build exact production feature-builder input
+    #
+    # The production model uses range-based inputs.
+    # Since the current UI provides a single value, use:
+    #
+    #     min = max = UI value
+    #
+    # The feature builder will then generate midpoint/span/log
+    # features in the exact order expected by CatBoost.
+    # ============================================================
+
+    return {
+        "depth_min_ft": depth,
+        "depth_max_ft": depth,
+
+        "porosity_min_pct": porosity,
+        "porosity_max_pct": porosity,
+
+        "perm_min_md": permeability,
+        "perm_max_md": permeability,
+
+        "api_min": api,
+        "api_max": api,
+
+        "visc_min_cp": viscosity,
+        "visc_max_cp": viscosity,
+
+        "so_min_pct": oil_saturation,
+        "so_max_pct": oil_saturation,
+
+        "formation_category": formation_map[formation],
+    }
 
 # =============================================================================
 # EOR INTELLIGENCE
 # =============================================================================
-
 def run_eor_intelligence(
     services: Dict[str, Any],
     values: Dict[str, float],
     formation: str,
 ) -> Dict[str, Any]:
     """
-    Run fuzzy and CatBoost independently.
+    Run fuzzy suitability and CatBoost independently.
+
+    Engineering screening remains authoritative for feasibility.
     """
 
     fuzzy_engine: FuzzyEngine = services[
@@ -1587,6 +1737,10 @@ def run_eor_intelligence(
         services["techs_all"]
     )
 
+    # ============================================================
+    # Fuzzy suitability
+    # ============================================================
+
     fuzzy_scores = fuzzy_engine.evaluate_all(
         techs_all,
         formation,
@@ -1599,42 +1753,40 @@ def run_eor_intelligence(
         reverse=True,
     )[:5]
 
+    # ============================================================
+    # CatBoost intelligence
+    # ============================================================
+
     ml_top3 = []
     ml_probabilities = {}
 
     if model_service.is_loaded():
-        ml_result = (
-            model_service.predict_from_inputs(
-                values=values,
-                formation=formation,
-                top_n=3,
+
+        ml_input = build_eor_ml_input(
+            values,
+            formation,
+        )
+
+        ml_result = model_service.predict(
+            ml_input
+        )
+
+        if not ml_result.success:
+            raise RuntimeError(
+                ml_result.warning
+                or "CatBoost prediction failed."
             )
-        )
 
-        ml_top3 = ml_result[
-            "top_predictions"
-        ]
+        ml_top3 = ml_result.top_n(3)
 
-        probabilities = np.asarray(
-            ml_result["probabilities"],
-            dtype=float,
-        )
+        ml_probabilities = {
+            candidate.technique: candidate.probability
+            for candidate in ml_result.candidates
+        }
 
-        classes = list(
-            model_service
-            .label_encoder
-            .classes_
-        )
-
-        if len(
-            classes
-        ) == len(probabilities):
-            ml_probabilities = dict(
-                zip(
-                    classes,
-                    probabilities,
-                )
-            )
+    # ============================================================
+    # Return independent signals
+    # ============================================================
 
     return {
         "formation": formation,
@@ -1644,7 +1796,6 @@ def run_eor_intelligence(
         "ml_top3": ml_top3,
         "ml_probabilities": ml_probabilities,
     }
-
 
 def render_eor_intelligence_result(
     result: Dict[str, Any],
@@ -1666,70 +1817,54 @@ def render_eor_intelligence_result(
         unsafe_allow_html=True,
     )
 
-    st.markdown(
-        "### 🤖 CatBoost Top 3"
-    )
+
+    st.markdown("### 🤖 CatBoost Top 3")
 
     if result["ml_available"]:
+
         cols = st.columns(
-            len(result["ml_top3"])
-            or 1
+            len(result["ml_top3"]) or 1
         )
 
-        for col, (
-            rank,
-            prediction,
-        ) in zip(
+        for col, candidate in zip(
             cols,
-            enumerate(
-                result["ml_top3"],
-                start=1,
-            ),
+            result["ml_top3"],
         ):
-            technique, probability = prediction
+            rank = candidate.rank
+            technique = candidate.technique
+            probability = candidate.probability
 
             with col:
                 st.markdown(
-                    f"""
-                    <div class="top3-card">
-                        <div style="font-size:0.72rem;color:#64748b;">
-                            RANK {rank}
-                        </div>
-                        <div style="font-size:1.2rem;font-weight:700;">
-                            {technique}
-                        </div>
-                        <div>
-                            CatBoost probability:
-                            <strong>{_format_probability(probability)}</strong>
-                        </div>
-                    </div>
-                    """,
+                    f'<div class="top3-card">'
+                    f'<div style="font-size:0.72rem;color:#64748b;">'
+                    f'RANK {rank}'
+                    f'</div>'
+                    f'<div style="font-size:1.2rem;font-weight:700;">'
+                    f'{technique}'
+                    f'</div>'
+                    f'<div>'
+                    f'CatBoost probability: '
+                    f'<strong>{_format_probability(probability)}</strong>'
+                    f'</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
         ml_df = pd.DataFrame(
             [
                 {
-                    "Rank": i,
-                    "EOR Technique": technique,
-                    "CatBoost Probability": probability,
+                    "Rank": candidate.rank,
+                    "EOR Technique": candidate.technique,
+                    "CatBoost Probability": candidate.probability,
                 }
-                for i, (
-                    technique,
-                    probability,
-                ) in enumerate(
-                    result["ml_top3"],
-                    start=1,
-                )
+                for candidate in result["ml_top3"]
             ]
         )
 
-        ml_df[
-            "CatBoost Probability"
-        ] = ml_df[
-            "CatBoost Probability"
-        ].map(
-            _format_probability
+        ml_df["CatBoost Probability"] = (
+            ml_df["CatBoost Probability"]
+            .map(_format_probability)
         )
 
         st.dataframe(
@@ -1742,62 +1877,62 @@ def render_eor_intelligence_result(
         st.warning(
             "CatBoost model is unavailable."
         )
-
-    st.markdown(
-        "### 🌐 Fuzzy Suitability Top 5"
-    )
-
-    fuzzy_df = pd.DataFrame(
-        [
-            {
-                "Rank": i,
-                "EOR Technique": technique,
-                "Fuzzy Suitability": round(
-                    float(score),
-                    3,
-                ),
-            }
-            for i, (
-                technique,
-                score,
-            ) in enumerate(
-                result["fuzzy_top5"],
-                start=1,
-            )
-        ]
-    )
-
-    st.dataframe(
-        fuzzy_df,
-        use_container_width=True,
-        hide_index=True,
-    )
-
-    if result["ml_probabilities"]:
+        
         st.markdown(
-            "### CatBoost Probability Distribution"
+            "### 🌐 Fuzzy Suitability Top 5"
         )
 
-        st.bar_chart(
-            pd.Series(
-                result["ml_probabilities"],
-                dtype=float,
-            ).sort_values(
-                ascending=False
+        fuzzy_df = pd.DataFrame(
+            [
+                {
+                    "Rank": i,
+                    "EOR Technique": technique,
+                    "Fuzzy Suitability": round(
+                        float(score),
+                        3,
+                    ),
+                }
+                for i, (
+                    technique,
+                    score,
+                ) in enumerate(
+                    result["fuzzy_top5"],
+                    start=1,
+                )
+            ]
+        )
+
+        st.dataframe(
+            fuzzy_df,
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        if result["ml_probabilities"]:
+            st.markdown(
+                "### CatBoost Probability Distribution"
             )
-        )
 
-    st.markdown(
-        "### Fuzzy Suitability Distribution"
-    )
-
-    if result["fuzzy_top5"]:
-        st.bar_chart(
-            pd.Series(
-                dict(result["fuzzy_top5"]),
-                dtype=float,
+            st.bar_chart(
+                pd.Series(
+                    result["ml_probabilities"],
+                    dtype=float,
+                ).sort_values(
+                    ascending=False
+                )
             )
+
+        st.markdown(
+            "### Fuzzy Suitability Distribution"
         )
+
+        if result["fuzzy_top5"]:
+            st.bar_chart(
+                pd.Series(
+                    dict(result["fuzzy_top5"]),
+                    dtype=float,
+                )
+            )
 
     st.info(
         "No weighted ML/fuzzy ensemble is applied. "

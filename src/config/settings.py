@@ -2,13 +2,15 @@
 EOR Atlas
 Central application configuration.
 
-This module contains:
+Single source of truth for:
 - project paths
-- ML artifact configuration
-- engineering configuration
-- UI configuration
+- workbook/reference files
+- ML model artifacts
+- ML configuration
+- engineering thresholds
+- Streamlit UI configuration
 
-No Streamlit logic should live here.
+No Streamlit execution logic belongs here.
 """
 
 from __future__ import annotations
@@ -19,26 +21,55 @@ from typing import Any
 
 
 class Settings:
-    """Central configuration for EOR Atlas."""
+    """Central configuration for the EOR Atlas application."""
 
     def __init__(self) -> None:
 
         # ================================================================
         # PROJECT PATHS
+        #
+        # Expected repository structure:
+        #
+        # EORWEBDEV/
+        # ├── app.py
+        # ├── data/
+        # ├── outputs/
+        # │   └── model_artifacts/
+        # ├── EOR_Screening_Tool_2026.xlsx
+        # └── src/
+        #     └── config/
+        #         └── settings.py
         # ================================================================
 
-        self.src_dir = Path(__file__).resolve().parent
+        self.settings_dir = Path(__file__).resolve().parent
+        self.config_dir = self.settings_dir
+        self.src_dir = self.config_dir.parent
 
-        self.project_root = self.src_dir.parent.parent
-
-        self.data_dir = self.project_root / "data"
-
-        self.outputs_dir = self.project_root / "outputs"
-
-        self.model_dir = self.outputs_dir / "model_artifacts"
+        # settings.py:
+        # EORWEBDEV/src/config/settings.py
+        #
+        # parent      -> EORWEBDEV/src
+        # parent.parent -> EORWEBDEV
+        self.project_root = self.src_dir.parent
 
         # ================================================================
-        # WORKBOOK
+        # DATA DIRECTORIES
+        # ================================================================
+
+        self.data_dir = (
+            self.project_root / "data"
+        )
+
+        self.outputs_dir = (
+            self.project_root / "outputs"
+        )
+
+        self.model_dir = (
+            self.outputs_dir / "model_artifacts"
+        )
+
+        # ================================================================
+        # ENGINEERING WORKBOOK / REFERENCE DATA
         # ================================================================
 
         self.workbook_path = (
@@ -54,11 +85,10 @@ class Settings:
         self.ranges_sheet = "Table1_Ranges"
 
         # ================================================================
-        # ACTIVE MODEL
+        # ACTIVE CATBOOST MODEL
         # ================================================================
 
         self.model_name = "EOR CatBoost"
-
         self.model_version = "1.0.0"
 
         self.model_path = (
@@ -87,23 +117,22 @@ class Settings:
 
         self.ml_config = self._load_ml_config()
 
-        self.fuzzy_alpha = self.ml_config.get(
-            "alpha",
-            0.30,
+        self.fuzzy_alpha = float(
+            self.ml_config.get(
+                "alpha",
+                0.30,
+            )
         )
 
         # ================================================================
         # ENGINEERING PARAMETERS
         # ================================================================
 
-        self.engineering_params = {
-
+        self.engineering_params: dict[str, Any] = {
             "confidence_threshold": 0.60,
-
             "high_confidence_threshold": 0.75,
 
             "rare_class_override_enabled": True,
-
             "rare_threshold": 0.90,
 
             "rare_candidates": [
@@ -113,19 +142,16 @@ class Settings:
         }
 
         # ================================================================
-        # UI
+        # STREAMLIT UI
         # ================================================================
 
-        self.ui_config = {
-
-            "page_title":
-                "EOR Atlas – Decision Support Platform",
-
-            "page_icon":
-                "📈",
-
-            "layout":
-                "wide",
+        self.ui_config: dict[str, Any] = {
+            "page_title": (
+                "EOR Atlas – Decision Support Platform"
+            ),
+            "page_icon": "📈",
+            "layout": "wide",
+            "initial_sidebar_state": "expanded",
 
             "formation_categories": [
                 "Sandstone",
@@ -133,8 +159,7 @@ class Settings:
                 "Unconsolidated sands",
             ],
 
-            "default_formation":
-                "Sandstone",
+            "default_formation": "Sandstone",
         }
 
         # ================================================================
@@ -142,37 +167,45 @@ class Settings:
         # ================================================================
 
         self.app_name = "EOR Atlas"
-
         self.app_version = "1.0.0"
-
         self.environment = "development"
 
-    # ====================================================================
-    # ML CONFIG
-    # ====================================================================
+    # ================================================================
+    # ML CONFIGURATION
+    # ================================================================
 
     def _load_ml_config(self) -> dict[str, Any]:
+        """Load the active CatBoost model configuration."""
 
-        if not self.config_path.exists():
-
+        if not self.config_path.is_file():
             return {
                 "model_name": self.model_name,
                 "version": self.model_version,
             }
 
         try:
-
             with self.config_path.open(
                 "r",
                 encoding="utf-8",
             ) as file:
+                config = json.load(file)
 
-                return json.load(file)
+            if not isinstance(config, dict):
+                raise ValueError(
+                    "ML configuration must be a JSON object."
+                )
 
-        except (OSError, json.JSONDecodeError) as exc:
+            return config
+
+        except (
+            OSError,
+            json.JSONDecodeError,
+            ValueError,
+        ) as exc:
 
             print(
-                f"Warning: Could not load ML config: {exc}"
+                "Warning: Could not load CatBoost configuration: "
+                f"{exc}"
             )
 
             return {
@@ -180,49 +213,84 @@ class Settings:
                 "version": self.model_version,
             }
 
-    # ====================================================================
-    # ENGINEERING PARAMETER
-    # ====================================================================
+    # ================================================================
+    # ENGINEERING PARAMETERS
+    # ================================================================
 
     def get_engineering_param(
         self,
         key: str,
         default: Any = None,
     ) -> Any:
+        """Return an engineering configuration parameter."""
 
         return self.engineering_params.get(
             key,
             default,
         )
 
-    # ====================================================================
+    # ================================================================
     # PATH VALIDATION
-    # ====================================================================
+    # ================================================================
 
     def validate_paths(self) -> dict[str, bool]:
+        """Validate all required EOR Atlas paths."""
 
         return {
+            "project_root": self.project_root.is_dir(),
+            "src_dir": self.src_dir.is_dir(),
+            "data_dir": self.data_dir.is_dir(),
+            "outputs_dir": self.outputs_dir.is_dir(),
+            "model_dir": self.model_dir.is_dir(),
 
-            "project_root":
-                self.project_root.exists(),
+            "model": self.model_path.is_file(),
+            "label_encoder": self.label_encoder_path.is_file(),
+            "config": self.config_path.is_file(),
+            "manifest": self.model_manifest_path.is_file(),
 
-            "model_dir":
-                self.model_dir.exists(),
+            "ranges": self.ranges_path.is_file(),
+            "workbook": self.workbook_path.is_file(),
+        }
 
-            "model":
-                self.model_path.exists(),
+    # ================================================================
+    # MODEL ARTIFACT DIAGNOSTICS
+    # ================================================================
 
-            "label_encoder":
-                self.label_encoder_path.exists(),
+    def get_model_artifact_status(
+        self,
+    ) -> dict[str, Any]:
+        """Return detailed diagnostics for production ML artifacts."""
 
-            "config":
-                self.config_path.exists(),
+        return {
+            "project_root": str(
+                self.project_root
+            ),
 
-            "ranges":
-                self.ranges_path.exists(),
+            "data_dir": str(
+                self.data_dir
+            ),
 
-            "workbook":
-                self.workbook_path.exists(),
+            "model_dir": str(
+                self.model_dir
+            ),
+
+            "model_path": str(
+                self.model_path
+            ),
+
+            "label_encoder_path": str(
+                self.label_encoder_path
+            ),
+
+            "config_path": str(
+                self.config_path
+            ),
+
+            "model_manifest_path": str(
+                self.model_manifest_path
+            ),
+
+            "paths": self.validate_paths(),
         }
 
 
