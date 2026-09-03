@@ -147,11 +147,11 @@ class Settings:
 
         self.ui_config: dict[str, Any] = {
             "page_title": (
-                "EOR Atlas – Decision Support Platform"
+                "EOR Atlas – Decision Support Platform with Machine Learning Classifications"
             ),
             "page_icon": "📈",
             "layout": "wide",
-            "initial_sidebar_state": "expanded",
+            "initial_sidebar_state": "collapsed",
 
             "formation_categories": [
                 "Sandstone",
@@ -166,9 +166,9 @@ class Settings:
         # APPLICATION METADATA
         # ================================================================
 
-        self.app_name = "EOR Atlas"
+        self.app_name = "EOR Atlas Dashboard + CatBoost 🐱"
         self.app_version = "1.0.0"
-        self.environment = "development"
+        self.environment = "Beta Released"
 
     # ================================================================
     # ML CONFIGURATION

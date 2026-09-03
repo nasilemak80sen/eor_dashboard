@@ -101,7 +101,7 @@ st.markdown(
     }
 
     .exec-kpi-card {
-        background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+        background: linear-gradient(135deg, #00a19c 0%, #bfd730 100%);
         border-radius: 14px;
         padding: 1rem 1.1rem;
         min-height: 110px;
@@ -2023,10 +2023,10 @@ def render_executive_overview_section():
     metrics = [
         ("Fields", 41),
         ("Reservoirs", 600),
-        ("EOR Families", 9),
-        ("Historical Studies", 128),
+        ("EOR Techniques", 9),
+        ("Past EOR Studies", 128),
         ("RF Gap (MMstb)", 1.31),
-        ("Candidates", 18),
+        ("Potential EOR Candidates", 18),
     ]
 
     cols = st.columns(6)
@@ -2094,49 +2094,45 @@ def render_executive_overview_section():
     )
 
     if pdk is not None:
-        st.pydeck_chart(
-            pdk.Deck(
-                initial_view_state=pdk.ViewState(
-                    latitude=4.3,
-                    longitude=103.4,
-                    zoom=5,
-                    pitch=30,
-                ),
-                layers=[
-                    pdk.Layer(
-                        "ScatterplotLayer",
-                        data=map_df,
-                        get_position=(
-                            "[Longitude, Latitude]"
-                        ),
-                        get_color=[
-                            255,
-                            120,
-                            60,
-                            200,
-                        ],
-                        get_radius="RF_Gap",
-                        pickable=True,
-                    )
-                ],
-            )
-        )
-    else:
-        st.map(
-            map_df[
-                [
-                    "Latitude",
-                    "Longitude",
-                ]
-            ]
-        )
 
-    st.dataframe(
-        map_df,
-        use_container_width=True,
-        hide_index=True,
+        tooltip = {
+        "html": """
+            <b>{Field}</b><br/>
+            Status: {EOR_Status}<br/>
+            RF Gap: {RF_Gap}
+        """,
+        "style": {
+            "backgroundColor": "steelblue",
+            "color": "white",
+        },
+    }
+
+    st.pydeck_chart(
+        pdk.Deck(
+                map_style = "light",
+                initial_view_state=pdk.ViewState(
+                latitude=4.3,
+                longitude=103.4,
+                zoom=4,
+                pitch=30,
+            ),
+            layers=[
+                pdk.Layer(
+                    "ScatterplotLayer",
+                    data=map_df,
+                    get_position="[Longitude, Latitude]",
+                    get_fill_color="[255, 120, 60, 220]",
+                    get_radius="RF_Gap * 1000",
+                    radius_min_pixels=6,
+                    radius_max_pixels=20,
+                    pickable=True,
+                )
+            ],
+            tooltip=tooltip,
+        )
     )
 
+    st.dataframe( map_df, use_container_width=True, hide_index=True,)
 
 def render_field_candidates_section():
     st.header(
@@ -2685,7 +2681,7 @@ def render_sidebar_status(
 def main():
 
     st.title(
-        "🛢️ EOR Atlas – Decision Support Platform"
+        "EOR Atlas – Decision Support Platform with Machine Learning Classifications"
     )
 
     st.caption(
@@ -2746,7 +2742,7 @@ def main():
 
     with tabs[7]:
         st.header(
-            "🤖 EOR Intelligence"
+            "🤖 EOR Intelligence with CatBoost Machine Learning Classification Method"
         )
 
         st.write(
@@ -2813,7 +2809,7 @@ def main():
 
             if model_service.is_loaded():
                 with st.expander(
-                    "🔧 CatBoost Model Information",
+                    "🐱 CatBoost Model Information",
                     expanded=False,
                 ):
                     st.json(
