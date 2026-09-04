@@ -1,12 +1,15 @@
 # 🛢️ EOR Atlas
 
-### Enhanced Oil Recovery Screening & Decision Support Platform
+### Enhanced Oil Recovery Screening & Decision Support Platform 
+
 
 **EOR Atlas** is an engineering-first decision-support platform for **Enhanced Oil Recovery (EOR)** screening, reservoir suitability assessment, and data-driven EOR intelligence.
 
 The platform combines **deterministic engineering screening**, **fuzzy suitability analysis**, and **CatBoost machine learning** within a single Streamlit dashboard.
 
 > **Engineering feasibility remains authoritative. ML and fuzzy logic provide independent decision-support signals.**
+>
+**Access Here :** https://beta-eordashboard-1.streamlit.app/
 
 ---
 
