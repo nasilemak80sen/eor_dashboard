@@ -70,31 +70,106 @@ def _multiselect(
 def _safe_metric_value(value: Any, suffix: str = "") -> str:
     if value is None or pd.isna(value):
         return "—"
+
     try:
-        return f"{float(value):,.2f}{suffix}"
+        value = float(value)
+
+        if abs(value) >= 1_000_000:
+            return f"{value / 1_000_000:,.1f}M{suffix}"
+
+        if abs(value) >= 1_000:
+            return f"{value / 1_000:,.1f}K{suffix}"
+
+        return f"{value:,.1f}{suffix}"
+
     except (TypeError, ValueError):
         return str(value)
 
+def _render_summary_cards(
+    analysis: CandidateAnalysis,
+    dataframe: pd.DataFrame,
+) -> None:
 
-def _render_summary_cards(analysis: CandidateAnalysis, dataframe: pd.DataFrame) -> None:
     summary = analysis.opportunity_summary(dataframe)
+
+    candidate_reservoirs = summary.get("reservoirs", 0)
+    fields = summary.get("fields", 0)
+    stoiip = summary.get("STOIIP_total")
+    cr_potential = summary.get("CR potential_total")
+
     c1, c2, c3, c4 = st.columns(4)
 
     with c1:
-        st.metric("Candidate Reservoirs", f"{summary['reservoirs']:,}")
-    with c2:
-        st.metric("Fields", f"{summary['fields']:,}")
-    with c3:
-        st.metric(
-            "STOIIP",
-            _safe_metric_value(summary.get("STOIIP_total"), " MMSTB"),
-        )
-    with c4:
-        st.metric(
-            "CR Volume Potential",
-            _safe_metric_value(summary.get("CR potential_total"), " MMSTB"),
+        st.markdown(
+            f"""
+            <div class="exec-kpi-card">
+                <div class="exec-kpi-label">
+                    🛢️ Candidate Reservoirs
+                </div>
+                <div class="exec-kpi-value">
+                    {candidate_reservoirs:,}
+                </div>
+                <div class="exec-kpi-subtext">
+                    Reservoirs in current portfolio
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
+    with c2:
+        st.markdown(
+            f"""
+            <div class="exec-kpi-card">
+                <div class="exec-kpi-label">
+                    🗺️ Fields
+                </div>
+                <div class="exec-kpi-value">
+                    {fields:,}
+                </div>
+                <div class="exec-kpi-subtext">
+                    Fields represented
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c3:
+        st.markdown(
+            f"""
+            <div class="exec-kpi-card">
+                <div class="exec-kpi-label">
+                    📦 STOIIP
+                </div>
+                <div class="exec-kpi-value">
+                    {_safe_metric_value(stoiip)}
+                </div>
+                <div class="exec-kpi-subtext">
+                    MMSTB in current dataset
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c4:
+        st.markdown(
+            f"""
+            <div class="exec-kpi-card">
+                <div class="exec-kpi-label">
+                    🚀 CR Volume Potential
+                </div>
+                <div class="exec-kpi-value">
+                    {_safe_metric_value(cr_potential)}
+                </div>
+                <div class="exec-kpi-subtext">
+                    MMSTB potential opportunity
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 def _render_scatter(
     analysis: CandidateAnalysis,
@@ -289,10 +364,10 @@ def _render_detail_panel(dataframe: pd.DataFrame) -> None:
 def render_field_reservoir_parameters_tab(
     workbook_path: str | None = None,
 ) -> None:
-    """Render the standalone Field / Reservoir Candidate Analytics feature."""
+    """Field / Reservoir Candidate Analytics feature."""
     path = str(workbook_path or CandidateRepository().workbook_path)
 
-    st.header("🎯 Field / Reservoir Parameters")
+    st.header("🎯 EOR Candidate Screening")
     st.caption(
         "Standalone portfolio exploration of field and reservoir properties. "
         "This module does not run EOR screening, fuzzy suitability, or machine learning."

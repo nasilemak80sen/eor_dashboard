@@ -1142,7 +1142,7 @@ def main():
     tabs = st.tabs([
         "🏠 Executive Overview",
         "🔍 EOR Screening",
-        "🎯 Field / Reservoir Parameters",
+        "🎯 EOR Candidate Screening",
         "🧪 CEOR — Fluid / Fluid",
         "🪨 CEOR — Fluid / Rock",
         "📚 Past EOR Results",
