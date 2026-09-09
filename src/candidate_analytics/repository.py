@@ -24,7 +24,6 @@ NUMERIC_COLUMNS = [
     "RF Gap =Benchmark  RF - Field RF (%) ",
     "RF Gap =Benchmark  RF - Field RF (%) abs ",
     "CR volume potential = RF Gap x STOIIP  (MMSTB)",
-    "Non producing reservoirs ",
     "Reservoir Temperature (F)",
     "# Idle Well (June 25) ",
     "Temp (deg C)",
@@ -248,12 +247,22 @@ class CandidateRepository:
         result["Reservoir"] = result["Reservoir"].astype(str).str.strip()
         result["Field & Reservoir "] = result["Field & Reservoir "].astype(str).str.strip()
 
-        # Useful UI labels; these do not alter source engineering values.
-        result["Reservoir Producing Status"] = result.get(
-            "Non producing reservoirs ", pd.Series(index=result.index, dtype=float)
-        ).map(
-            lambda value: "NONPRODUCING" if pd.notna(value) and value > 0 else "PRODUCING"
-        )
+        # The workbook already encodes the producing-state semantics in this
+        # column. Preserve the source values exactly rather than deriving a
+        # status from row-level numerics.
+        if "Non producing reservoirs " in result.columns:
+            source_status = (
+                result["Non producing reservoirs "]
+                .astype("string")
+                .str.strip()
+                .str.upper()
+            )
+            result["Reservoir Producing Status"] = source_status.where(
+                source_status.isin(["PRODUCING", "NONPRODUCING"]),
+                other=pd.NA,
+            )
+        else:
+            result["Reservoir Producing Status"] = pd.NA
 
         result.drop(columns=["__candidate_key"], inplace=True)
 
