@@ -19,6 +19,7 @@ from domain.fuzzy_engine import FuzzyEngine
 from data.repositories import EnvelopeRepository, WorkbookRepository
 from data.queries import RepositoryFactory
 from ml.model_service import ModelService
+from candidate_analytics.ui import render_field_reservoir_parameters_tab
 
 
 # =============================================================================
@@ -1058,7 +1059,6 @@ class ExcelScreeningService:
             )
         )
 
-        # Stable rank: score first, original technique order second.
         ranked = sorted(
             enumerate(results),
             key=lambda x: (
@@ -1561,6 +1561,7 @@ def render_eor_input_form(
 
     return values, formation
 
+
 def build_eor_ml_input(
     values: Dict[str, Any],
     formation: str,
@@ -1569,10 +1570,6 @@ def build_eor_ml_input(
     Convert EOR Atlas UI values into the exact range-based
     input schema expected by the production CatBoost model.
     """
-
-    # ============================================================
-    # Formation normalization
-    # ============================================================
 
     formation_map = {
         "Sandstone": "Sandstone",
@@ -1588,10 +1585,6 @@ def build_eor_ml_input(
             f"Supported formations: "
             f"{list(formation_map.keys())}"
         )
-
-    # ============================================================
-    # Actual EOR Intelligence input keys
-    # ============================================================
 
     required_keys = [
         "depth_ft",
@@ -1615,101 +1608,42 @@ def build_eor_ml_input(
             f"Available keys: {list(values.keys())}"
         )
 
-    # ============================================================
-    # Read values
-    # ============================================================
-
-    depth = float(
-        values["depth_ft"]
-    )
-
-    porosity = float(
-        values["porosity_pct"]
-    )
-
-    permeability = float(
-        values["perm_md"]
-    )
-
-    api = float(
-        values["api"]
-    )
-
-    viscosity = float(
-        values["visc_cp"]
-    )
-
-    oil_saturation = float(
-        values["so_pct"]
-    )
-
-    # ============================================================
-    # Basic validation
-    # ============================================================
+    depth = float(values["depth_ft"])
+    porosity = float(values["porosity_pct"])
+    permeability = float(values["perm_md"])
+    api = float(values["api"])
+    viscosity = float(values["visc_cp"])
+    oil_saturation = float(values["so_pct"])
 
     if depth <= 0:
-        raise ValueError(
-            "Depth must be greater than zero."
-        )
-
+        raise ValueError("Depth must be greater than zero.")
     if not 0 <= porosity <= 100:
-        raise ValueError(
-            "Porosity must be between 0 and 100%."
-        )
-
+        raise ValueError("Porosity must be between 0 and 100%.")
     if permeability <= 0:
-        raise ValueError(
-            "Permeability must be greater than zero."
-        )
-
+        raise ValueError("Permeability must be greater than zero.")
     if not 0 <= api <= 100:
-        raise ValueError(
-            "API gravity must be between 0 and 100°."
-        )
-
+        raise ValueError("API gravity must be between 0 and 100°.")
     if viscosity <= 0:
-        raise ValueError(
-            "Viscosity must be greater than zero."
-        )
-
+        raise ValueError("Viscosity must be greater than zero.")
     if not 0 <= oil_saturation <= 100:
-        raise ValueError(
-            "Oil saturation must be between 0 and 100%."
-        )
-
-    # ============================================================
-    # Build exact production feature-builder input
-    #
-    # The production model uses range-based inputs.
-    # Since the current UI provides a single value, use:
-    #
-    #     min = max = UI value
-    #
-    # The feature builder will then generate midpoint/span/log
-    # features in the exact order expected by CatBoost.
-    # ============================================================
+        raise ValueError("Oil saturation must be between 0 and 100%.")
 
     return {
         "depth_min_ft": depth,
         "depth_max_ft": depth,
-
         "porosity_min_pct": porosity,
         "porosity_max_pct": porosity,
-
         "perm_min_md": permeability,
         "perm_max_md": permeability,
-
         "api_min": api,
         "api_max": api,
-
         "visc_min_cp": viscosity,
         "visc_max_cp": viscosity,
-
         "so_min_pct": oil_saturation,
         "so_max_pct": oil_saturation,
-
         "formation_category": formation_map[formation],
     }
+
 
 # =============================================================================
 # EOR INTELLIGENCE
@@ -1719,27 +1653,11 @@ def run_eor_intelligence(
     values: Dict[str, float],
     formation: str,
 ) -> Dict[str, Any]:
-    """
-    Run fuzzy suitability and CatBoost independently.
+    """Run fuzzy suitability and CatBoost independently."""
 
-    Engineering screening remains authoritative for feasibility.
-    """
-
-    fuzzy_engine: FuzzyEngine = services[
-        "fuzzy_engine"
-    ]
-
-    model_service: ModelService = services[
-        "model_service"
-    ]
-
-    techs_all = list(
-        services["techs_all"]
-    )
-
-    # ============================================================
-    # Fuzzy suitability
-    # ============================================================
+    fuzzy_engine: FuzzyEngine = services["fuzzy_engine"]
+    model_service: ModelService = services["model_service"]
+    techs_all = list(services["techs_all"])
 
     fuzzy_scores = fuzzy_engine.evaluate_all(
         techs_all,
@@ -1753,23 +1671,12 @@ def run_eor_intelligence(
         reverse=True,
     )[:5]
 
-    # ============================================================
-    # CatBoost intelligence
-    # ============================================================
-
     ml_top3 = []
     ml_probabilities = {}
 
     if model_service.is_loaded():
-
-        ml_input = build_eor_ml_input(
-            values,
-            formation,
-        )
-
-        ml_result = model_service.predict(
-            ml_input
-        )
+        ml_input = build_eor_ml_input(values, formation)
+        ml_result = model_service.predict(ml_input)
 
         if not ml_result.success:
             raise RuntimeError(
@@ -1778,15 +1685,10 @@ def run_eor_intelligence(
             )
 
         ml_top3 = ml_result.top_n(3)
-
         ml_probabilities = {
             candidate.technique: candidate.probability
             for candidate in ml_result.candidates
         }
-
-    # ============================================================
-    # Return independent signals
-    # ============================================================
 
     return {
         "formation": formation,
@@ -1797,13 +1699,11 @@ def run_eor_intelligence(
         "ml_probabilities": ml_probabilities,
     }
 
+
 def render_eor_intelligence_result(
     result: Dict[str, Any],
 ) -> None:
-
-    st.subheader(
-        "🧠 EOR Intelligence Results"
-    )
+    st.subheader("🧠 EOR Intelligence Results")
 
     st.markdown(
         """
@@ -1817,23 +1717,14 @@ def render_eor_intelligence_result(
         unsafe_allow_html=True,
     )
 
-
     st.markdown("### 🤖 CatBoost Top 3")
 
     if result["ml_available"]:
-
-        cols = st.columns(
-            len(result["ml_top3"]) or 1
-        )
-
-        for col, candidate in zip(
-            cols,
-            result["ml_top3"],
-        ):
+        cols = st.columns(len(result["ml_top3"]) or 1)
+        for col, candidate in zip(cols, result["ml_top3"]):
             rank = candidate.rank
             technique = candidate.technique
             probability = candidate.probability
-
             with col:
                 st.markdown(
                     f'<div class="top3-card">'
@@ -1863,8 +1754,7 @@ def render_eor_intelligence_result(
         )
 
         ml_df["CatBoost Probability"] = (
-            ml_df["CatBoost Probability"]
-            .map(_format_probability)
+            ml_df["CatBoost Probability"].map(_format_probability)
         )
 
         st.dataframe(
@@ -1872,67 +1762,45 @@ def render_eor_intelligence_result(
             use_container_width=True,
             hide_index=True,
         )
-
     else:
-        st.warning(
-            "CatBoost model is unavailable."
-        )
-        
-        st.markdown(
-            "### 🌐 Fuzzy Suitability Top 5"
-        )
-
+        st.warning("CatBoost model is unavailable.")
+        st.markdown("### 🌐 Fuzzy Suitability Top 5")
         fuzzy_df = pd.DataFrame(
             [
                 {
                     "Rank": i,
                     "EOR Technique": technique,
-                    "Fuzzy Suitability": round(
-                        float(score),
-                        3,
-                    ),
+                    "Fuzzy Suitability": round(float(score), 3),
                 }
-                for i, (
-                    technique,
-                    score,
-                ) in enumerate(
+                for i, (technique, score) in enumerate(
                     result["fuzzy_top5"],
                     start=1,
                 )
             ]
         )
-
         st.dataframe(
             fuzzy_df,
             use_container_width=True,
             hide_index=True,
         )
 
-        if result["ml_probabilities"]:
-            st.markdown(
-                "### CatBoost Probability Distribution"
-            )
-
-            st.bar_chart(
-                pd.Series(
-                    result["ml_probabilities"],
-                    dtype=float,
-                ).sort_values(
-                    ascending=False
-                )
-            )
-
-        st.markdown(
-            "### Fuzzy Suitability Distribution"
+    if result["ml_probabilities"]:
+        st.markdown("### CatBoost Probability Distribution")
+        st.bar_chart(
+            pd.Series(
+                result["ml_probabilities"],
+                dtype=float,
+            ).sort_values(ascending=False)
         )
 
-        if result["fuzzy_top5"]:
-            st.bar_chart(
-                pd.Series(
-                    dict(result["fuzzy_top5"]),
-                    dtype=float,
-                )
+    st.markdown("### Fuzzy Suitability Distribution")
+    if result["fuzzy_top5"]:
+        st.bar_chart(
+            pd.Series(
+                dict(result["fuzzy_top5"]),
+                dtype=float,
             )
+        )
 
     st.info(
         "No weighted ML/fuzzy ensemble is applied. "
@@ -1945,19 +1813,13 @@ def render_eor_intelligence_result(
 # =============================================================================
 
 def render_eor_screening_tab() -> None:
-
-    st.header(
-        "🔍 EOR Screening"
-    )
-
+    st.header("🔍 EOR Screening")
     st.write(
         "Deterministic reservoir screening only. "
         "This layer does not call CatBoost or fuzzy scoring."
     )
 
-    inputs, formation = render_eor_input_form(
-        "screening"
-    )
+    inputs, formation = render_eor_input_form("screening")
 
     if st.button(
         "🚀 Run Screening",
@@ -1966,51 +1828,23 @@ def render_eor_screening_tab() -> None:
         key="excel_screening_run",
     ):
         try:
-            result = ExcelScreeningService().screen(
-                inputs,
-                formation,
-            )
-
-            st.session_state[
-                "excel_screening_result"
-            ] = result
-
+            result = ExcelScreeningService().screen(inputs, formation)
+            st.session_state["excel_screening_result"] = result
         except Exception:
-            logger.exception(
-                "EOR Screening failed."
-            )
-            st.error(
-                "The deterministic screening could not be completed."
-            )
+            logger.exception("EOR Screening failed.")
+            st.error("The deterministic screening could not be completed.")
 
-    result = st.session_state.get(
-        "excel_screening_result"
-    )
+    result = st.session_state.get("excel_screening_result")
 
     if result:
-        st.success(
-            "✅ EOR Screening completed"
-        )
-        render_excel_screening_result(
-            result
-        )
+        st.success("✅ EOR Screening completed")
+        render_excel_screening_result(result)
 
-    with st.expander(
-        "Workbook source / diagnostic",
-        expanded=False,
-    ):
-        st.write(
-            f"Workbook: `{settings.workbook_path}`"
-        )
-        st.write(
-            "Executable worksheet: `Screening`"
-        )
-        st.write(
-            "Input source: `InputData!B4:B44`"
-        )
-        st.write(
-            "Output source: `Screening!B2:I14`"
-        )
+    with st.expander("Workbook source / diagnostic", expanded=False):
+        st.write(f"Workbook: `{settings.workbook_path}`")
+        st.write("Executable worksheet: `Screening`")
+        st.write("Input source: `InputData!B4:B44`")
+        st.write("Output source: `Screening!B2:I14`")
 
 
 # =============================================================================
@@ -2031,13 +1865,7 @@ def render_executive_overview_section():
 
     cols = st.columns(6)
 
-    for col, (
-        label,
-        value,
-    ) in zip(
-        cols,
-        metrics,
-    ):
+    for col, (label, value) in zip(cols, metrics):
         with col:
             st.markdown(
                 f"""
@@ -2051,184 +1879,67 @@ def render_executive_overview_section():
 
     map_df = pd.DataFrame(
         {
-            "Field": [
-                "Angsi",
-                "Barton",
-                "Dulang",
-                "Tapis",
-                "Baram",
-            ],
-            "Latitude": [
-                4.3,
-                4.1,
-                3.9,
-                3.8,
-                5.0,
-            ],
-            "Longitude": [
-                103.1,
-                103.3,
-                103.6,
-                103.2,
-                112.0,
-            ],
-            "EOR_Status": [
-                "Candidate",
-                "Multiple",
-                "Historical",
-                "Candidate",
-                "Historical",
-            ],
-            "RF_Gap": [
-                120,
-                95,
-                80,
-                66,
-                105,
-            ],
+            "Field": ["Angsi", "Barton", "Dulang", "Tapis", "Baram"],
+            "Latitude": [4.3, 4.1, 3.9, 3.8, 5.0],
+            "Longitude": [103.1, 103.3, 103.6, 103.2, 112.0],
+            "EOR_Status": ["Candidate", "Multiple", "Historical", "Candidate", "Historical"],
+            "RF_Gap": [120, 95, 80, 66, 105],
         }
     )
 
-    st.subheader(
-        "Field Opportunity Map"
-    )
+    st.subheader("Field Opportunity Map")
 
     if pdk is not None:
-
         tooltip = {
-        "html": """
-            <b>{Field}</b><br/>
-            Status: {EOR_Status}<br/>
-            RF Gap: {RF_Gap}
-        """,
-        "style": {
-            "backgroundColor": "steelblue",
-            "color": "white",
-        },
-    }
+            "html": """
+                <b>{Field}</b><br/>
+                Status: {EOR_Status}<br/>
+                RF Gap: {RF_Gap}
+            """,
+            "style": {"backgroundColor": "steelblue", "color": "white"},
+        }
 
-    st.pydeck_chart(
-        pdk.Deck(
-                map_style = "light",
+        st.pydeck_chart(
+            pdk.Deck(
+                map_style="light",
                 initial_view_state=pdk.ViewState(
-                latitude=4.3,
-                longitude=103.4,
-                zoom=4,
-                pitch=30,
-            ),
-            layers=[
-                pdk.Layer(
-                    "ScatterplotLayer",
-                    data=map_df,
-                    get_position="[Longitude, Latitude]",
-                    get_fill_color="[255, 120, 60, 220]",
-                    get_radius="RF_Gap * 1000",
-                    radius_min_pixels=6,
-                    radius_max_pixels=20,
-                    pickable=True,
-                )
-            ],
-            tooltip=tooltip,
+                    latitude=4.3,
+                    longitude=103.4,
+                    zoom=4,
+                    pitch=30,
+                ),
+                layers=[
+                    pdk.Layer(
+                        "ScatterplotLayer",
+                        data=map_df,
+                        get_position="[Longitude, Latitude]",
+                        get_fill_color="[255, 120, 60, 220]",
+                        get_radius="RF_Gap * 1000",
+                        radius_min_pixels=6,
+                        radius_max_pixels=20,
+                        pickable=True,
+                    )
+                ],
+                tooltip=tooltip,
+            )
         )
-    )
 
-    st.dataframe( map_df, use_container_width=True, hide_index=True,)
+    st.dataframe(map_df, use_container_width=True, hide_index=True)
+
 
 def render_field_candidates_section():
-    st.header(
-        "🗺️ Field / Reservoir Candidates"
-    )
+    """Backward-compatible function name for the Candidate tab.
 
-    df = pd.DataFrame(
-        {
-            "Field": [
-                "Angsi",
-                "Dulang",
-                "Barton",
-                "Baram",
-                "Tapis",
-                "Penara",
-            ],
-            "Reservoir": [
-                "A12",
-                "E14",
-                "B7",
-                "E10",
-                "N12",
-                "P1",
-            ],
-            "Temperature_C": [
-                85,
-                93,
-                72,
-                108,
-                80,
-                66,
-            ],
-            "EUR_MMstb": [
-                68,
-                52,
-                41,
-                88,
-                54,
-                34,
-            ],
-            "RF_Gap": [
-                20,
-                18,
-                15,
-                24,
-                17,
-                12,
-            ],
-            "Permeability_mD": [
-                120,
-                160,
-                80,
-                180,
-                110,
-                90,
-            ],
-            "Method": [
-                "CO2 WAG",
-                "Polymer",
-                "ASP",
-                "CO2 WAG",
-                "Polymer",
-                "Steam",
-            ],
-        }
-    )
-
-    st.subheader(
-        "Candidate Reservoir Scatter"
-    )
-    st.bar_chart(
-        df.set_index("Field")[
-            "EUR_MMstb"
-        ]
-    )
-
-    st.subheader(
-        "Opportunity Rank"
-    )
-    st.bar_chart(
-        df.set_index("Field")[
-            "RF_Gap"
-        ]
-    )
-
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
+    The implementation now lives in the dedicated candidate_analytics package,
+    while remaining a peer feature inside the same EOR Atlas dashboard.
+    """
+    render_field_reservoir_parameters_tab(
+        workbook_path=str(settings.workbook_path)
     )
 
 
 def render_fluid_fluid_section():
-    st.header(
-        "🧪 CEOR — Fluid / Fluid"
-    )
+    st.header("🧪 CEOR — Fluid / Fluid")
 
     rheology = pd.DataFrame(
         {
@@ -2237,16 +1948,10 @@ def render_fluid_fluid_section():
             "Polymer_B": [132, 104, 82, 64, 49],
             "Polymer_C": [110, 88, 70, 54, 41],
         }
-    ).set_index(
-        "Shear_Rate"
-    )
+    ).set_index("Shear_Rate")
 
-    st.subheader(
-        "Rheology"
-    )
-    st.line_chart(
-        rheology
-    )
+    st.subheader("Rheology")
+    st.line_chart(rheology)
 
     thermal = pd.DataFrame(
         {
@@ -2254,16 +1959,10 @@ def render_fluid_fluid_section():
             "Retention_A": [100, 96, 90, 84, 79],
             "Retention_B": [100, 92, 85, 75, 68],
         }
-    ).set_index(
-        "Time_Days"
-    )
+    ).set_index("Time_Days")
 
-    st.subheader(
-        "Thermal Stability"
-    )
-    st.line_chart(
-        thermal
-    )
+    st.subheader("Thermal Stability")
+    st.line_chart(thermal)
 
     phase = pd.DataFrame(
         {
@@ -2273,12 +1972,8 @@ def render_fluid_fluid_section():
         }
     )
 
-    st.subheader(
-        "Phase Behaviour"
-    )
-    st.bar_chart(
-        phase.set_index("Formulation")
-    )
+    st.subheader("Phase Behaviour")
+    st.bar_chart(phase.set_index("Formulation"))
 
     ift = pd.DataFrame(
         {
@@ -2287,18 +1982,12 @@ def render_fluid_fluid_section():
         }
     )
 
-    st.subheader(
-        "IFT Comparison"
-    )
-    st.bar_chart(
-        ift.set_index("Formulation")
-    )
+    st.subheader("IFT Comparison")
+    st.bar_chart(ift.set_index("Formulation"))
 
 
 def render_fluid_rock_section():
-    st.header(
-        "🪨 CEOR — Fluid / Rock"
-    )
+    st.header("🪨 CEOR — Fluid / Rock")
 
     adsorption = pd.DataFrame(
         {
@@ -2308,12 +1997,8 @@ def render_fluid_rock_section():
         }
     ).set_index("Days")
 
-    st.subheader(
-        "Adsorption vs Time"
-    )
-    st.line_chart(
-        adsorption
-    )
+    st.subheader("Adsorption vs Time")
+    st.line_chart(adsorption)
 
     coreflood = pd.DataFrame(
         {
@@ -2323,12 +2008,8 @@ def render_fluid_rock_section():
         }
     )
 
-    st.subheader(
-        "Core Flood Incremental Recovery"
-    )
-    st.bar_chart(
-        coreflood.set_index("Core")
-    )
+    st.subheader("Core Flood Incremental Recovery")
+    st.bar_chart(coreflood.set_index("Core"))
 
     sor = pd.DataFrame(
         {
@@ -2337,18 +2018,12 @@ def render_fluid_rock_section():
         }
     )
 
-    st.subheader(
-        "Sor Reduction"
-    )
-    st.bar_chart(
-        sor.set_index("Core")
-    )
+    st.subheader("Sor Reduction")
+    st.bar_chart(sor.set_index("Core"))
 
 
 def render_challenges_section():
-    st.header(
-        "⚠️ Challenges & Lessons Learnt"
-    )
+    st.header("⚠️ Challenges & Lessons Learnt")
 
     df = pd.DataFrame(
         {
@@ -2360,11 +2035,7 @@ def render_challenges_section():
         }
     )
 
-    st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
-    )
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
     dist = pd.DataFrame(
         {
@@ -2379,38 +2050,21 @@ def render_challenges_section():
         }
     )
 
-    st.subheader(
-        "Challenge Distribution"
-    )
-    st.bar_chart(
-        dist.set_index("Challenge")
-    )
+    st.subheader("Challenge Distribution")
+    st.bar_chart(dist.set_index("Challenge"))
 
 
 def render_database_summary_section():
-    st.subheader(
-        "📊 Platform Overview"
-    )
+    st.subheader("📊 Platform Overview")
 
     try:
-        recent = (
-            RepositoryFactory
-            .screening_repo()
-            .get_recent(days=30)
-        )
+        recent = RepositoryFactory.screening_repo().get_recent(days=30)
     except Exception as exc:
-        logger.warning(
-            "Database summary unavailable: %s",
-            exc,
-        )
+        logger.warning("Database summary unavailable: %s", exc)
         recent = None
 
     cols = st.columns(4)
-
-    cols[0].metric(
-        "Recent Runs",
-        len(recent) if recent is not None else "N/A",
-    )
+    cols[0].metric("Recent Runs", len(recent) if recent is not None else "N/A")
     cols[1].metric(
         "Model Status",
         "Ready" if settings.validate_paths().get("model") else "Missing",
@@ -2419,18 +2073,13 @@ def render_database_summary_section():
         "Workbook",
         "Loaded" if settings.validate_paths().get("workbook") else "Missing",
     )
-    cols[3].metric(
-        "Environment",
-        settings.environment.upper(),
-    )
+    cols[3].metric("Environment", settings.environment.upper())
 
     if recent:
         rows = [
             {
                 "Time": (
-                    run.timestamp.strftime(
-                        "%Y-%m-%d %H:%M"
-                    )
+                    run.timestamp.strftime("%Y-%m-%d %H:%M")
                     if run.timestamp else "N/A"
                 ),
                 "Formation": run.formation,
@@ -2446,37 +2095,23 @@ def render_database_summary_section():
             hide_index=True,
         )
     else:
-        st.info(
-            "No recent screening records available."
-        )
+        st.info("No recent screening records available.")
 
 
 def render_model_registry_section():
-    st.subheader(
-        "🧠 Model Registry"
-    )
+    st.subheader("🧠 Model Registry")
 
     try:
-        versions = (
-            RepositoryFactory
-            .model_version_repo()
-            .list_versions()
-        )
+        versions = RepositoryFactory.model_version_repo().list_versions()
     except Exception as exc:
-        logger.warning(
-            "Model registry unavailable: %s",
-            exc,
-        )
+        logger.warning("Model registry unavailable: %s", exc)
         versions = None
 
     if not versions:
-        st.info(
-            "No registered model versions available."
-        )
+        st.info("No registered model versions available.")
         return
 
     rows = []
-
     for version in versions:
         rows.append(
             {
@@ -2486,17 +2121,10 @@ def render_model_registry_section():
                 "Accuracy": version.test_accuracy,
                 "Weighted F1": version.test_weighted_f1,
                 "Training Date": (
-                    version.training_date.strftime(
-                        "%Y-%m-%d %H:%M"
-                    )
-                    if version.training_date
-                    else "N/A"
+                    version.training_date.strftime("%Y-%m-%d %H:%M")
+                    if version.training_date else "N/A"
                 ),
-                "Active": (
-                    "Yes"
-                    if version.is_active
-                    else "No"
-                ),
+                "Active": "Yes" if version.is_active else "No",
             }
         )
 
@@ -2508,62 +2136,35 @@ def render_model_registry_section():
 
 
 def render_saved_run_detail_section():
-    st.subheader(
-        "🧾 Saved Run Detail & Comparison"
-    )
+    st.subheader("🧾 Saved Run Detail & Comparison")
 
     try:
-        history = (
-            RepositoryFactory
-            .screening_repo()
-            .get_recent(days=365)
-        )
+        history = RepositoryFactory.screening_repo().get_recent(days=365)
     except Exception as exc:
-        logger.warning(
-            "Historical screening data unavailable: %s",
-            exc,
-        )
+        logger.warning("Historical screening data unavailable: %s", exc)
         history = None
 
     if not history:
-        st.info(
-            "No saved screening runs available."
-        )
+        st.info("No saved screening runs available.")
         return
 
-    run_ids = [
-        run.id for run in history
-    ]
-
+    run_ids = [run.id for run in history]
     selected_id = st.selectbox(
         "Select a saved run",
         run_ids,
         key="saved_run_detail",
     )
 
-    selected = next(
-        (
-            run for run in history
-            if run.id == selected_id
-        ),
-        None,
-    )
-
+    selected = next((run for run in history if run.id == selected_id), None)
     if selected is None:
         return
 
     left, right = st.columns(2)
 
     with left:
-        st.write(
-            f"**Run ID:** {selected.id}"
-        )
-        st.write(
-            f"**Timestamp:** {selected.timestamp}"
-        )
-        st.write(
-            f"**Formation:** {selected.formation}"
-        )
+        st.write(f"**Run ID:** {selected.id}")
+        st.write(f"**Timestamp:** {selected.timestamp}")
+        st.write(f"**Formation:** {selected.formation}")
         st.write(
             f"**Recommendation:** {selected.recommended_technique or 'N/A'}"
         )
@@ -2572,9 +2173,7 @@ def render_saved_run_detail_section():
         st.write(
             f"**Status:** {selected.recommendation_status or 'N/A'}"
         )
-        st.write(
-            f"**Score:** {selected.recommendation_score}"
-        )
+        st.write(f"**Score:** {selected.recommendation_score}")
         st.write(
             f"**Model Version:** {selected.model_version or 'N/A'}"
         )
@@ -2583,57 +2182,33 @@ def render_saved_run_detail_section():
         )
 
     if selected.input_payload:
-        st.write(
-            "**Exact input values:**"
-        )
+        st.write("**Exact input values:**")
         st.dataframe(
-            pd.DataFrame(
-                [selected.input_payload]
-            ),
+            pd.DataFrame([selected.input_payload]),
             use_container_width=True,
             hide_index=True,
         )
 
     if selected.rule_trace:
-        with st.expander(
-            "Structured rule trace"
-        ):
-            st.json(
-                selected.rule_trace
-            )
+        with st.expander("Structured rule trace"):
+            st.json(selected.rule_trace)
 
     if selected.assumptions:
-        with st.expander(
-            "Recorded assumptions"
-        ):
-            st.json(
-                selected.assumptions
-            )
+        with st.expander("Recorded assumptions"):
+            st.json(selected.assumptions)
 
 
 # =============================================================================
 # SIDEBAR
 # =============================================================================
 
-def render_sidebar_status(
-    services: Dict[str, Any],
-):
+def render_sidebar_status(services: Dict[str, Any]):
     path_status = settings.validate_paths()
+    model_ready = bool(services.get("model_loaded"))
+    workbook_ready = bool(path_status.get("workbook"))
+    config_ready = bool(path_status.get("config"))
 
-    model_ready = bool(
-        services.get("model_loaded")
-    )
-    workbook_ready = bool(
-        path_status.get("workbook")
-    )
-    config_ready = bool(
-        path_status.get("config")
-    )
-
-    st.sidebar.header(
-        "Operational Status"
-    )
-
+    st.sidebar.header("Operational Status")
     st.sidebar.markdown(
         f"""
         <div class="status-box">
@@ -2660,18 +2235,10 @@ def render_sidebar_status(
         unsafe_allow_html=True,
     )
 
-    st.sidebar.caption(
-        "Decision stack"
-    )
-    st.sidebar.write(
-        "• Deterministic Excel screening"
-    )
-    st.sidebar.write(
-        "• Fuzzy envelope suitability"
-    )
-    st.sidebar.write(
-        "• CatBoost ML ranking"
-    )
+    st.sidebar.caption("Decision stack")
+    st.sidebar.write("• Deterministic Excel screening")
+    st.sidebar.write("• Fuzzy envelope suitability")
+    st.sidebar.write("• CatBoost ML ranking")
 
 
 # =============================================================================
@@ -2679,7 +2246,6 @@ def render_sidebar_status(
 # =============================================================================
 
 def main():
-
     st.title(
         "EOR Atlas – Decision Support Platform with Machine Learning Classifications"
     )
@@ -2692,20 +2258,16 @@ def main():
     services = initialize_services()
 
     if services is None:
-        st.error(
-            "EOR Atlas services failed to initialize."
-        )
+        st.error("EOR Atlas services failed to initialize.")
         return
 
-    render_sidebar_status(
-        services
-    )
+    render_sidebar_status(services)
 
     tabs = st.tabs(
         [
             "🏠 Executive Overview",
             "🔍 EOR Screening",
-            "🗺️ Field / Reservoir Candidates",
+            "🎯 Field / Reservoir Parameters",
             "🧪 CEOR — Fluid / Fluid",
             "🪨 CEOR — Fluid / Rock",
             "📚 Past EOR Results",
@@ -2730,9 +2292,7 @@ def main():
         render_fluid_rock_section()
 
     with tabs[5]:
-        st.header(
-            "📚 Past EOR Results"
-        )
+        st.header("📚 Past EOR Results")
         render_database_summary_section()
         st.divider()
         render_saved_run_detail_section()
@@ -2750,9 +2310,7 @@ def main():
             "CatBoost and fuzzy suitability are independent signals."
         )
 
-        inputs, formation = render_eor_input_form(
-            "intel"
-        )
+        inputs, formation = render_eor_input_form("intel")
 
         if st.button(
             "🧠 Run EOR Intelligence",
@@ -2760,7 +2318,6 @@ def main():
             use_container_width=True,
             key="run_eor_intelligence",
         ):
-
             ml_values = {
                 "depth_ft": inputs["depth_ft"],
                 "porosity_pct": inputs["porosity_pct"],
@@ -2770,51 +2327,32 @@ def main():
                 "so_pct": inputs["so_pct"],
             }
 
-            with st.spinner(
-                "Running fuzzy and CatBoost intelligence..."
-            ):
+            with st.spinner("Running fuzzy and CatBoost intelligence..."):
                 try:
                     result = run_eor_intelligence(
                         services,
                         ml_values,
                         formation,
                     )
-
-                    st.session_state[
-                        "eor_intelligence_result"
-                    ] = result
-
+                    st.session_state["eor_intelligence_result"] = result
                 except Exception:
-                    logger.exception(
-                        "EOR Intelligence execution failed."
-                    )
-                    st.error(
-                        "EOR Intelligence could not complete."
-                    )
+                    logger.exception("EOR Intelligence execution failed.")
+                    st.error("EOR Intelligence could not complete.")
 
-        result = st.session_state.get(
-            "eor_intelligence_result"
-        )
+        result = st.session_state.get("eor_intelligence_result")
 
         if result:
-            render_eor_intelligence_result(
-                result
-            )
-
+            render_eor_intelligence_result(result)
             st.divider()
 
-            model_service = services[
-                "model_service"
-            ]
+            model_service = services["model_service"]
 
             if model_service.is_loaded():
                 with st.expander(
                     "🐱 CatBoost Model Information",
                     expanded=False,
                 ):
-                    st.json(
-                        model_service.get_model_info()
-                    )
+                    st.json(model_service.get_model_info())
 
             st.divider()
             render_model_registry_section()
