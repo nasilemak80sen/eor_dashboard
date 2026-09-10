@@ -21,6 +21,21 @@ from ml.hybrid_intelligence import HybridDecisionService, build_opportunity_cont
 
 _ORIGINAL_RENDER_INPUT_FORM = _app.render_eor_input_form
 _ORIGINAL_RENDER_SIDEBAR_STATUS = _app.render_sidebar_status
+_FORM_INSTANCE_COUNTER: Dict[str, int] = {}
+
+
+def _next_form_instance(prefix: str) -> int:
+    """Return a deterministic per-rerun instance number for a form prefix.
+
+    Streamlit can execute more than one copy of a tab/form during a render.
+    The v3-only widgets therefore need an instance suffix in addition to the
+    logical prefix. The module is re-imported on each Streamlit script rerun,
+    so the counter is stable for the duration of a single render and does not
+    grow across reruns.
+    """
+    instance = _FORM_INSTANCE_COUNTER.get(prefix, 0)
+    _FORM_INSTANCE_COUNTER[prefix] = instance + 1
+    return instance
 
 
 def initialize_services() -> Dict[str, Any]:
@@ -61,25 +76,29 @@ def render_sidebar_status(services: Dict[str, Any]) -> None:
 def render_eor_input_form(prefix: str):
     """Reuse the stable ScreenTool form and append optional ScreenTool v3 data."""
     inputs, formation = _ORIGINAL_RENDER_INPUT_FORM(prefix)
+    form_instance = _next_form_instance(prefix)
 
     with st.expander("🧩 ScreenTool v3 Optional Parameters", expanded=False):
         st.caption(
             "These parameters are optional opportunity/context indicators. "
             "They do not create a universal engineering PASS/FAIL gate."
         )
+        sorw_key = f"{prefix}_sorw_v3_{form_instance}"
+        sorw_available_key = f"{prefix}_sorw_available_v3_{form_instance}"
+
         sorw_raw = st.number_input(
             "Residual Oil Saturation to Waterflood, Sorw (%)",
             min_value=0.0,
             max_value=100.0,
-            value=float(inputs.get("sorw_pct", 0.0)),
+            value=float(inputs.get("sorw_pct", 0.0) or 0.0),
             step=1.0,
-            key=f"{prefix}_sorw_v3",
+            key=sorw_key,
             help="Optional SCAL/simulation input used to derive movable oil saturation.",
         )
         sorw_provided = st.checkbox(
             "Sorw available from SCAL / simulation",
             value=bool(inputs.get("sorw_pct") is not None),
-            key=f"{prefix}_sorw_available_v3",
+            key=sorw_available_key,
         )
 
     inputs["sorw_pct"] = sorw_raw if sorw_provided else None
