@@ -28,23 +28,8 @@ NAV_ITEMS = (
 )
 
 
-def _reset_input_state() -> None:
-    """Clear all EOR input widgets and transient screening results."""
-    prefixes = ("screening_", "intel_")
-    keys_to_clear = [
-        key
-        for key in list(st.session_state.keys())
-        if any(str(key).startswith(prefix) for prefix in prefixes)
-    ]
-    for key in keys_to_clear:
-        del st.session_state[key]
-
-    for key in ("excel_screening_result", "eor_intelligence_result"):
-        st.session_state.pop(key, None)
-
-
 def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
-    """Render the navigation and return the selected page key."""
+    """Render global navigation only; page-local input reset lives on each form page."""
     state = system_state or {}
 
     st.sidebar.markdown(
@@ -63,19 +48,21 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
     current = st.session_state.get("atlas_page", "overview")
     selected = current
 
-    sections = []
+    sections: list[str] = []
     for item in NAV_ITEMS:
         if item.section not in sections:
             sections.append(item.section)
 
     for section in sections:
-        st.sidebar.markdown(f'<div class="nav-section-label">{section}</div>', unsafe_allow_html=True)
-        section_items = [item for item in NAV_ITEMS if item.section == section]
-        for item in section_items:
+        st.sidebar.markdown(
+            f'<div class="nav-section-label">{section}</div>',
+            unsafe_allow_html=True,
+        )
+        for item in (x for x in NAV_ITEMS if x.section == section):
             active = item.key == current
-            button_label = f"{'▌ ' if active else ''}{item.icon}  {item.label}"
+            label = f"{'▌ ' if active else ''}{item.icon}  {item.label}"
             if st.sidebar.button(
-                button_label,
+                label,
                 key=f"nav_{item.key}",
                 use_container_width=True,
                 type="primary" if active else "secondary",
@@ -83,34 +70,20 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
                 selected = item.key
                 st.session_state["atlas_page"] = item.key
 
-    st.sidebar.markdown('<div style="height:.7rem"></div>', unsafe_allow_html=True)
-    st.sidebar.markdown('<div class="nav-section-label">Workspace</div>', unsafe_allow_html=True)
-
-    if st.sidebar.button(
-        "↺  Reset EOR Inputs",
-        key="sidebar_reset_eor_inputs",
-        use_container_width=True,
-        type="secondary",
-        help="Reset EOR Screening and Hybrid Intelligence inputs to their defaults.",
-    ):
-        _reset_input_state()
-        st.rerun()
-
-    st.sidebar.caption("Reset only the EOR Screening and Hybrid Intelligence input state.")
-
-    st.sidebar.markdown('<div style="height:.45rem"></div>', unsafe_allow_html=True)
-    st.sidebar.markdown('<div class="nav-section-label">System Status</div>', unsafe_allow_html=True)
-    status_items = (
+    st.sidebar.markdown('<div style="height:.8rem"></div>', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<div class="nav-section-label">System Status</div>',
+        unsafe_allow_html=True,
+    )
+    for label, ready in (
         ("Excel Gate", bool(state.get("workbook"))),
         ("CatBoost", bool(state.get("model"))),
         ("Decision Fusion", True),
-    )
-    for label, ready in status_items:
-        symbol = "●" if ready else "○"
-        status = "READY" if ready else "CHECK"
+    ):
+        status_class = "status-ok" if ready else "status-check"
+        status_text = "READY" if ready else "CHECK"
         st.sidebar.markdown(
-            f'<div style="display:flex;justify-content:space-between;font-size:.73rem;margin:.32rem 0;">'
-            f'<span>{symbol}&nbsp; {label}</span><span style="opacity:.68;">{status}</span></div>',
+            f'<div class="sidebar-status-row"><span>{label}</span><span class="{status_class}">{status_text}</span></div>',
             unsafe_allow_html=True,
         )
 
