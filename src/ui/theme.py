@@ -73,17 +73,52 @@ def inject_theme() -> None:
         .context-bar {{ display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 1rem;background:#fff;border:1px solid var(--atlas-border);border-radius:14px;box-shadow:0 4px 14px rgba(16,24,40,.03);margin-bottom:1rem; }}
         .context-label {{ color:#98A2B3;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em; }} .context-value {{ color:#152D36;font-size:.92rem;font-weight:700;margin-top:.15rem; }}
 
-        /* Buttons: white secondary actions with dark text, PETRONAS green primary action. */
+        /* Main-content controls: high contrast and deliberately quiet. */
         div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {{ border-radius:10px;min-height:2.5rem;font-weight:600;border:1px solid #D0D5DD;background:#fff;color:#182230; }}
         div[data-testid="stButton"] > button:hover, div[data-testid="stDownloadButton"] > button:hover {{ border-color:#98A2B3;background:#F9FAFB;color:#101828; }}
         div[data-testid="stButton"] > button[kind="primary"] {{ background:var(--petronas-green);border-color:var(--petronas-green);color:#fff;box-shadow:0 4px 10px rgba(0,161,156,.15); }}
         div[data-testid="stButton"] > button[kind="primary"]:hover {{ background:#008F89;border-color:#008F89;color:#fff; }}
+
+        /* Sidebar navigation: dark surface with light text. */
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button,
+        [data-testid="stSidebar"] div[data-testid="stDownloadButton"] > button {{
+            background:rgba(255,255,255,.055) !important;
+            border:1px solid rgba(255,255,255,.08) !important;
+            color:#EAF7F6 !important;
+            text-align:left !important;
+            box-shadow:none !important;
+        }}
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button:hover {{
+            background:rgba(255,255,255,.11) !important;
+            border-color:rgba(255,255,255,.16) !important;
+            color:#fff !important;
+        }}
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button[kind="primary"] {{
+            background:var(--petronas-green) !important;
+            border-color:var(--petronas-green) !important;
+            color:#fff !important;
+            box-shadow:0 6px 14px rgba(0,161,156,.18) !important;
+        }}
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button[kind="primary"]:hover {{
+            background:#12B5AE !important;
+            border-color:#12B5AE !important;
+        }}
+        /* Reset action is intentionally dark and quiet, with light text. */
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button[key="sidebar_reset_eor_inputs"] {{
+            background:#071B21 !important;
+            border:1px solid rgba(255,255,255,.16) !important;
+            color:#F2FAF9 !important;
+        }}
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button[key="sidebar_reset_eor_inputs"]:hover {{
+            background:#0D2931 !important;
+            border-color:rgba(255,255,255,.28) !important;
+            color:#fff !important;
+        }}
+
         div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div, div[data-baseweb="textarea"] > div {{ background:#fff;border-color:#D0D5DD;color:#182230; }}
         div[data-baseweb="select"] span, div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea {{ color:#182230 !important; }}
         [data-baseweb="popover"] {{ background:#fff; }} [role="option"] {{ color:#182230 !important;background:#fff; }} [role="option"][aria-selected="true"] {{ background:#EAF7F6 !important;color:#0F4B4A !important; }}
         input::placeholder,textarea::placeholder {{ color:#98A2B3 !important;opacity:1; }} label,[data-testid="stWidgetLabel"] p {{ color:#344054 !important;font-weight:600; }} .stMarkdown,.stCaption,.stText {{ color:#344054; }}
-
-        /* Native st.metric is intentionally upgraded into a KPI tile. */
         [data-testid="stMetric"] {{ background:#fff;border:1px solid var(--atlas-border);border-radius:14px;padding:.82rem .9rem;min-height:82px;box-shadow:0 4px 12px rgba(16,24,40,.028); }}
         [data-testid="stMetric"] [data-testid="stMetricLabel"] {{ color:#667085 !important;font-size:.64rem !important;font-weight:700;letter-spacing:.065em;text-transform:uppercase; }}
         [data-testid="stMetric"] [data-testid="stMetricValue"] {{ color:#101828 !important;font-size:1.12rem !important;font-weight:700;line-height:1.2; }}
@@ -91,8 +126,6 @@ def inject_theme() -> None:
         [data-testid="stDataFrame"] {{ border:1px solid var(--atlas-border);border-radius:12px;overflow:hidden; }}
         .stExpander {{ border:1px solid var(--atlas-border);border-radius:14px;background:#fff; }} .stExpander summary p {{ color:#182230 !important;font-weight:700; }}
         .stTabs [role="tablist"] {{ gap:.25rem;border-bottom:1px solid var(--atlas-border); }}
-
-        /* Backward-compatible legacy candidate cards. */
         .exec-kpi-card {{ background:#fff !important;border:1px solid var(--atlas-border);border-radius:16px;padding:1rem 1.05rem;min-height:112px;box-shadow:0 5px 18px rgba(16,24,40,.035);border-left:4px solid var(--petronas-green); }}
         .exec-kpi-label {{ color:#667085 !important;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.45rem; }}
         .exec-kpi-value {{ color:#101828 !important;font-size:1.65rem;font-weight:700;line-height:1.05; }} .exec-kpi-subtext {{ color:#667085 !important;font-size:.74rem;margin-top:.42rem; }}
