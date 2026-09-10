@@ -4,17 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import kpi_cards, page_header, section_title, status_grid
+from ui.components import kpi_cards, section_title, status_grid
 
 
 def render(services: dict) -> None:
     import app_2 as _app
-
-    page_header(
-        "Platform Governance",
-        "System & Model",
-        "Monitor the application health, workbook connection and active CatBoost configuration.",
-    )
 
     try:
         path_status = _app.settings.validate_paths()
@@ -33,31 +27,32 @@ def render(services: dict) -> None:
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
-        section_title("System Health")
+    health_tab, model_tab, runtime_tab = st.tabs(["System Health", "Active Model", "Runtime Diagnostics"])
+
+    with health_tab:
+        section_title("System Health", "A compact operational view of the components required by the decision stack.")
         status_grid([
             ("Excel workbook", workbook_ready),
             ("ML configuration", config_ready),
             ("CatBoost model", model_ready),
             ("Decision Fusion", True),
         ])
-    with col2:
-        section_title("Active Model")
+        st.info("The sidebar is intentionally reserved for global navigation and system status. Local form reset controls remain on the pages that own the inputs.")
+
+    with model_tab:
+        section_title("Active Model", "Current production-compatible model metadata.")
         if model_ready:
             try:
-                info = model_service.get_model_info()
-                st.json(info)
+                st.json(model_service.get_model_info())
             except Exception as exc:
                 st.warning(f"Model metadata could not be displayed: {exc}")
         else:
             st.info("The CatBoost model is not currently available to the application.")
+        section_title("V3 Training Readiness", "Engineering-aware CatBoost v2 remains isolated until it has independently labelled training data and validation.")
+        st.caption("The live decision path remains Excel Gate → CatBoost → Decision Fusion.")
 
-    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    section_title("V3 Training Readiness")
-    st.info("The engineering-aware CatBoost v2 pipeline is kept separate from the current production-compatible model. It should only be promoted after independent labeled-data validation.")
-
-    with st.expander("Runtime diagnostics", expanded=False):
+    with runtime_tab:
+        section_title("Runtime Diagnostics", "Useful environment details without crowding the main workspace.")
         st.write(f"Environment: `{getattr(_app.settings, 'environment', 'unknown')}`")
         st.write(f"Workbook path: `{getattr(_app.settings, 'workbook_path', 'unknown')}`")
         st.write(f"Model loaded: `{model_ready}`")
