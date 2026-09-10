@@ -36,20 +36,36 @@ Reservoir / Field Inputs
 
 Fuzzy suitability is no longer part of the production dashboard decision path.
 
+## Redesigned UI Shell
+
+The recommended production UI entrypoint is now `src/eor_atlas.py`.
+
+The interface uses a PETRONAS-inspired internal application shell with:
+
+- sidebar navigation instead of a wide horizontal tab row
+- consistent page headers and reusable KPI/status components
+- PETRONAS green, blue, lime, yellow and purple accents
+- an engineering-first visual hierarchy
+- one active page rendered at a time to reduce visual clutter and unnecessary widget execution
+- dedicated pages for portfolio discovery, engineering screening, hybrid intelligence, insights, historical knowledge, CEOR analysis, challenges and system governance
+
+The redesign is presentation-only: the working Excel Gate, current CatBoost compatibility model, and Decision Fusion services remain in the existing execution layer.
+
 ## Dashboard Modules
 
 | Module | Role |
 |---|---|
-| 🏠 Executive Overview | Portfolio-level EOR indicators and operational overview |
+| 🏠 Executive Overview | Portfolio-level EOR indicators and opportunity landscape |
+| 🎯 EOR Candidates | Interactive field/reservoir candidate exploration |
 | 🔍 EOR Screening | Deterministic Excel/ScreenTool engineering gate |
-| 🎯 Field / Reservoir Parameters | Independent candidate exploration and reservoir-property analytics |
-| 🧪 CEOR — Fluid / Fluid | Chemical EOR laboratory-style fluid analytics |
-| 🪨 CEOR — Fluid / Rock | Fluid-rock interaction and compatibility analytics |
-| 📚 Past EOR Results | Historical application records and saved screening runs |
-| ⚠️ Challenges & Lessons | Engineering observations and lessons learnt |
-| 🤖 EOR Intelligence | Excel-gated CatBoost prediction and decision fusion |
+| 🧠 Hybrid Intelligence | Excel-gated CatBoost ranking and Decision Fusion |
+| 📊 EOR Insights | Portfolio opportunity concentration and action view |
+| 📚 Historical EOR | Historical application records and saved screening runs |
+| ⚠️ Challenges & Lessons | Engineering observations and execution risks |
+| 🧪 CEOR Lab | Fluid/fluid and fluid/rock technical analytics |
+| ⚙ System & Model | Runtime health and model governance |
 
-The Field / Reservoir Parameters tab is intentionally independent: it does not launch deterministic screening, call the ML model, or hand a selected reservoir into another tool.
+The EOR Candidates module remains intentionally independent from deterministic screening and machine-learning inference.
 
 ## Excel Gate
 
@@ -63,6 +79,23 @@ The screening layer reproduces the executable engineering logic represented by t
 - reasons for failure or conditionality
 
 A critical Excel Gate failure is a hard veto in Decision Fusion.
+
+## ScreenTool v3 Inputs
+
+The v3-aligned production input flow distinguishes core engineering variables from optional context.
+
+Core reservoir and recovery inputs include depth, pressure, temperature, viscosity, API gravity, permeability, porosity, Current Oil Saturation (`So`), recovery context, waterflood history, injection context and gas/WAG information.
+
+Optional/context fields include:
+
+- Residual Oil Saturation to Waterflood (`Sorw`)
+- optional numeric Produced GOR
+- numeric GOR-derived category
+- movable oil saturation (`So - Sorw`)
+- `φSo` opportunity indicator
+- gas-source/reinjection context
+
+Optional fields are represented explicitly when unavailable; values are not silently fabricated.
 
 ## Hybrid Intelligence
 
@@ -112,23 +145,21 @@ The hybrid layer maps the model's current technique taxonomy to the ScreenTool t
 - optional movable-oil saturation (`So - Sorw`)
 - optional Produced GOR and derived GOR category
 
-Missing optional values are represented explicitly; they are not silently treated as measured observations.
-
-`src/ml/train_hybrid_catboost.py` trains this next-generation model only from a real labelled historical EOR dataset. ScreenTool-generated labels are intentionally not used as training targets because that would simply teach ML to reproduce the deterministic rule set.
+`src/ml/train_hybrid_catboost.py` trains this next-generation model only from a real labelled historical EOR dataset. ScreenTool-generated labels are intentionally not used as training targets.
 
 ## Model Evaluation
 
-Model development should track more than accuracy. The assessment workflow is intended to monitor:
+The model assessment workflow tracks:
 
 - accuracy
-- macro F1
-- weighted F1
-- per-technique precision / recall / F1
-- confusion matrix
-- probability calibration
-- confidence coverage
+- balanced accuracy
+- macro and weighted F1
+- precision / recall
+- log loss
+- probability calibration / ECE
+- class support and sparse-class readiness
 
-The repository also contains regression tests for the hybrid decision layer and feature schema.
+The repository contains regression tests for the hybrid decision layer, feature schema, model assessment utilities and the redesigned UI imports.
 
 ## Project Structure
 
@@ -138,21 +169,32 @@ EORWEBDEV/
 ├── outputs/model_artifacts/
 ├── tests/
 │   ├── test_hybrid_intelligence.py
-│   └── test_hybrid_feature_builder.py
+│   ├── test_hybrid_feature_builder.py
+│   └── test_hybrid_model_assessment.py
 ├── src/
 │   ├── app_2.py
 │   ├── hybrid_app.py
+│   ├── eor_atlas.py              # redesigned production UI shell
+│   ├── ui/
+│   │   ├── theme.py
+│   │   ├── components.py
+│   │   ├── navigation.py
+│   │   └── app_shell.py
+│   ├── pages_ui/
+│   │   ├── overview.py
+│   │   ├── candidates.py
+│   │   ├── screening.py
+│   │   ├── intelligence.py
+│   │   ├── insights.py
+│   │   ├── historical.py
+│   │   ├── ceor.py
+│   │   ├── challenges.py
+│   │   └── system.py
 │   ├── candidate_analytics/
 │   ├── config/
 │   ├── data/
 │   ├── domain/
 │   ├── ml/
-│   │   ├── feature_builder.py
-│   │   ├── hybrid_feature_builder.py
-│   │   ├── hybrid_intelligence.py
-│   │   ├── model_assessment.py
-│   │   ├── model_service.py
-│   │   └── train_hybrid_catboost.py
 │   └── utils/
 ├── EOR_Screening_Tool_2026.xlsx
 ├── requirements.txt
@@ -183,7 +225,13 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-Run the production hybrid entrypoint:
+Run the redesigned production interface:
+
+```bash
+streamlit run src/eor_atlas.py
+```
+
+The previous hybrid entrypoint remains available for direct engineering/ML troubleshooting:
 
 ```bash
 streamlit run src/hybrid_app.py
@@ -191,23 +239,19 @@ streamlit run src/hybrid_app.py
 
 ## Testing
 
-Run the hybrid regression tests:
+Run the regression tests:
 
 ```bash
-PYTHONPATH=src pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py
+PYTHONPATH=src pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py
 ```
 
 Run syntax checks:
 
 ```bash
-python -m py_compile src/ml/hybrid_intelligence.py src/ml/hybrid_feature_builder.py src/ml/train_hybrid_catboost.py src/hybrid_app.py
+python -m py_compile src/eor_atlas.py src/hybrid_app.py src/ml/hybrid_intelligence.py src/ml/hybrid_feature_builder.py src/ml/hybrid_model_assessment.py src/ml/train_hybrid_catboost.py
 ```
 
-GitHub Actions runs these checks automatically for pushes and pull requests to `main`.
-
-## Data Sources
-
-The platform uses the engineering screening workbook, application persistence, and historical EOR evidence available in the repository. The Field / Reservoir Parameters analytics use the workbook's reservoir-property tables and do not depend on a generated placeholder dataset.
+GitHub Actions also compiles and imports the redesigned UI modules on pushes and pull requests to `main`.
 
 ## Limitations
 
