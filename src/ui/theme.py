@@ -103,17 +103,6 @@ def inject_theme() -> None:
             background:#12B5AE !important;
             border-color:#12B5AE !important;
         }}
-        /* Reset action is intentionally dark and quiet, with light text. */
-        [data-testid="stSidebar"] div[data-testid="stButton"] > button[key="sidebar_reset_eor_inputs"] {{
-            background:#071B21 !important;
-            border:1px solid rgba(255,255,255,.16) !important;
-            color:#F2FAF9 !important;
-        }}
-        [data-testid="stSidebar"] div[data-testid="stButton"] > button[key="sidebar_reset_eor_inputs"]:hover {{
-            background:#0D2931 !important;
-            border-color:rgba(255,255,255,.28) !important;
-            color:#fff !important;
-        }}
 
         div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, div[data-baseweb="base-input"] > div, div[data-baseweb="textarea"] > div {{ background:#fff;border-color:#D0D5DD;color:#182230; }}
         div[data-baseweb="select"] span, div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea {{ color:#182230 !important; }}
