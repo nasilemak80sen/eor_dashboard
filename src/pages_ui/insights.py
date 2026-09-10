@@ -5,68 +5,53 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ui.components import kpi_cards, page_header, section_title
+from ui.components import kpi_cards, section_title
 
 
 def render(services: dict) -> None:
-    page_header(
-        "Decision View",
-        "EOR Insights",
-        "Translate screening and portfolio data into an intuitive view of opportunity concentration and next actions.",
-    )
-
     workbook = services.get("workbook_sheets") or {}
     df = workbook.get("PROP_updatedNov25_v2") if isinstance(workbook, dict) else None
 
     if isinstance(df, pd.DataFrame) and not df.empty:
         rows = len(df)
-        fields = df.get("Field", pd.Series(dtype=object)).nunique()
-        try:
-            rf_gap = pd.to_numeric(df.get("RF Gap"), errors="coerce").sum()
-        except Exception:
-            rf_gap = None
-        try:
-            cr = pd.to_numeric(df.get("CR volume potential"), errors="coerce").sum()
-        except Exception:
-            cr = None
+        fields = int(df["Field"].nunique()) if "Field" in df.columns else 0
+        rf_gap = pd.to_numeric(df["RF Gap"], errors="coerce").sum() if "RF Gap" in df.columns else None
+        cr = pd.to_numeric(df["CR volume potential"], errors="coerce").sum() if "CR volume potential" in df.columns else None
         kpi_cards([
             ("Reservoirs", rows, "Current portfolio universe"),
             ("Fields", fields, "Distinct fields represented"),
-            ("RF Gap", "—" if rf_gap is None else f"{rf_gap:,.1f}", "Aggregate workbook indicator"),
-            ("CR Potential", "—" if cr is None else f"{cr:,.1f}", "Workbook candidate potential"),
+            ("RF Gap", "—" if rf_gap is None else f"{rf_gap:,.1f}", "Workbook aggregate indicator"),
+            ("CR Potential", "—" if cr is None else f"{cr:,.1f}", "Workbook opportunity indicator"),
         ])
 
         st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
         col1, col2 = st.columns(2)
         with col1:
-            section_title("RF Gap Distribution", "Where the portfolio appears to carry the largest recovery opportunity signal.")
-            gap_col = "RF Gap"
-            if gap_col in df.columns:
-                chart_df = pd.DataFrame({gap_col: pd.to_numeric(df[gap_col], errors="coerce")}).dropna()
-                if not chart_df.empty:
-                    st.line_chart(chart_df.sort_values(gap_col).reset_index(drop=True))
-                else:
-                    st.info("RF Gap values are not available for a chart.")
+            section_title("RF Gap Distribution", "Sorted recovery-gap signal across the loaded reservoir population.")
+            if "RF Gap" in df.columns:
+                chart_df = pd.to_numeric(df["RF Gap"], errors="coerce").dropna().sort_values().reset_index(drop=True)
+                st.line_chart(chart_df)
             else:
-                st.info("RF Gap column is not available in the loaded workbook.")
+                st.info("RF Gap data is unavailable.")
         with col2:
-            section_title("Candidate Opportunity", "Reservoir counts by producing status from the candidate data source.")
-            status_col = "Reservoir Producing Status"
-            if status_col in df.columns:
-                counts = df[status_col].fillna("Unknown").astype(str).value_counts()
-                st.bar_chart(counts)
+            section_title("Opportunity by Field", "Aggregate RF Gap by field for portfolio prioritisation.")
+            if "Field" in df.columns and "RF Gap" in df.columns:
+                temp = df[["Field", "RF Gap"]].copy()
+                temp["RF Gap"] = pd.to_numeric(temp["RF Gap"], errors="coerce")
+                field_gap = temp.dropna(subset=["RF Gap"]).groupby("Field")["RF Gap"].sum().sort_values(ascending=False).head(12)
+                st.bar_chart(field_gap)
             else:
-                st.info("Producing-status data is not available.")
+                st.info("Field/RF Gap data is unavailable.")
     else:
         kpi_cards([
             ("Candidates", 18, "Current opportunity pool"),
             ("Techniques", 9, "Current ScreenTool taxonomy"),
-            ("Priority", "Review", "Run screening for reservoir-level evidence"),
+            ("Priority", "Review", "Run reservoir-level screening"),
         ])
-        st.info("Portfolio workbook analytics are unavailable in this session; the decision workflow remains available through Candidates and Screening.")
+        st.info("Portfolio workbook analytics are unavailable in this session; Candidates and Screening remain available.")
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    section_title("Recommended Action Path")
+    section_title("Recommended Action Path", "A decision-oriented sequence from portfolio signal to engineering evidence.")
     actions = pd.DataFrame({
         "Priority": ["1", "2", "3"],
         "Action": ["Identify high-opportunity reservoirs", "Run deterministic EOR screening", "Review hybrid recommendation and engineering basis"],
