@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import insight_cards, section_title
+from ui.components import insight_cards, reset_button, section_title
 
 
 def render(services: dict) -> None:
@@ -17,15 +17,27 @@ def render(services: dict) -> None:
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    section_title("Reservoir Context", "Use the same full v3 input schema as EOR Screening so the two pages remain consistent.")
-    inputs, formation = _hybrid.render_eor_input_form("intel")
+    input_tab, decision_tab = st.tabs(["Reservoir Inputs", "Hybrid Decision"])
 
-    if st.button("🧠 Run Hybrid Intelligence", type="primary", use_container_width=True, key="ui_hybrid_intelligence_run"):
-        _hybrid._run_intelligence_from_current_inputs(services, inputs, formation)
+    with input_tab:
+        action_col, _ = st.columns([1, 4])
+        with action_col:
+            reset_button(
+                "↺ Reset inputs",
+                prefixes="intel_",
+                result_keys=("eor_intelligence_result",),
+                key="intelligence_reset_inputs",
+            )
+        section_title("Reservoir Context", "Use the same full v3 input schema as EOR Screening so the two pages remain consistent.")
+        inputs, formation = _hybrid.render_eor_input_form("intel")
+        if st.button("🧠 Run Hybrid Intelligence", type="primary", use_container_width=True, key="ui_hybrid_intelligence_run"):
+            _hybrid._run_intelligence_from_current_inputs(services, inputs, formation)
 
-    result = st.session_state.get("eor_intelligence_result")
-    if result:
-        st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    with decision_tab:
+        result = st.session_state.get("eor_intelligence_result")
+        if not result:
+            st.info("Run Hybrid Intelligence from the Reservoir Inputs tab to populate the decision result.")
+            return
         section_title("Decision Result", "Recommendation, Top 3 ranking, engineering gate and model context.")
         try:
             _hybrid.render_eor_intelligence_result(result)
