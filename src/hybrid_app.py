@@ -25,14 +25,7 @@ _FORM_INSTANCE_COUNTER: Dict[str, int] = {}
 
 
 def _next_form_instance(prefix: str) -> int:
-    """Return a deterministic per-rerun instance number for a form prefix.
-
-    Streamlit can execute more than one copy of a tab/form during a render.
-    The v3-only widgets therefore need an instance suffix in addition to the
-    logical prefix. The module is re-imported on each Streamlit script rerun,
-    so the counter is stable for the duration of a single render and does not
-    grow across reruns.
-    """
+    """Return a deterministic per-rerun instance number for a form prefix."""
     instance = _FORM_INSTANCE_COUNTER.get(prefix, 0)
     _FORM_INSTANCE_COUNTER[prefix] = instance + 1
     return instance
@@ -74,44 +67,86 @@ def render_sidebar_status(services: Dict[str, Any]) -> None:
 
 
 def render_eor_input_form(prefix: str):
-    """Reuse the stable ScreenTool form and append optional ScreenTool v3 data."""
+    """Reuse the stable ScreenTool form and append ScreenTool v3 opportunity data."""
     inputs, formation = _ORIGINAL_RENDER_INPUT_FORM(prefix)
     form_instance = _next_form_instance(prefix)
 
-    with st.expander("🧩 ScreenTool v3 Optional Parameters", expanded=False):
+    with st.expander("🧩 ScreenTool v3 Optional / Opportunity Parameters", expanded=False):
         st.caption(
-            "These parameters are optional opportunity/context indicators. "
-            "They do not create a universal engineering PASS/FAIL gate."
+            "The v3 workbook distinguishes core screening inputs from optional "
+            "opportunity/context indicators. Current So remains part of the "
+            "core screening input, while Sorw and numeric GOR are optional."
         )
+
+        # Current So is already entered in the main Reservoir Characteristics
+        # section. Reuse that value here rather than creating a second widget.
+        current_so = inputs.get("so_pct")
+        so_available_key = f"{prefix}_so_context_available_v3_{form_instance}"
         sorw_key = f"{prefix}_sorw_v3_{form_instance}"
         sorw_available_key = f"{prefix}_sorw_available_v3_{form_instance}"
 
-        sorw_raw = st.number_input(
-            "Residual Oil Saturation to Waterflood, Sorw (%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=float(inputs.get("sorw_pct", 0.0) or 0.0),
-            step=1.0,
-            key=sorw_key,
-            help="Optional SCAL/simulation input used to derive movable oil saturation.",
+        st.checkbox(
+            "Include Current Oil Saturation, So in v3 opportunity context",
+            value=current_so is not None,
+            disabled=current_so is None,
+            key=so_available_key,
+            help="Uses the Current So already entered above; no duplicate So input is created.",
         )
+
+        so_col, sorw_col = st.columns(2)
+        with so_col:
+            if current_so is None:
+                st.metric("Current Oil Saturation, So", "Not available")
+            else:
+                st.metric("Current Oil Saturation, So", f"{float(current_so):,.1f}% PV")
+        with sorw_col:
+            sorw_raw = st.number_input(
+                "Residual Oil Saturation to Waterflood, Sorw (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=float(inputs.get("sorw_pct", 0.0) or 0.0),
+                step=1.0,
+                key=sorw_key,
+                help="Optional SCAL/simulation input used to derive movable oil saturation.",
+            )
+
         sorw_provided = st.checkbox(
             "Sorw available from SCAL / simulation",
             value=bool(inputs.get("sorw_pct") is not None),
             key=sorw_available_key,
         )
 
-    inputs["sorw_pct"] = sorw_raw if sorw_provided else None
-
-    opportunity = build_opportunity_context(inputs)
-    movable = opportunity.get("movable_oil_saturation_pct")
-
-    if opportunity["sorw_available"]:
-        st.caption(
-            f"Movable Oil Saturation Indicator (So − Sorw) = **{movable:.1f}%**"
+        # The workbook allows numeric GOR as an optional helper and uses the
+        # manual category when the numeric value is unavailable. The base form
+        # already captures both, so expose them here as contextual readouts.
+        opportunity_preview = build_opportunity_context(
+            {
+                **inputs,
+                "sorw_pct": sorw_raw if sorw_provided else None,
+            }
         )
-    else:
-        st.caption("Movable Oil Saturation Indicator = **Not available**")
+        gor_col, category_col, movable_col = st.columns(3)
+        with gor_col:
+            gor_numeric = opportunity_preview.get("produced_gor_scf_stb")
+            st.metric(
+                "Produced GOR",
+                "Not available" if gor_numeric is None else f"{float(gor_numeric):,.0f} scf/STB",
+            )
+        with category_col:
+            category = opportunity_preview.get("gor_category") or inputs.get("produced_gor_category")
+            st.metric("GOR Category", category or "Not available")
+        with movable_col:
+            movable = opportunity_preview.get("movable_oil_saturation_pct")
+            st.metric(
+                "Movable Oil Saturation (So − Sorw)",
+                "Not available" if movable is None else f"{float(movable):,.1f}% PV",
+            )
+
+        st.caption(
+            "Sorw is optional EOR opportunity context. Current So remains a core screening input because the workbook uses So thresholds for gas/WAG, polymer, chemical, thermal and ISC screening."
+        )
+
+    inputs["sorw_pct"] = sorw_raw if sorw_provided else None
 
     return inputs, formation
 
