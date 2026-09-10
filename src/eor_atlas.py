@@ -11,7 +11,20 @@ import streamlit as st
 
 import hybrid_app as engine
 from pages_ui import challenges, ceor, candidates, historical, insights, intelligence, overview, screening, system
-from ui.app_shell import initialize_ui, render_shell_header, select_page
+from ui.app_shell import initialize_ui, render_page_intro, render_shell_header, select_page
+
+
+PAGE_META = {
+    "overview": ("PORTFOLIO OVERVIEW", "Executive Overview", "A decision-oriented view of the EOR portfolio, opportunity landscape and system readiness."),
+    "candidates": ("PORTFOLIO DISCOVERY", "EOR Candidates", "Explore field and reservoir properties, isolate candidate populations and open a reservoir for screening."),
+    "screening": ("ENGINEERING GATE", "EOR Screening", "Deterministic reservoir screening using the EOR Screening Tool 2026 v3 criteria."),
+    "intelligence": ("ENGINEERING + ML", "Hybrid Intelligence", "Use the deterministic Excel Gate as the engineering anchor, then apply CatBoost and Decision Fusion."),
+    "insights": ("DECISION VIEW", "EOR Insights", "Translate screening and portfolio data into an intuitive view of opportunity concentration and next actions."),
+    "historical": ("KNOWLEDGE BASE", "Historical EOR", "Review previous EOR studies, saved screening runs and lessons available to inform current decisions."),
+    "challenges": ("RISK & LESSONS", "Challenges & Lessons", "Capture technical, operational and execution risks so they remain visible alongside EOR opportunity."),
+    "ceor": ("TECHNOLOGY", "CEOR Lab", "Explore fluid/fluid and fluid/rock technical evidence supporting chemical EOR decisions."),
+    "system": ("PLATFORM GOVERNANCE", "System & Model", "Monitor application health, workbook connection and the active CatBoost configuration."),
+}
 
 
 def _safe_services() -> dict:
@@ -59,6 +72,8 @@ def main() -> None:
     services = _safe_services()
     page = select_page(_system_state(services))
     render_shell_header()
+    kicker, title, subtitle = PAGE_META.get(page, PAGE_META["overview"])
+    render_page_intro(kicker, title, subtitle)
     _render_page(page, services)
 
 
