@@ -85,6 +85,36 @@ def detail_metric_cards(
             )
 
 
+def reset_page_state(
+    prefixes: str | Iterable[str],
+    result_keys: Iterable[str] = (),
+) -> bool:
+    """Clear only the widget/result state owned by the current page."""
+    prefix_tuple = (prefixes,) if isinstance(prefixes, str) else tuple(prefixes)
+    changed = False
+    for key in list(st.session_state.keys()):
+        if any(str(key).startswith(prefix) for prefix in prefix_tuple):
+            del st.session_state[key]
+            changed = True
+    for key in result_keys:
+        if key in st.session_state:
+            st.session_state.pop(key, None)
+            changed = True
+    return changed
+
+
+def reset_button(label: str, prefixes: str | Iterable[str], result_keys: Iterable[str] = (), key: str = "reset_page") -> None:
+    """Render a consistent local page reset action and rerun after clearing state."""
+    if st.button(label, key=key, use_container_width=True, type="secondary"):
+        reset_page_state(prefixes, result_keys)
+        st.rerun()
+
+
+def page_tabs(labels: Iterable[str]):
+    """Create consistent contextual tabs for a page workflow."""
+    return st.tabs(list(labels))
+
+
 def status_badge(label: str, ready: bool) -> str:
     cls = "ready" if ready else "warn"
     state = "READY" if ready else "CHECK"
