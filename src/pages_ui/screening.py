@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import insight_cards, section_title
+from ui.components import insight_cards, reset_button, section_title
 
 
 def render() -> None:
@@ -18,21 +18,40 @@ def render() -> None:
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    section_title("Reservoir Inputs", "Current So is a core screening input. Sorw and numeric Produced GOR are optional v3 context inputs.")
-    inputs, formation = _hybrid.render_eor_input_form("screening")
+    inputs_tab, result_tab = st.tabs(["Reservoir Inputs", "Engineering Gate"])
 
-    if st.button("🚀 Run EOR Screening", type="primary", use_container_width=True, key="ui_screening_run"):
-        try:
-            result = _app.ExcelScreeningService().screen(inputs, formation)
-            st.session_state["excel_screening_result"] = result
-        except Exception:
-            _app.logger.exception("EOR Screening failed.")
-            st.error("The engineering screening could not be completed. Check the entered values.")
+    with inputs_tab:
+        action_col, _ = st.columns([1, 4])
+        with action_col:
+            reset_button(
+                "↺ Reset inputs",
+                prefixes="screening_",
+                result_keys=("excel_screening_result",),
+                key="screening_reset_inputs",
+            )
+        section_title(
+            "Reservoir Inputs",
+            "Current So is a core screening input. Sorw and numeric Produced GOR are optional v3 context inputs.",
+        )
+        inputs, formation = _hybrid.render_eor_input_form("screening")
 
-    result = st.session_state.get("excel_screening_result")
-    if result:
-        st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-        section_title("Engineering Gate Result", "Deterministic output is the engineering feasibility layer used by hybrid decision fusion.")
+        if st.button("🚀 Run EOR Screening", type="primary", use_container_width=True, key="ui_screening_run"):
+            try:
+                result = _app.ExcelScreeningService().screen(inputs, formation)
+                st.session_state["excel_screening_result"] = result
+            except Exception:
+                _app.logger.exception("EOR Screening failed.")
+                st.error("The engineering screening could not be completed. Check the entered values.")
+
+    with result_tab:
+        result = st.session_state.get("excel_screening_result")
+        if not result:
+            st.info("Run the screening from the Reservoir Inputs tab to populate the Engineering Gate result.")
+            return
+        section_title(
+            "Engineering Gate Result",
+            "Deterministic output is the engineering feasibility layer used by hybrid decision fusion.",
+        )
         try:
             _app.render_excel_screening_result(result)
         except Exception as exc:
