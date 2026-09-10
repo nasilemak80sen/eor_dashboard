@@ -8,10 +8,9 @@ probability calibration.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping
+from typing import Any
 
 import numpy as np
-from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -38,27 +37,29 @@ class ClassificationMetrics:
         return asdict(self)
 
 
+def _normalise_probabilities(y_probability: np.ndarray) -> np.ndarray:
+    probabilities = np.asarray(y_probability, dtype=float)
+    if probabilities.ndim != 2:
+        raise ValueError("y_probability must be a 2D probability matrix.")
+    if not np.isfinite(probabilities).all():
+        raise ValueError("Probability matrix contains non-finite values.")
+    row_sums = probabilities.sum(axis=1)
+    if np.any(row_sums <= 0):
+        raise ValueError("Each probability row must have positive mass.")
+    return probabilities / row_sums[:, None]
+
+
 def evaluate_probabilities(
     y_true: np.ndarray,
     y_probability: np.ndarray,
 ) -> ClassificationMetrics:
     """Evaluate multiclass probabilities with imbalance-aware metrics."""
     y_true = np.asarray(y_true)
-    y_probability = np.asarray(y_probability, dtype=float)
-
-    if y_probability.ndim != 2:
-        raise ValueError("y_probability must be a 2D probability matrix.")
-    if len(y_true) != len(y_probability):
+    probabilities = _normalise_probabilities(y_probability)
+    if len(y_true) != len(probabilities):
         raise ValueError("y_true and y_probability must contain the same number of rows.")
-    if not np.isfinite(y_probability).all():
-        raise ValueError("Probability matrix contains non-finite values.")
 
-    row_sums = y_probability.sum(axis=1)
-    if np.any(row_sums <= 0):
-        raise ValueError("Each probability row must have positive mass.")
-    y_probability = y_probability / row_sums[:, None]
-    y_pred = np.argmax(y_probability, axis=1)
-
+    y_pred = np.argmax(probabilities, axis=1)
     return ClassificationMetrics(
         accuracy=float(accuracy_score(y_true, y_pred)),
         balanced_accuracy=float(balanced_accuracy_score(y_true, y_pred)),
@@ -68,7 +69,6 @@ def evaluate_probabilities(
         weighted_precision=float(precision_score(y_true, y_pred, average="weighted", zero_division=0)),
         macro_recall=float(recall_score(y_true, y_pred, average="macro", zero_division=0)),
         weighted_recall=float(recall_score(y_true, y_pred, average="weighted", zero_division=0)),
-        log_loss_value=None,
     )
 
 
@@ -76,14 +76,13 @@ def evaluate_multiclass_model(
     y_true: np.ndarray,
     y_probability: np.ndarray,
 ) -> ClassificationMetrics:
-    """Evaluate predictions and include multiclass cross-entropy."""
-    metrics = evaluate_probabilities(y_true, y_probability)
-    y_probability = np.asarray(y_probability, dtype=float)
-    y_probability = y_probability / y_probability.sum(axis=1, keepdims=True)
+    """Evaluate multiclass predictions and include cross-entropy."""
+    probabilities = _normalise_probabilities(y_probability)
+    metrics = evaluate_probabilities(y_true, probabilities)
     return ClassificationMetrics(
         **{
             **metrics.to_dict(),
-            "log_loss": float(log_loss(y_true, y_probability, labels=np.arange(y_probability.shape[1]))),
+            "log_loss": float(log_loss(y_true, probabilities, labels=np.arange(probabilities.shape[1]))),
         }
     )
 
@@ -93,14 +92,14 @@ def expected_calibration_error(
     y_probability: np.ndarray,
     n_bins: int = 10,
 ) -> float:
-    """Compute a top-class expected calibration error (ECE)."""
+    """Compute top-class expected calibration error (ECE)."""
     if n_bins < 2:
         raise ValueError("n_bins must be >= 2.")
 
+    probabilities = _normalise_probabilities(y_probability)
     y_true = np.asarray(y_true)
-    y_probability = np.asarray(y_probability, dtype=float)
-    y_pred = np.argmax(y_probability, axis=1)
-    confidence = np.max(y_probability, axis=1)
+    y_pred = np.argmax(probabilities, axis=1)
+    confidence = np.max(probabilities, axis=1)
     correct = (y_pred == y_true).astype(float)
 
     edges = np.linspace(0.0, 1.0, n_bins + 1)
@@ -109,14 +108,13 @@ def expected_calibration_error(
         mask = (confidence >= lower) & (confidence < upper)
         if upper == 1.0:
             mask = (confidence >= lower) & (confidence <= upper)
-        if not mask.any():
-            continue
-        ece += mask.mean() * abs(confidence[mask].mean() - correct[mask].mean())
+        if mask.any():
+            ece += mask.mean() * abs(confidence[mask].mean() - correct[mask].mean())
     return float(ece)
 
 
 def class_support_report(y_true: np.ndarray, classes: list[str]) -> dict[str, int]:
-    """Return class counts for promotion/data sufficiency review."""
+    """Return class counts for data-sufficiency review."""
     values = np.asarray(y_true)
     return {
         str(classes[index]): int(np.sum(values == index))
