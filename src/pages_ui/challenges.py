@@ -16,8 +16,14 @@ def render() -> None:
         ("LEARNING", "Past experience", "Use lessons learned to shape what needs verification in the next screening cycle."),
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    section_title("Risk Landscape", "Technical, facilities, fluid-handling and execution constraints from the existing knowledge module.")
-    try:
-        _app.render_challenges_section()
-    except Exception as exc:
-        st.error(f"Challenge data could not be rendered: {exc}")
+
+    risk_tab, lessons_tab = st.tabs(["Risk Landscape", "How to Use"])
+    with risk_tab:
+        section_title("Risk Landscape", "Technical, facilities, fluid-handling and execution constraints from the existing knowledge module.")
+        try:
+            _app.render_challenges_section()
+        except Exception as exc:
+            st.error(f"Challenge data could not be rendered: {exc}")
+    with lessons_tab:
+        section_title("How to Use", "Keep key risks visible before advancing an EOR option.")
+        st.markdown("Review technical uncertainty, facility readiness and lessons learned alongside the screening result; they are supporting evidence, not a replacement for the engineering gate.")
