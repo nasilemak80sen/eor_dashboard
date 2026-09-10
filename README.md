@@ -1,473 +1,220 @@
 # 🛢️ EOR Atlas
 
-### Enhanced Oil Recovery Screening & Decision Support Platform 
+### Enhanced Oil Recovery Screening & Decision Support Platform
 
+EOR Atlas is an engineering-first Streamlit platform for EOR screening, reservoir opportunity analysis, historical evidence review, and data-driven EOR intelligence.
 
-**EOR Atlas** is an engineering-first decision-support platform for **Enhanced Oil Recovery (EOR)** screening, reservoir suitability assessment, and data-driven EOR intelligence.
+## Decision Architecture
 
-The platform combines **deterministic engineering screening**, **fuzzy suitability analysis**, and **CatBoost machine learning** within a single Streamlit dashboard.
-
-> **Engineering feasibility remains authoritative. ML and fuzzy logic provide independent decision-support signals.**
->
-**Access Here :** https://beta-eordashboard-1.streamlit.app/
-
----
-
-## 📌 Overview
-
-EOR Atlas was developed to support reservoir engineers in evaluating potential EOR opportunities using a structured and repeatable workflow.
-
-The platform brings together three independent analytical layers:
-
-| Layer                       | Purpose                                      | Output                    |
-| --------------------------- | -------------------------------------------- | ------------------------- |
-| **Deterministic Screening** | Engineering rule-based screening             | PASS / CONDITIONAL / FAIL |
-| **Fuzzy Suitability**       | Evaluate reservoir fit against EOR envelopes | Suitability ranking       |
-| **ML Intelligence**         | Learn patterns from historical EOR data      | Probabilistic EOR ranking |
-
-This separation ensures that machine learning does not override established engineering constraints.
-
----
-
-## 🚀 Key Capabilities
-
-### 🔍 EOR Screening
-
-Performs deterministic screening using reservoir and operational inputs such as:
-
-* Depth
-* Temperature
-* Oil viscosity
-* API gravity
-* Permeability
-* Porosity
-* Oil saturation
-* Reservoir characteristics
-* Waterflood history
-* Injection facilities
-* Gas availability
-* Mobility considerations
-* Field maturity
-* Other EOR-specific constraints
-
-The screening layer provides:
-
-* EOR technique eligibility
-* Engineering suitability
-* Screening score
-* Estimated incremental recovery
-* Failure / conditional reasoning
-
----
-
-### 🧠 EOR Intelligence
-
-The EOR Intelligence layer provides two independent analytical perspectives.
-
-#### CatBoost ML Ranking
-
-The embedded CatBoost model provides a probabilistic ranking of EOR techniques based on engineered reservoir features.
-
-Current production feature space:
+The production decision path is deliberately simple and auditable:
 
 ```text
-17 engineered features
+Reservoir / Field Inputs
+        │
+        ▼
+┌─────────────────────┐
+│     Excel Gate      │
+│ deterministic rules │
+└──────────┬──────────┘
+           │ eligible candidates
+           ▼
+┌─────────────────────┐
+│  Hybrid Intelligence│
+│      CatBoost       │
+└──────────┬──────────┘
+           │ class probabilities
+           ▼
+┌─────────────────────┐
+│   Decision Fusion   │
+│ engineering + ML    │
+└──────────┬──────────┘
+           ▼
+   Hybrid EOR Ranking
 ```
 
-including:
+**Engineering feasibility is authoritative. CatBoost supports the decision; it does not override a hard engineering failure.**
 
-* Reservoir depth
-* Porosity
-* Permeability
-* API gravity
-* Oil viscosity
-* Oil saturation
-* Feature spans
-* Log-transformed permeability
-* Log-transformed viscosity
-* Formation-type indicators
+Fuzzy suitability is no longer part of the production dashboard decision path.
 
-The model returns:
+## Dashboard Modules
 
-* Top EOR candidates
-* Class probabilities
-* Ranking
-* Confidence information
+| Module | Role |
+|---|---|
+| 🏠 Executive Overview | Portfolio-level EOR indicators and operational overview |
+| 🔍 EOR Screening | Deterministic Excel/ScreenTool engineering gate |
+| 🎯 Field / Reservoir Parameters | Independent candidate exploration and reservoir-property analytics |
+| 🧪 CEOR — Fluid / Fluid | Chemical EOR laboratory-style fluid analytics |
+| 🪨 CEOR — Fluid / Rock | Fluid-rock interaction and compatibility analytics |
+| 📚 Past EOR Results | Historical application records and saved screening runs |
+| ⚠️ Challenges & Lessons | Engineering observations and lessons learnt |
+| 🤖 EOR Intelligence | Excel-gated CatBoost prediction and decision fusion |
 
-#### Fuzzy Suitability
+The Field / Reservoir Parameters tab is intentionally independent: it does not launch deterministic screening, call the ML model, or hand a selected reservoir into another tool.
 
-The fuzzy layer evaluates the reservoir against predefined EOR suitability envelopes.
+## Excel Gate
 
-This provides an independent suitability perspective without combining the score with the ML probability.
+The screening layer reproduces the executable engineering logic represented by the EOR screening workbook. It returns technique-level:
 
----
+- PASS
+- CONDITIONAL
+- FAIL (critical)
+- engineering score
+- incremental recovery estimate
+- reasons for failure or conditionality
 
-## 🏗️ Decision Architecture
+A critical Excel Gate failure is a hard veto in Decision Fusion.
+
+## Hybrid Intelligence
+
+The current production path uses the existing CatBoost v1 artifact as a compatibility model while the richer v2 training pipeline is prepared.
+
+Initial fusion defaults are:
 
 ```text
-                    EOR Atlas
-                       │
-                       ▼
-             Reservoir / Field Inputs
-                       │
-          ┌────────────┼────────────┐
-          │            │            │
-          ▼            ▼            ▼
-    Deterministic     Fuzzy       CatBoost
-      Screening     Suitability      ML
-          │            │            │
-          ▼            ▼            ▼
-    Engineering      Envelope     Data-driven
-     Feasibility     Ranking       Ranking
-          │            │            │
-          └────────────┼────────────┘
-                       ▼
-              Engineering Decision
+CatBoost probability        65%
+Engineering compatibility  35%
+Conditional penalty          0.90
 ```
 
-### Design Principle
+These are implementation defaults, not validated project-performance claims. They should be calibrated against a sufficiently large labelled validation set before being treated as formal decision criteria.
 
-The analytical layers are intentionally independent.
+### CatBoost v1 compatibility layer
 
-```text
-Deterministic Screening
-        ↓
-Engineering feasibility
+The current model consumes 17 engineered features derived from:
 
-Fuzzy Suitability
-        ↓
-Reservoir-envelope compatibility
+- depth
+- porosity
+- permeability
+- API gravity
+- viscosity
+- oil saturation
+- uncertainty spans
+- log permeability
+- log viscosity
+- formation indicators
 
-CatBoost ML
-        ↓
-Historical/data-driven similarity
-```
+The hybrid layer maps the model's current technique taxonomy to the ScreenTool taxonomy before fusion.
 
-No arbitrary weighted ensemble is used to combine these signals.
+## Next CatBoost Generation
 
----
+`src/ml/hybrid_feature_builder.py` provides the schema for the next engineering-aware model. It adds context such as:
 
-## 🗂️ Dashboard
+- reservoir pressure and bubble-point margin
+- temperature and net pay
+- water cut
+- salinity and hardness
+- mobility, injectivity, heterogeneity and maturity
+- injection-facility availability
+- WAG context
+- CO2 / MMP availability
+- gas availability and reinjection context
+- optional Sorw
+- optional movable-oil saturation (`So - Sorw`)
+- optional Produced GOR and derived GOR category
 
-The Streamlit dashboard currently provides the following modules:
+Missing optional values are represented explicitly; they are not silently treated as measured observations.
 
-### 🏠 Executive Overview
+`src/ml/train_hybrid_catboost.py` trains this next-generation model only from a real labelled historical EOR dataset. ScreenTool-generated labels are intentionally not used as training targets because that would simply teach ML to reproduce the deterministic rule set.
 
-Portfolio-level overview including:
+## Model Evaluation
 
-* Field and reservoir metrics
-* EOR opportunity indicators
-* Field opportunity visualization
-* Portfolio statistics
+Model development should track more than accuracy. The assessment workflow is intended to monitor:
 
-### 🔍 EOR Screening
+- accuracy
+- macro F1
+- weighted F1
+- per-technique precision / recall / F1
+- confusion matrix
+- probability calibration
+- confidence coverage
 
-Interactive reservoir screening using deterministic engineering logic.
+The repository also contains regression tests for the hybrid decision layer and feature schema.
 
-### 🗺️ Field / Reservoir Candidates
-
-Candidate reservoir comparison with technical indicators and EOR method suggestions.
-
-### 🧪 CEOR — Fluid / Fluid
-
-Chemical EOR laboratory-style analytics covering areas such as:
-
-* Rheology
-* Thermal stability
-* Formulation behaviour
-
-### 🪨 CEOR — Fluid / Rock
-
-Fluid-rock interaction and compatibility analysis.
-
-### 📚 Past EOR Results
-
-Historical EOR study and assessment records stored in the application database.
-
-### ⚠️ Challenges & Lessons
-
-Engineering observations, limitations, and lessons learned from EOR application.
-
-### 🤖 EOR Intelligence
-
-Integrated view of:
-
-* CatBoost Top 3 EOR predictions
-* Fuzzy Top 5 suitability ranking
-* ML probability distribution
-* Fuzzy suitability distribution
-* Model metadata
-
----
-
-## 🧰 Technology Stack
-
-### Application
-
-* Python
-* Streamlit
-* Pandas
-* NumPy
-* SciPy
-
-### Machine Learning
-
-* CatBoost
-* Scikit-learn
-* Joblib
-
-### Engineering Intelligence
-
-* Deterministic rule-based screening
-* Fuzzy envelope suitability analysis
-
-### Data & Persistence
-
-* Excel workbooks
-* OpenPyXL
-* SQLite
-* SQLAlchemy
-
-### Visualization
-
-* Streamlit charts
-* PyDeck
-* Interactive geographic visualization
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```text
 EORWEBDEV/
-│
 ├── data/
-│   └── NeuroFuzzy_EOR_Extracted_Tables.xlsx
-│
-├── outputs/
-│   └── model_artifacts/
-│       ├── eor_catboost_v1.0.0.joblib
-│       ├── label_encoder_catboost_v1.0.0.joblib
-│       ├── config_catboost_v1.0.0.json
-│       └── model_manifest_catboost_v1.0.0.json
-│
+├── outputs/model_artifacts/
+├── tests/
+│   ├── test_hybrid_intelligence.py
+│   └── test_hybrid_feature_builder.py
 ├── src/
 │   ├── app_2.py
-│   │
+│   ├── hybrid_app.py
+│   ├── candidate_analytics/
 │   ├── config/
-│   │   └── settings.py
-│   │
 │   ├── data/
-│   │   ├── database.py
-│   │   ├── queries.py
-│   │   └── repositories.py
-│   │
 │   ├── domain/
-│   │   └── fuzzy_engine.py
-│   │
 │   ├── ml/
 │   │   ├── feature_builder.py
+│   │   ├── hybrid_feature_builder.py
+│   │   ├── hybrid_intelligence.py
+│   │   ├── model_assessment.py
 │   │   ├── model_service.py
-│   │   ├── prediction.py
-│   │   └── validators.py
-│   │
+│   │   └── train_hybrid_catboost.py
 │   └── utils/
-│
 ├── EOR_Screening_Tool_2026.xlsx
 ├── requirements.txt
 └── README.md
 ```
 
----
-
-## ⚙️ Installation
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/nasilemak80sen/eor_dashboard.git
-cd eor_dashboard
-```
-
-### 2. Create a virtual environment
-
-#### Windows
+## Running Locally
 
 ```bash
 python -m venv .venv
+```
+
+Windows:
+
+```bash
 .venv\Scripts\activate
 ```
 
-#### Linux / macOS
+Linux/macOS:
 
 ```bash
-python -m venv .venv
 source .venv/bin/activate
 ```
 
-### 3. Install dependencies
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
----
-
-## ▶️ Running the Application
-
-From the project root:
+Run the production hybrid entrypoint:
 
 ```bash
-streamlit run src/app_2.py
+streamlit run src/hybrid_app.py
 ```
 
-The application will open in the browser at the Streamlit local URL.
+## Testing
 
----
+Run the hybrid regression tests:
 
-## 📊 Data Sources
-
-EOR Atlas uses several data sources.
-
-### Engineering Screening Workbook
-
-```text
-EOR_Screening_Tool_2026.xlsx
+```bash
+PYTHONPATH=src pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py
 ```
 
-Used for deterministic engineering screening and workbook-parity logic.
+Run syntax checks:
 
-### Fuzzy Envelope Dataset
-
-```text
-data/NeuroFuzzy_EOR_Extracted_Tables.xlsx
+```bash
+python -m py_compile src/ml/hybrid_intelligence.py src/ml/hybrid_feature_builder.py src/ml/train_hybrid_catboost.py src/hybrid_app.py
 ```
 
-Contains the extracted EOR suitability envelopes used by the fuzzy analysis layer.
+GitHub Actions runs these checks automatically for pushes and pull requests to `main`.
 
-### Historical / Application Data
+## Data Sources
 
-The application can persist assessment and historical information through the SQLite database layer.
+The platform uses the engineering screening workbook, application persistence, and historical EOR evidence available in the repository. The Field / Reservoir Parameters analytics use the workbook's reservoir-property tables and do not depend on a generated placeholder dataset.
 
----
+## Limitations
 
-## 🤖 Machine Learning Model
+EOR Atlas is a screening and decision-support platform, not a full-field reservoir simulator, detailed project design package, or substitute for reservoir-engineering judgement.
 
-The production ML artifact is a **CatBoost classifier**.
+The current hybrid model is still an implementation-stage decision-support component. A production-grade next-generation CatBoost model requires a larger, consistently labelled historical dataset and independent validation.
 
-### Current model
+## Disclaimer
 
-```text
-Model: CatBoost
-Version: 1.0.0
-Feature count: 17
-Classes: 9
-```
-
-The model is loaded through a dedicated `ModelService`, which is responsible for:
-
-1. Loading model artifacts
-2. Validating artifact paths
-3. Validating feature schema
-4. Building engineered features
-5. Running prediction
-6. Generating ranked candidates
-7. Returning structured prediction results
-
-The UI does not directly interact with raw CatBoost objects.
-
----
-
-## 🔐 ML / Engineering Boundaries
-
-EOR Atlas intentionally separates machine learning from deterministic engineering logic.
-
-### ML does NOT:
-
-* Override critical engineering constraints
-* Replace deterministic screening
-* Automatically approve an EOR project
-* Represent a field development decision
-
-### ML DOES:
-
-* Identify patterns in historical data
-* Rank potential EOR techniques
-* Provide probabilistic guidance
-* Support engineering review
-
-The final interpretation remains subject to reservoir engineering judgement and available field-specific data.
-
----
-
-## ⚠️ Limitations
-
-EOR Atlas is a **screening and decision-support platform**, not a full-field reservoir simulator or final project-design tool.
-
-Results depend on:
-
-* Input quality
-* Historical data coverage
-* Engineering assumptions
-* Availability of field-specific laboratory and reservoir data
-* Applicability of historical ML training patterns
-
-ML predictions should therefore be interpreted as **decision-support evidence rather than deterministic recommendations**.
-
----
-
-## 🔮 Future Development
-
-Planned development areas include:
-
-* Portfolio-scale EOR opportunity mapping
-* Improved field and reservoir data integration
-* Additional historical EOR datasets
-* Expanded ML training data
-* Model monitoring and validation
-* Sensitivity analysis
-* Batch reservoir screening
-* Explainable ML
-* Engineering evidence traceability
-* Scenario-based EOR comparison
-* Improved geospatial analytics
-
----
-
-## 🎯 Engineering Philosophy
-
-EOR Atlas follows an engineering-first philosophy:
-
-> **Screen first. Understand the envelope. Use data-driven intelligence to support the decision.**
-
-The platform is designed to make EOR screening more:
-
-* Structured
-* Repeatable
-* Transparent
-* Data-driven
-* Scalable
-
-while keeping engineering judgement at the centre of the decision process.
-
----
-
-## 📄 Project Status
-
-**Current Status: Operational Prototype / Development Release**
-
-The Streamlit dashboard is operational with:
-
-* Deterministic EOR screening
-* Fuzzy suitability analysis
-* Embedded CatBoost ML intelligence
-* Workbook integration
-* Database integration
-* Interactive dashboard visualizations
-* Cloud deployment support
----
-
-## 📜 Disclaimer
-
-This platform is intended for **screening, analytical support, and technical demonstration purposes**.
-Outputs should be reviewed by qualified reservoir engineering and EOR specialists before being used in technical decisions, field development planning, or project execution.
+Outputs are intended for screening, analytical support, and technical demonstration. Qualified reservoir engineering and EOR specialists should review results before technical or investment decisions are made.
