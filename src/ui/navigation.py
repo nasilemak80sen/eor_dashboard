@@ -28,6 +28,21 @@ NAV_ITEMS = (
 )
 
 
+def _reset_input_state() -> None:
+    """Clear all EOR input widgets and transient screening results."""
+    prefixes = ("screening_", "intel_")
+    keys_to_clear = [
+        key
+        for key in list(st.session_state.keys())
+        if any(str(key).startswith(prefix) for prefix in prefixes)
+    ]
+    for key in keys_to_clear:
+        del st.session_state[key]
+
+    for key in ("excel_screening_result", "eor_intelligence_result"):
+        st.session_state.pop(key, None)
+
+
 def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
     """Render the navigation and return the selected page key."""
     state = system_state or {}
@@ -68,7 +83,22 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
                 selected = item.key
                 st.session_state["atlas_page"] = item.key
 
-    st.sidebar.markdown('<div style="height:.6rem"></div>', unsafe_allow_html=True)
+    st.sidebar.markdown('<div style="height:.7rem"></div>', unsafe_allow_html=True)
+    st.sidebar.markdown('<div class="nav-section-label">Workspace</div>', unsafe_allow_html=True)
+
+    if st.sidebar.button(
+        "↺  Reset EOR Inputs",
+        key="sidebar_reset_eor_inputs",
+        use_container_width=True,
+        type="secondary",
+        help="Reset EOR Screening and Hybrid Intelligence inputs to their defaults.",
+    ):
+        _reset_input_state()
+        st.rerun()
+
+    st.sidebar.caption("Reset only the EOR Screening and Hybrid Intelligence input state.")
+
+    st.sidebar.markdown('<div style="height:.45rem"></div>', unsafe_allow_html=True)
     st.sidebar.markdown('<div class="nav-section-label">System Status</div>', unsafe_allow_html=True)
     status_items = (
         ("Excel Gate", bool(state.get("workbook"))),
