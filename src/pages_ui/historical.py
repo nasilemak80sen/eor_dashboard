@@ -4,17 +4,12 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import page_header, section_title, kpi_cards
+from ui.components import kpi_cards, section_title
 
 
 def render() -> None:
     import app_2 as _app
 
-    page_header(
-        "Knowledge Base",
-        "Historical EOR",
-        "Review previous EOR studies, saved screening runs and the lessons available to inform current decisions.",
-    )
     kpi_cards([
         ("Historical Studies", 128, "Knowledge-base reference"),
         ("Saved Runs", "Live", "Retrieved from the application database"),
