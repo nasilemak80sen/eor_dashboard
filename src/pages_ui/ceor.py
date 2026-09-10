@@ -4,17 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import insight_cards, page_header, section_title
+from ui.components import insight_cards, section_title
 
 
 def render() -> None:
     import app_2 as _app
-
-    page_header(
-        "Technology",
-        "CEOR Lab",
-        "Explore fluid/fluid and fluid/rock technical evidence supporting chemical EOR decisions.",
-    )
 
     mode = st.segmented_control(
         "CEOR analysis area",
