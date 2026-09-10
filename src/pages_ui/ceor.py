@@ -10,14 +10,6 @@ from ui.components import insight_cards, section_title
 def render() -> None:
     import app_2 as _app
 
-    mode = st.radio(
-        "CEOR analysis area",
-        ["Fluid / Fluid", "Fluid / Rock"],
-        index=0,
-        horizontal=True,
-        key="ceor_lab_mode",
-    )
-
     insight_cards([
         ("FLUID / FLUID", "Rheology & phase behaviour", "Review viscosity, retention, phase stability and IFT indicators."),
         ("FLUID / ROCK", "Rock interaction", "Review adsorption, core-flood increments and Sor reduction."),
@@ -25,12 +17,16 @@ def render() -> None:
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    try:
-        if mode == "Fluid / Rock":
-            section_title("Fluid / Rock Analysis", "Rock–fluid interaction and core-flood evidence.")
-            _app.render_fluid_rock_section()
-        else:
-            section_title("Fluid / Fluid Analysis", "Fluid compatibility, rheology and phase behaviour.")
+    fluid_fluid_tab, fluid_rock_tab = st.tabs(["Fluid / Fluid", "Fluid / Rock"])
+    with fluid_fluid_tab:
+        section_title("Fluid / Fluid Analysis", "Fluid compatibility, rheology and phase behaviour.")
+        try:
             _app.render_fluid_fluid_section()
-    except Exception as exc:
-        st.error(f"CEOR analysis could not be rendered: {exc}")
+        except Exception as exc:
+            st.error(f"CEOR Fluid / Fluid analysis could not be rendered: {exc}")
+    with fluid_rock_tab:
+        section_title("Fluid / Rock Analysis", "Rock–fluid interaction and core-flood evidence.")
+        try:
+            _app.render_fluid_rock_section()
+        except Exception as exc:
+            st.error(f"CEOR Fluid / Rock analysis could not be rendered: {exc}")
