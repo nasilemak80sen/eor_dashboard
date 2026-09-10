@@ -4,17 +4,11 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import insight_cards, page_header, section_title
+from ui.components import insight_cards, section_title
 
 
 def render(services: dict) -> None:
     import hybrid_app as _hybrid
-
-    page_header(
-        "Engineering + ML",
-        "Hybrid Intelligence",
-        "Use the deterministic Excel Gate as the engineering anchor, then apply CatBoost and Decision Fusion.",
-    )
 
     insight_cards([
         ("01 · GATE", "Excel screening", "Hard engineering failures remain excluded from the hybrid recommendation."),
