@@ -53,7 +53,7 @@ jobs:
         run: |
           python -c "import eor_atlas; import ui.theme; import ui.components; import ui.navigation; import ui.app_shell; import pages_ui.overview; import pages_ui.candidates; import pages_ui.screening; import pages_ui.intelligence; import pages_ui.insights; import pages_ui.historical; import pages_ui.ceor; import pages_ui.challenges; import pages_ui.system"
 
-      - name: Run hybrid regression tests
+      - name: Run hybrid and UI regression tests
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py
+        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py tests/test_ui_shell.py
