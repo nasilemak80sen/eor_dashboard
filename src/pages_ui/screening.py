@@ -4,18 +4,12 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import insight_cards, page_header, section_title
+from ui.components import insight_cards, section_title
 
 
 def render() -> None:
     import app_2 as _app
     import hybrid_app as _hybrid
-
-    page_header(
-        "Engineering Gate",
-        "EOR Screening",
-        "Deterministic reservoir screening using the EOR Screening Tool 2026 v3 criteria.",
-    )
 
     insight_cards([
         ("INPUT", "Define the reservoir", "Enter the reservoir, recovery and injection context required by ScreenTool v3."),
@@ -31,7 +25,6 @@ def render() -> None:
         try:
             result = _app.ExcelScreeningService().screen(inputs, formation)
             st.session_state["excel_screening_result"] = result
-            st.session_state["atlas_page"] = "screening"
         except Exception:
             _app.logger.exception("EOR Screening failed.")
             st.error("The engineering screening could not be completed. Check the entered values.")
