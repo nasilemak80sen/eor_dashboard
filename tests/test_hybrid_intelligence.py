@@ -57,6 +57,7 @@ def test_hybrid_prefers_stronger_combination():
         {"Miscible CO2": 0.80, "Polymer": 0.20},
     )
     assert result["recommendation"]["EOR Technique"] == "CO2 Miscible Flood"
+    assert abs(sum(row["Hybrid Score"] for row in result["ranking"]) - 1.0) < 1e-9
 
 
 def test_hybrid_feature_schema_is_stable():
