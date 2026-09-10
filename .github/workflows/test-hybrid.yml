@@ -21,17 +21,18 @@ jobs:
       - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "numpy>=2.1,<3" "pandas==2.2.3" "pytest==8.3.4"
+          pip install "numpy>=2.1,<3" "pandas==2.2.3" "scikit-learn==1.6.1" "pytest==8.3.4"
 
-      - name: Compile hybrid modules
+      - name: Compile production and hybrid modules
         run: |
           python -m py_compile \
+            src/app_2.py \
+            src/hybrid_app.py \
             src/ml/hybrid_intelligence.py \
             src/ml/hybrid_feature_builder.py \
-            src/ml/train_hybrid_catboost.py \
-            src/hybrid_app.py
+            src/ml/train_hybrid_catboost.py
 
-      - name: Run hybrid unit tests
+      - name: Run hybrid regression tests
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_hybrid_intelligence.py
+        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py
