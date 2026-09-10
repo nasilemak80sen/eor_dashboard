@@ -20,6 +20,7 @@ from ml.hybrid_intelligence import HybridDecisionService, build_opportunity_cont
 
 
 _ORIGINAL_RENDER_INPUT_FORM = _app.render_eor_input_form
+_ORIGINAL_RENDER_SIDEBAR_STATUS = _app.render_sidebar_status
 
 
 def initialize_services() -> Dict[str, Any]:
@@ -31,6 +32,30 @@ def initialize_services() -> Dict[str, Any]:
         "model_loaded": model_service.is_loaded(),
         "workbook_sheets": workbook_sheets,
     }
+
+
+def render_sidebar_status(services: Dict[str, Any]) -> None:
+    """Render production status without exposing the retired fuzzy layer."""
+    path_status = _app.settings.validate_paths()
+    model_ready = bool(services.get("model_loaded"))
+    workbook_ready = bool(path_status.get("workbook"))
+    config_ready = bool(path_status.get("config"))
+
+    st.sidebar.header("Operational Status")
+    st.sidebar.markdown(
+        f"""
+        <div class="status-box">
+            <div class="status-row"><span>CatBoost Model</span><span class="status-pill {"ready" if model_ready else "warn"}">{"Ready" if model_ready else "Unavailable"}</span></div>
+            <div class="status-row"><span>Workbook</span><span class="status-pill {"ready" if workbook_ready else "warn"}">{"Loaded" if workbook_ready else "Missing"}</span></div>
+            <div class="status-row"><span>ML Config</span><span class="status-pill {"ready" if config_ready else "warn"}">{"Valid" if config_ready else "Check"}</span></div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.sidebar.caption("Production decision stack")
+    st.sidebar.write("• Excel Gate")
+    st.sidebar.write("• CatBoost Intelligence")
+    st.sidebar.write("• Decision Fusion")
 
 
 def render_eor_input_form(prefix: str):
@@ -299,6 +324,7 @@ def render_eor_intelligence_result(result: Dict[str, Any]) -> None:
 
 # Patch only the production entrypoints. The rest of app_2 remains unchanged.
 _app.initialize_services = initialize_services
+_app.render_sidebar_status = render_sidebar_status
 _app.render_eor_input_form = render_eor_input_form
 _app.run_eor_intelligence = run_eor_intelligence
 _app.render_eor_intelligence_result = render_eor_intelligence_result
