@@ -1,29 +1,23 @@
-"""
-EOR Atlas Hybrid Intelligence
+"""EOR Atlas Hybrid Intelligence
 
 Decision-fusion layer for the production EOR recommendation workflow.
 
 Target architecture:
     Excel Gate -> CatBoost Intelligence -> Decision Fusion
 
-Fuzzy suitability is intentionally excluded from the live decision path.
 The Excel/ScreenTool result remains the hard engineering gate; CatBoost
 provides data-driven technique probabilities; this module reconciles both
-signals without pretending that model probability is an engineering pass.
+signals without treating model probability as an engineering pass.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 import numpy as np
 
 
-# ---------------------------------------------------------------------------
-# Canonical mapping between the current CatBoost v1 taxonomy and the
-# deterministic ScreenTool taxonomy.
-# ---------------------------------------------------------------------------
 MODEL_TO_SCREEN_TECHNIQUES: Dict[str, tuple[str, ...]] = {
     "Combustion": ("ISC",),
     "HC immiscible": ("Immiscible Gas Flood", "Immiscible Gas WAG"),
@@ -39,7 +33,7 @@ MODEL_TO_SCREEN_TECHNIQUES: Dict[str, tuple[str, ...]] = {
 
 @dataclass(frozen=True)
 class HybridWeights:
-    """Weights used by the initial hybrid decision fusion."""
+    """Initial weights for production decision fusion."""
 
     ml: float = 0.65
     engineering: float = 0.35
@@ -77,11 +71,10 @@ class HybridDecisionService:
     @staticmethod
     def _engineering_score(result: Mapping[str, Any]) -> float:
         status = str(result.get("Status", "")).strip().upper()
-        if status == "FAIL (CRITICAL)" or status == "FAIL":
+        if status in {"FAIL (CRITICAL)", "FAIL"}:
             return 0.0
-        raw = result.get("Score (%)", 0.0)
         try:
-            score = float(raw) / 100.0
+            score = float(result.get("Score (%)", 0.0)) / 100.0
         except (TypeError, ValueError):
             score = 0.0
         return float(np.clip(score, 0.0, 1.0))
@@ -98,15 +91,7 @@ class HybridDecisionService:
         top_n: int = 3,
         opportunity_context: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Produce a hybrid ranking.
-
-        The deterministic ScreenTool result is the gate. A critical failure
-        forces the hybrid score to zero for that technique. Non-failing
-        techniques combine normalized ScreenTool compatibility with the
-        CatBoost class probability. Conditional results receive a small,
-        explicit penalty rather than being treated as outright failures.
-        """
+        """Return the Excel-gated hybrid ranking."""
         if top_n < 1:
             raise ValueError("top_n must be >= 1.")
 
@@ -117,19 +102,19 @@ class HybridDecisionService:
         }
 
         candidates: List[Dict[str, Any]] = []
-
         for model_class, probability in ml_probabilities.items():
             probability = self._safe_probability(probability)
-            compatible_names = MODEL_TO_SCREEN_TECHNIQUES.get(model_class, ())
-
-            for technique in compatible_names:
+            for technique in MODEL_TO_SCREEN_TECHNIQUES.get(model_class, ()):
                 screen_row = by_technique.get(technique)
                 if screen_row is None:
                     continue
 
                 engineering = self._engineering_score(screen_row)
                 conditional = self._is_conditional(screen_row)
-                gate_failed = engineering <= 0.0 and not conditional
+                gate_failed = str(screen_row.get("Status", "")).strip().upper() in {
+                    "FAIL",
+                    "FAIL (CRITICAL)",
+                }
 
                 if gate_failed:
                     hybrid_raw = 0.0
@@ -151,15 +136,12 @@ class HybridDecisionService:
                         "Hybrid Score Raw": float(hybrid_raw),
                         "Gate Failed": gate_failed,
                         "Conditional": conditional,
-                        "Engineering Reason": screen_row.get(
-                            "Cause of Fail/Pass", ""
-                        ),
+                        "Engineering Reason": screen_row.get("Cause of Fail/Pass", ""),
                     }
                 )
 
-        # Multiple model classes can map to the same final technique. Keep the
-        # strongest empirical signal for that technique rather than double
-        # counting duplicated probability mass.
+        # Several CatBoost classes intentionally map to the same ScreenTool
+        # technique. Keep the strongest mapped signal instead of double-counting.
         merged: Dict[str, Dict[str, Any]] = {}
         for row in candidates:
             technique = row["EOR Technique"]
@@ -167,27 +149,29 @@ class HybridDecisionService:
             if current is None or row["Hybrid Score Raw"] > current["Hybrid Score Raw"]:
                 merged[technique] = row
 
-        ranked = sorted(
+        ranked_all = sorted(
             merged.values(),
             key=lambda row: row["Hybrid Score Raw"],
             reverse=True,
         )
+        ranked = ranked_all[:top_n]
 
-        total = sum(row["Hybrid Score Raw"] for row in ranked)
+        # Normalize only over the displayed ranking so the Top-N hybrid scores
+        # form a useful 100% distribution in the UI.
+        top_total = sum(row["Hybrid Score Raw"] for row in ranked)
         for row in ranked:
             row["Hybrid Score"] = (
-                float(row["Hybrid Score Raw"] / total)
-                if total > 0
+                float(row["Hybrid Score Raw"] / top_total)
+                if top_total > 0
                 else 0.0
             )
-
-        ranked = ranked[:top_n]
 
         recommendation = ranked[0] if ranked else None
 
         return {
             "recommendation": recommendation,
             "ranking": ranked,
+            "eligible_count": len(ranked_all),
             "weights": {
                 "ml": self.weights.ml,
                 "engineering": self.weights.engineering,
