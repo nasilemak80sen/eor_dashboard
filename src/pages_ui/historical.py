@@ -17,14 +17,14 @@ def render() -> None:
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
-    with col1:
+    history_tab, detail_tab = st.tabs(["Screening History", "Saved Run Detail"])
+    with history_tab:
         section_title("Screening History", "Recent decisions captured by the application database.")
         try:
             _app.render_database_summary_section()
         except Exception as exc:
             st.info(f"Screening history is temporarily unavailable: {exc}")
-    with col2:
+    with detail_tab:
         section_title("Saved Run Detail", "Inspect a historical run and its engineering context.")
         try:
             _app.render_saved_run_detail_section()
