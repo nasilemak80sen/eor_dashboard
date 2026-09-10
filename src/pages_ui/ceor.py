@@ -10,10 +10,11 @@ from ui.components import insight_cards, section_title
 def render() -> None:
     import app_2 as _app
 
-    mode = st.segmented_control(
+    mode = st.radio(
         "CEOR analysis area",
         ["Fluid / Fluid", "Fluid / Rock"],
-        default="Fluid / Fluid",
+        index=0,
+        horizontal=True,
         key="ceor_lab_mode",
     )
 
