@@ -30,9 +30,10 @@ jobs:
             src/hybrid_app.py \
             src/ml/hybrid_intelligence.py \
             src/ml/hybrid_feature_builder.py \
+            src/ml/hybrid_model_assessment.py \
             src/ml/train_hybrid_catboost.py
 
       - name: Run hybrid regression tests
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py
+        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py
