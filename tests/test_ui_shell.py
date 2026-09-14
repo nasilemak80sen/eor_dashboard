@@ -49,3 +49,16 @@ def test_decision_ux_module_and_hand_offs_exist():
     assert "eor_candidate_shortlist" in candidates
     assert "decision_hero(" in intelligence
     assert "decision_trace(" in screening
+
+
+def test_top_navigation_is_rendered_by_the_application_shell():
+    navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
+    shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
+    assert "def render_top_nav" in navigation
+    assert "render_top_nav()" in shell
+    assert "atlas_page" in navigation
+
+
+def test_sidebar_defaults_to_collapsed():
+    settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
+    assert '"initial_sidebar_state": "collapsed"' in settings
