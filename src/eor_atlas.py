@@ -27,7 +27,9 @@ PAGE_META = {
 }
 
 
+@st.cache_resource(show_spinner=False)
 def _safe_services() -> dict:
+    """Initialize expensive production services once per Streamlit process."""
     try:
         return engine.initialize_services()
     except Exception:
