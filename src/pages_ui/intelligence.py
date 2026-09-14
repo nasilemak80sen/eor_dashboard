@@ -4,41 +4,43 @@ from __future__ import annotations
 
 import streamlit as st
 
-from ui.components import insight_cards, reset_button, section_title
+from ui.components import insight_cards, reset_button, section_title, kpi_cards
 
 
 def render(services: dict) -> None:
     import hybrid_app as _hybrid
 
     insight_cards([
-        ("01 · GATE", "Excel screening", "Hard engineering failures remain excluded from the hybrid recommendation."),
-        ("02 · MODEL", "CatBoost probability", "The active compatibility model contributes a data-driven technique signal."),
-        ("03 · FUSION", "Decision recommendation", "Engineering score and model probability are reconciled into a ranked Top 3."),
+        ("01 · GATE", "Engineering anchor", "Hard engineering failures remain excluded before ML contributes to the recommendation."),
+        ("02 · MODEL", "CatBoost signal", "The active model contributes a data-driven technique probability."),
+        ("03 · FUSION", "Decision ranking", "Engineering and model signals are reconciled into an interpretable ranked recommendation."),
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    input_tab, decision_tab = st.tabs(["Reservoir Inputs", "Hybrid Decision"])
+    result = st.session_state.get("eor_intelligence_result")
+    kpi_cards([("Workflow", "Result available" if result else "Awaiting run", "Current page state"), ("Engineering", "Excel Gate", "Deterministic anchor"), ("Model", "CatBoost", "Data-driven signal")])
 
+    input_tab, decision_tab = st.tabs(["Reservoir Inputs", "Hybrid Decision"])
     with input_tab:
         action_col, _ = st.columns([1, 4])
         with action_col:
-            reset_button(
-                "↺ Reset inputs",
-                prefixes="intel_",
-                result_keys=("eor_intelligence_result",),
-                key="intelligence_reset_inputs",
-            )
-        section_title("Reservoir Context", "Use the same full v3 input schema as EOR Screening so the two pages remain consistent.")
+            reset_button("↺ Reset inputs", prefixes="intel_", result_keys=("eor_intelligence_result",), key="intelligence_reset_inputs")
+        section_title("Reservoir Context", "Use the same v3 schema as Engineering Screening so results remain comparable across workflows.")
         inputs, formation = _hybrid.render_eor_input_form("intel")
+        st.caption("Run only after the reservoir context is complete. The resulting ranking is constrained by the engineering gate.")
         if st.button("🧠 Run Hybrid Intelligence", type="primary", use_container_width=True, key="ui_hybrid_intelligence_run"):
-            _hybrid._run_intelligence_from_current_inputs(services, inputs, formation)
+            try:
+                _hybrid._run_intelligence_from_current_inputs(services, inputs, formation)
+                st.toast("Hybrid recommendation updated", icon="🧠")
+            except Exception as exc:
+                st.error(f"Hybrid intelligence could not be completed: {exc}")
 
     with decision_tab:
         result = st.session_state.get("eor_intelligence_result")
         if not result:
-            st.info("Run Hybrid Intelligence from the Reservoir Inputs tab to populate the decision result.")
+            st.info("No hybrid result yet. Complete Reservoir Inputs and run Hybrid Intelligence.")
             return
-        section_title("Decision Result", "Recommendation, Top 3 ranking, engineering gate and model context.")
+        section_title("Decision Result", "Read the recommendation together with the gate status and model context — not as a standalone ML prediction.")
         try:
             _hybrid.render_eor_intelligence_result(result)
         except Exception as exc:
