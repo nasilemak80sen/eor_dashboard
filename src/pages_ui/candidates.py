@@ -13,6 +13,12 @@ except Exception:
     pdk = None
 
 
+def _numeric_or_zero(frame: pd.DataFrame, column: str) -> pd.Series:
+    if column not in frame.columns:
+        return pd.Series(0.0, index=frame.index, dtype="float64")
+    return pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
+
+
 def _render_reactive_location_map(dataframe: pd.DataFrame) -> None:
     st.subheader("Candidate Location")
     st.caption("Longitude = X · Latitude = Y. Switch between Heatmap for spatial concentration and Scatter for reservoir-level inspection.")
@@ -50,8 +56,8 @@ def _render_reactive_location_map(dataframe: pd.DataFrame) -> None:
         st.info("No mapped reservoirs are available for the selected field.")
         return
 
-    visible["CR_Potential"] = pd.to_numeric(visible.get("CR volume potential = RF Gap x STOIIP  (MMSTB)"), errors="coerce").fillna(0.0)
-    visible["STOIIP"] = pd.to_numeric(visible.get("STOIIP_ARPR 1.1.2025"), errors="coerce").fillna(0.0)
+    visible["CR_Potential"] = _numeric_or_zero(visible, "CR volume potential = RF Gap x STOIIP  (MMSTB)")
+    visible["STOIIP"] = _numeric_or_zero(visible, "STOIIP_ARPR 1.1.2025")
     center_lat = float(visible["LATITUDE"].mean())
     center_lon = float(visible["LONGITUDE"].mean())
     tooltip = {
