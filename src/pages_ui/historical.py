@@ -39,10 +39,27 @@ def _reference_for_record(row: Dict[str, Any]) -> str:
     return f"EOR-{timestamp[:4] or 'RUN'}-{int(row['id']):06d}"
 
 
+def _method_tokens(value: Any) -> list[str]:
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return []
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "n/a", "na", "-"}:
+        return []
+    parts = []
+    for segment in text.replace("\n", ";").split(";"):
+        parts.extend(token.strip() for token in segment.split(","))
+    return [token for token in dict.fromkeys(parts) if token]
+
+
 def _render_historical_filters(frame: pd.DataFrame) -> pd.DataFrame:
     st.markdown("### Past EOR Screening Input")
     field_options = sorted(frame["Field"].dropna().astype(str).unique().tolist())
-    study_options = sorted(frame["EOR Study"].dropna().astype(str).unique().tolist())
+
+    method_options: set[str] = set(frame["EOR Study"].dropna().astype(str).tolist())
+    if "Other Passing Methods" in frame.columns:
+        for value in frame["Other Passing Methods"].dropna().tolist():
+            method_options.update(_method_tokens(value))
+    study_options = sorted(method_options)
 
     a, b = st.columns(2)
     with a:
@@ -66,7 +83,16 @@ def _render_historical_filters(frame: pd.DataFrame) -> pd.DataFrame:
     if selected_fields:
         filtered = filtered[filtered["Field"].isin(selected_fields)]
     if selected_studies:
-        filtered = filtered[filtered["EOR Study"].isin(selected_studies)]
+        filtered = filtered[
+            filtered.apply(
+                lambda row: bool(
+                    set(_method_tokens(row.get("EOR Study")))
+                    .union(_method_tokens(row.get("Other Passing Methods")))
+                    .intersection(selected_studies)
+                ),
+                axis=1,
+            )
+        ]
     return filtered
 
 
@@ -90,6 +116,7 @@ def _render_manual_study_entry() -> None:
                     "Field": field.strip(),
                     "Reservoir": reservoir.strip() or "—",
                     "EOR Study": study.strip(),
+                    "Other Passing Methods": None,
                     "Incremental EUR (MMstb)": float(eur),
                     "Status": "User added",
                 }
@@ -105,10 +132,7 @@ def _stacked_bar(frame: pd.DataFrame, category: str, title: str) -> None:
 
     chart_frame = frame[["Field", category, "Incremental EUR (MMstb)"]].copy()
     chart_frame[category] = chart_frame[category].fillna("Unknown")
-    chart_frame = (
-        chart_frame.groupby(["Field", category], as_index=False)["Incremental EUR (MMstb)"]
-        .sum()
-    )
+    chart_frame = chart_frame.groupby(["Field", category], as_index=False)["Incremental EUR (MMstb)"].sum()
 
     fig = px.bar(
         chart_frame,
@@ -166,17 +190,20 @@ def _render_historical_eor_reference_section() -> None:
 
     kpi_cards([
         ("Historical Fields", filtered["Field"].nunique(), "Fields in selected historical scope"),
-        ("EOR Studies", filtered["EOR Study"].nunique(), "Distinct historical methods"),
+        ("EOR Studies", filtered["EOR Study"].nunique(), "Primary successful EOR methods"),
         ("Reservoirs", filtered["Reservoir"].nunique(), "Reservoirs represented"),
         ("Incremental EUR", _fmt_number(filtered["Incremental EUR (MMstb)"].sum(), 1), "MMstb in selected scope"),
     ])
 
     st.caption(
         f"Source: `{metadata['source_name']}` · Sheet: `{metadata['sheet_name']}` · "
+        f"Primary method: `{metadata.get('primary_method_column') or '—'}` · "
+        f"Alternative methods: `{metadata.get('alternative_method_column') or '—'}` · "
         f"Records: {metadata['rows']}{' + ' + str(len(manual_rows)) + ' user-added' if manual_rows else ''}"
     )
 
     st.markdown("#### 📊 Past EOR Screening Result")
+    st.caption("The Field/EOR Studies chart uses the source row's MOST SUITABLE PROCESS as the primary successful method. OTHERS PASS METHOD remains available through the method filter and record details without duplicating EUR.")
     _stacked_bar(filtered, "EOR Study", "INCREMENTAL EUR (MMSTB) by Field and EOR Studies")
     _stacked_bar(filtered, "Reservoir", "INCREMENTAL EUR (MMSTB) by Field and Reservoir")
 
@@ -261,7 +288,13 @@ def _render_ml(card: Dict[str, Any]) -> None:
     frame = pd.DataFrame(rows)
     frame["Probability"] = pd.to_numeric(frame["probability"], errors="coerce").fillna(0.0).map(lambda value: f"{value:.2%}")
     frame["Top Prediction"] = frame["is_top_prediction"].map(lambda value: "Yes" if bool(value) else "No")
-    st.dataframe(frame[["technique", "Probability", "Top Prediction", "confidence"]].rename(columns={"technique": "EOR Technique", "confidence": "Confidence"}), use_container_width=True, hide_index=True)
+    st.dataframe(
+        frame[["technique", "Probability", "Top Prediction", "confidence"]].rename(
+            columns={"technique": "EOR Technique", "confidence": "Confidence"}
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _render_hybrid(card: Dict[str, Any]) -> None:
@@ -273,7 +306,17 @@ def _render_hybrid(card: Dict[str, Any]) -> None:
     for column in ["hybrid_score", "catboost_probability", "engineering_score"]:
         frame[column] = pd.to_numeric(frame[column], errors="coerce").fillna(0.0).map(lambda value: f"{value:.1%}")
     frame["Recommended"] = frame["is_recommended"].map(lambda value: "Yes" if bool(value) else "")
-    st.dataframe(frame[["rank", "technique", "hybrid_score", "catboost_probability", "engineering_score", "engineering_status", "Recommended"]].rename(columns={"rank": "Rank", "technique": "EOR Technique", "hybrid_score": "Hybrid Score", "catboost_probability": "CatBoost", "engineering_score": "Engineering", "engineering_status": "Engineering Status"}), use_container_width=True, hide_index=True)
+    st.dataframe(
+        frame[["rank", "technique", "hybrid_score", "catboost_probability", "engineering_score", "engineering_status", "Recommended"]].rename(
+            columns={
+                "rank": "Rank", "technique": "EOR Technique", "hybrid_score": "Hybrid Score",
+                "catboost_probability": "CatBoost", "engineering_score": "Engineering",
+                "engineering_status": "Engineering Status",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 
 def _render_report_card(card: Dict[str, Any]) -> None:
@@ -282,8 +325,10 @@ def _render_report_card(card: Dict[str, Any]) -> None:
     inputs = _parse_json(run.get("input_payload")) or {}
     evidence = _parse_json(run.get("evidence_summary")) or {}
     assumptions = _parse_json(run.get("assumptions")) or {}
-
-    section_title(f"Screening Report Card · {reference}", "Exact submitted inputs plus the independent Engineering, CatBoost and Hybrid decision records captured for this run.")
+    section_title(
+        f"Screening Report Card · {reference}",
+        "The exact submitted inputs and the independent Engineering, CatBoost, and Hybrid decision records captured for this run.",
+    )
     recommendation = run.get("recommended_technique") or "No recommendation"
     score = run.get("recommendation_score")
     mode = run.get("recommendation_mode") or "ENGINEERING"
@@ -293,17 +338,20 @@ def _render_report_card(card: Dict[str, Any]) -> None:
     cols[2].metric("Formation", run.get("formation") or "—")
     cols[3].metric("Recommendation", recommendation)
     cols[4].metric("Decision Score", _fmt_number(score, 1) if score is not None else "—")
-
     st.markdown("### 1 · User Input Snapshot")
     _render_input_snapshot(inputs)
     engineering_tab, ml_tab, hybrid_tab, trace_tab = st.tabs(["Engineering", "CatBoost", "Hybrid Fusion", "Decision Trace"])
     with engineering_tab:
+        st.caption("Deterministic engineering eligibility captured at submission time.")
         _render_engineering(card)
     with ml_tab:
+        st.caption("CatBoost probabilities captured from the active model used for this run.")
         _render_ml(card)
     with hybrid_tab:
+        st.caption("Final ranking created by the production Engineering + CatBoost decision fusion.")
         _render_hybrid(card)
     with trace_tab:
+        st.markdown("#### Decision Path")
         st.code("User Inputs → Excel Engineering Gate → CatBoost → Decision Fusion → Report Card")
         trace = _parse_json(run.get("rule_trace"))
         if trace:
@@ -311,7 +359,11 @@ def _render_report_card(card: Dict[str, Any]) -> None:
                 st.json(trace)
         with st.expander("Recorded assumptions / provenance", expanded=False):
             st.json({"assumptions": assumptions, "evidence": evidence})
-        st.caption(f"Model version: {run.get('model_version') or '—'} · Workbook version: {run.get('workbook_version') or '—'} · Rule version: {run.get('rule_version') or '—'}")
+        st.caption(
+            f"Model version: {run.get('model_version') or '—'} · "
+            f"Workbook version: {run.get('workbook_version') or '—'} · "
+            f"Rule version: {run.get('rule_version') or '—'}"
+        )
 
 
 def _render_compare(left: Dict[str, Any], right: Dict[str, Any]) -> None:
@@ -324,38 +376,50 @@ def _render_compare(left: Dict[str, Any], right: Dict[str, Any]) -> None:
     rows = []
     for key in keys:
         lv, rv = left_inputs.get(key), right_inputs.get(key)
-        delta = float(rv) - float(lv) if isinstance(lv, (int, float)) and isinstance(rv, (int, float)) else None
-        rows.append({"Parameter": key.replace("_", " ").title(), left_ref: lv if lv not in (None, "") else "—", right_ref: rv if rv not in (None, "") else "—", "Δ (Right − Left)": _fmt_number(delta, 2) if delta is not None else "—"})
+        delta = None
+        if isinstance(lv, (int, float)) and isinstance(rv, (int, float)):
+            delta = float(rv) - float(lv)
+        rows.append({
+            "Parameter": key.replace("_", " ").title(),
+            left_ref: lv if lv not in (None, "") else "—",
+            right_ref: rv if rv not in (None, "") else "—",
+            "Δ (Right − Left)": _fmt_number(delta, 2) if delta is not None else "—",
+        })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    left_run, right_run = left["run"], right["run"]
     summary = pd.DataFrame([
-        {"Run": left_ref, "Type": left["run"].get("recommendation_mode") or "—", "Recommendation": left["run"].get("recommended_technique") or "—", "Score": left["run"].get("recommendation_score")},
-        {"Run": right_ref, "Type": right["run"].get("recommendation_mode") or "—", "Recommendation": right["run"].get("recommended_technique") or "—", "Score": right["run"].get("recommendation_score")},
+        {"Run": left_ref, "Type": left_run.get("recommendation_mode") or "—", "Recommendation": left_run.get("recommended_technique") or "—", "Score": left_run.get("recommendation_score")},
+        {"Run": right_ref, "Type": right_run.get("recommendation_mode") or "—", "Recommendation": right_run.get("recommended_technique") or "—", "Score": right_run.get("recommendation_score")},
     ])
     st.dataframe(summary, use_container_width=True, hide_index=True)
 
 
 def render() -> None:
-    """Render Historical EOR studies first, then durable screening records."""
+    try:
+        _render_historical_eor_reference_section()
+    except Exception as exc:
+        st.error(f"Historical EOR reference section failed: {exc}")
+        return
+
+    st.divider()
+    section_title(
+        "EOR Screening Run Records",
+        "Every submitted screening becomes a durable case with a stable Run ID and exact input snapshot.",
+    )
+
     try:
         records = list_report_cards(days=3650)
     except Exception as exc:
-        records = []
-        st.warning(f"Screening run history is unavailable: {exc}")
-
-    st.title("Historical EOR")
-    st.caption("Past EOR study evidence and saved EOR Atlas screening decisions.")
-    _render_historical_eor_reference_section()
-
-    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    section_title("EOR Screening Run Records", "Durable report cards generated by submitted Engineering and Hybrid screening runs.")
+        st.error(f"Historical screening storage is unavailable: {exc}")
+        return
 
     engineering_count = sum(record.get("recommendation_mode") == "ENGINEERING" for record in records)
     hybrid_count = sum(record.get("recommendation_mode") == "HYBRID" for record in records)
     kpi_cards([
-        ("Saved Runs", len(records), "Persisted report cards"),
+        ("Saved Runs", len(records), "Persisted screening report cards"),
         ("Engineering Runs", engineering_count, "Excel Gate submissions"),
-        ("Hybrid Runs", hybrid_count, "Excel + CatBoost + Fusion"),
-        ("Audit Source", "SQLite", "Persistent decision history"),
+        ("Hybrid Runs", hybrid_count, "Excel + CatBoost + Fusion submissions"),
+        ("Audit Source", "SQLite", "Persistent local decision history"),
     ])
 
     register_tab, card_tab, compare_tab = st.tabs(["Run Register", "Screening Report Card", "Compare Runs"])
@@ -364,7 +428,6 @@ def render() -> None:
         if selected_id is not None and st.button("Open selected report card", key="historical_open_card", type="primary"):
             st.session_state["historical_open_run_id"] = selected_id
             st.rerun()
-
     with card_tab:
         selected_id = st.session_state.get("historical_open_run_id")
         if selected_id is None and records:
@@ -381,7 +444,6 @@ def render() -> None:
                 _render_report_card(card)
             else:
                 st.info("The selected report card no longer exists.")
-
     with compare_tab:
         if len(records) < 2:
             st.info("At least two saved screening runs are required for comparison.")
