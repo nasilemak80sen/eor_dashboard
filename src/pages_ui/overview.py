@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from html import escape
-
 import pandas as pd
 import streamlit as st
 
@@ -16,7 +14,7 @@ except Exception:
 
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
-    normalized = {str(col).strip().lower().replace("_", " "): col for col in df.columns}
+    normalized = {str(c).strip().lower().replace("_", " "): c for c in df.columns}
     for alias in aliases:
         key = alias.strip().lower().replace("_", " ")
         if key in normalized:
@@ -29,8 +27,7 @@ def _map_summary(map_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     method_col = _find_column(map_df, ("types of eor", "eor method", "eor_method", "method"))
     lat_col = _find_column(map_df, ("latitude", "lat"))
     lon_col = _find_column(map_df, ("longitude", "long", "lon", "lng"))
-
-    if not field_col or not method_col or not lat_col or not lon_col:
+    if not all([field_col, method_col, lat_col, lon_col]):
         return pd.DataFrame(), pd.DataFrame()
 
     work = map_df[[field_col, method_col, lat_col, lon_col]].copy()
@@ -39,105 +36,56 @@ def _map_summary(map_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     work["EOR Method"] = work["EOR Method"].astype(str).str.strip()
     work["Latitude"] = pd.to_numeric(work["Latitude"], errors="coerce")
     work["Longitude"] = pd.to_numeric(work["Longitude"], errors="coerce")
-    work = work.replace({"Field": {"nan": ""}, "EOR Method": {"nan": ""}})
     work = work[(work["Field"] != "") & (work["EOR Method"] != "")].copy()
 
-    def methods(values: pd.Series) -> str:
-        return ", ".join(sorted(set(values.dropna().astype(str).str.strip())))
-
-    fields = (
-        work.dropna(subset=["Latitude", "Longitude"])
-        .groupby("Field", as_index=False)
-        .agg(
-            Latitude=("Latitude", "mean"),
-            Longitude=("Longitude", "mean"),
-            EOR_Method_Count=("EOR Method", "nunique"),
-            EOR_Methods=("EOR Method", methods),
-        )
+    field_summary = work.dropna(subset=["Latitude", "Longitude"]).groupby("Field", as_index=False).agg(
+        Latitude=("Latitude", "mean"), Longitude=("Longitude", "mean"), Methods=("EOR Method", "nunique")
     )
-    method_table = (
-        work.groupby("EOR Method")["Field"]
-        .nunique()
-        .sort_values(ascending=False)
-        .rename("Fields")
-        .reset_index()
-    )
-    if not method_table.empty:
-        method_table["Share of mapped fields"] = (
-            method_table["Fields"] / fields["Field"].nunique() * 100.0
-        ).round(1)
-    return fields, method_table
+    method_table = work.groupby("EOR Method")["Field"].nunique().sort_values(ascending=False).rename("Fields").reset_index()
+    if not method_table.empty and not field_summary.empty:
+        method_table["Mapped Field Share (%)"] = (method_table["Fields"] / field_summary["Field"].nunique() * 100).round(1)
+    return field_summary, method_table
 
 
 def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
-    section_title(
-        "Portfolio Snapshot",
-        "3D spatial view of mapped fields. Column height represents the number of distinct EOR methods associated with each field.",
-    )
-    field_summary, method_table = _map_summary(map_df)
-    if field_summary.empty:
-        st.warning("The map sheet does not contain the expected Field / EOR Method / LATITUDE / LONGITUDE columns.")
+    section_title("Portfolio Snapshot", "Start with geography and concentration, then drill into field-level EOR evidence.")
+    fields, methods = _map_summary(map_df)
+    if fields.empty:
+        st.warning("The workbook map sheet does not contain the expected field and coordinate structure.")
         return
 
-    mapped_fields = int(field_summary["Field"].nunique())
-    methods = int(method_table["EOR Method"].nunique()) if not method_table.empty else 0
-    map_kpi_1, map_kpi_2 = st.columns(2)
-    with map_kpi_1:
-        st.metric("Mapped Fields", mapped_fields, "Unique fields in map sheet")
-    with map_kpi_2:
-        st.metric("EOR Methods", methods, "Distinct EOR types in map sheet")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Mapped fields", len(fields))
+    c2.metric("EOR methods", int(methods["EOR Method"].nunique()) if not methods.empty else 0)
+    c3.metric("Mapped coordinates", int(map_df.shape[0]))
 
-    left, right = st.columns([1.8, 1])
+    left, right = st.columns([2.2, 1])
     with left:
+        mode = st.radio("Spatial view", ["Heatmap", "Scatter"], horizontal=True, key="overview_spatial_mode")
+        focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
+        focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
+        visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus]
+        center_lat = float(visible["Latitude"].mean())
+        center_lon = float(visible["Longitude"].mean())
+
         if pdk is None:
-            st.info("PyDeck is not available, so the spatial map cannot be rendered in 3D.")
+            st.info("PyDeck is not available for the spatial view.")
+        elif mode == "Heatmap":
+            layer = pdk.Layer("HeatmapLayer", data=visible, get_position="[Longitude, Latitude]", get_weight="Methods", radius_pixels=55, intensity=1.1, threshold=0.08)
+            st.pydeck_chart(pdk.Deck(map_style="light", initial_view_state=pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=5.0 if len(visible) < 10 else 4.4, pitch=12), layers=[layer]), use_container_width=True, height=520)
+            st.caption("Heat intensity represents EOR-method coverage concentration by mapped field.")
         else:
-            center_lat = float(field_summary["Latitude"].mean())
-            center_lon = float(field_summary["Longitude"].mean())
-            tooltip = {
-                "html": (
-                    "<b>{Field}</b><br/>"
-                    "EOR methods: {EOR_Methods}<br/>"
-                    "Distinct methods: {EOR_Method_Count}"
-                ),
-                "style": {"backgroundColor": "#102F37", "color": "white"},
-            }
-            st.pydeck_chart(
-                pdk.Deck(
-                    map_style="light",
-                    initial_view_state=pdk.ViewState(
-                        latitude=center_lat,
-                        longitude=center_lon,
-                        zoom=5.0,
-                        pitch=50,
-                        bearing=0,
-                    ),
-                    layers=[
-                        pdk.Layer(
-                            "ColumnLayer",
-                            data=field_summary,
-                            get_position="[Longitude, Latitude]",
-                            get_elevation="EOR_Method_Count * 120000",
-                            elevation_scale=1,
-                            radius=14000,
-                            get_fill_color="[0, 161, 156, 190]",
-                            pickable=True,
-                            auto_highlight=True,
-                        )
-                    ],
-                    tooltip=tooltip,
-                ),
-                use_container_width=True,
-                height=540,
-            )
+            layer = pdk.Layer("ScatterplotLayer", data=visible, get_position="[Longitude, Latitude]", get_radius=12000, radius_min_pixels=5, radius_max_pixels=18, get_fill_color="[0, 161, 156, 200]", pickable=True, auto_highlight=True)
+            tooltip = {"html": "<b>{Field}</b><br/>Distinct EOR methods: {Methods}", "style": {"backgroundColor": "#182230", "color": "white"}}
+            st.pydeck_chart(pdk.Deck(map_style="light", initial_view_state=pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=5.0 if len(visible) < 10 else 4.4, pitch=5), layers=[layer], tooltip=tooltip), use_container_width=True, height=520)
+            st.caption("Each point is a mapped field. Hover to inspect its EOR-method breadth.")
+
     with right:
-        section_title("EOR Method Coverage", "Number of unique mapped fields associated with each EOR method.")
-        if method_table.empty:
+        section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
+        if methods.empty:
             st.info("No EOR method records are available.")
         else:
-            display = method_table.copy()
-            display.columns = ["EOR Method", "Fields", "Mapped Field Share (%)"]
-            st.dataframe(display, use_container_width=True, hide_index=True, height=500)
+            st.dataframe(methods, use_container_width=True, hide_index=True, height=520)
 
 
 def render() -> None:
@@ -146,16 +94,16 @@ def render() -> None:
     workbook = _app.WorkbookRepository.load_workbook()
     df = workbook.get("PROP_updatedNov25_v2") if isinstance(workbook, dict) else None
     map_df = workbook.get("map") if isinstance(workbook, dict) else None
-
-    fields = int(df["Field"].nunique()) if isinstance(df, pd.DataFrame) and not df.empty and "Field" in df.columns else 41
-    reservoirs = len(df) if isinstance(df, pd.DataFrame) and not df.empty else 600
+    fields = int(df["Field"].nunique()) if isinstance(df, pd.DataFrame) and "Field" in df.columns else 0
+    reservoirs = len(df) if isinstance(df, pd.DataFrame) else 0
     rf_gap_total = pd.to_numeric(df["RF Gap"], errors="coerce").sum() if isinstance(df, pd.DataFrame) and "RF Gap" in df.columns else None
+    mapped, methods = _map_summary(map_df) if isinstance(map_df, pd.DataFrame) else (pd.DataFrame(), pd.DataFrame())
 
     kpi_cards([
         ("Fields", fields, "Portfolio coverage"),
         ("Reservoirs", reservoirs, "Screening universe"),
-        ("Mapped Fields", _map_summary(map_df)[0]["Field"].nunique() if isinstance(map_df, pd.DataFrame) and not map_df.empty and not _map_summary(map_df)[0].empty else "—", "EOR map sheet"),
-        ("EOR Methods", _map_summary(map_df)[1]["EOR Method"].nunique() if isinstance(map_df, pd.DataFrame) and not map_df.empty and not _map_summary(map_df)[1].empty else "—", "Mapped EOR taxonomy"),
+        ("Mapped fields", len(mapped), "Coordinate-enriched map"),
+        ("EOR methods", int(methods["EOR Method"].nunique()) if not methods.empty else 0, "Mapped taxonomy"),
         ("RF Gap", "—" if rf_gap_total is None else f"{rf_gap_total:,.1f}", "Workbook aggregate"),
     ])
 
@@ -166,36 +114,40 @@ def render() -> None:
         if isinstance(map_df, pd.DataFrame) and not map_df.empty:
             _render_spatial_snapshot(map_df)
         else:
-            st.info("The EOR Screening Tool 2026 workbook map sheet is unavailable in this session.")
+            st.info("The workbook map sheet is unavailable in this session.")
 
     with signals_tab:
-        col1, col2 = st.columns(2)
-        with col1:
-            section_title("Opportunity Concentration", "Where recovery-gap signals are concentrated by field.")
-            if isinstance(df, pd.DataFrame) and not df.empty and "Field" in df.columns and "RF Gap" in df.columns:
-                temp = df.assign(**{"RF Gap": pd.to_numeric(df["RF Gap"], errors="coerce")})
-                field_gap = temp.groupby("Field")["RF Gap"].sum().sort_values(ascending=False).head(10)
-                st.bar_chart(field_gap)
+        left, right = st.columns([1.4, 1])
+        with left:
+            section_title("Opportunity Concentration", "Use field aggregation as a prioritisation signal, then validate at reservoir level.")
+            if isinstance(df, pd.DataFrame) and not df.empty and {"Field", "RF Gap"}.issubset(df.columns):
+                temp = df[["Field", "RF Gap"]].copy()
+                temp["RF Gap"] = pd.to_numeric(temp["RF Gap"], errors="coerce")
+                ranked = temp.dropna().groupby("Field")["RF Gap"].sum().sort_values(ascending=False).reset_index()
+                try:
+                    import altair as alt
+                    chart = alt.Chart(ranked.head(12)).mark_bar().encode(
+                        x=alt.X("RF Gap:Q", title="Aggregate RF Gap"),
+                        y=alt.Y("Field:N", sort="-x", title=None),
+                        tooltip=["Field", alt.Tooltip("RF Gap:Q", format=",.1f")],
+                    ).properties(height=440).interactive()
+                    st.altair_chart(chart, use_container_width=True)
+                except Exception:
+                    st.dataframe(ranked.head(12), use_container_width=True, hide_index=True)
             else:
                 st.info("Field RF-gap data is unavailable.")
-        with col2:
-            section_title("What to do next", "Move from spatial opportunity to reservoir-level engineering evidence.")
+        with right:
+            section_title("Decision Pulse", "The dashboard should always make the next decision step obvious.")
             insight_cards([
-                ("DISCOVER", "Find candidates", "Use the candidate explorer to isolate fields and reservoirs for review."),
-                ("SCREEN", "Run the engineering gate", "Test the selected reservoir against ScreenTool v3 deterministic criteria."),
-                ("DECIDE", "Review hybrid ranking", "Use CatBoost and Decision Fusion only after the engineering gate."),
+                ("01", "Discover", "Narrow candidate reservoirs and locate portfolio concentration."),
+                ("02", "Screen", "Run the deterministic engineering gate on a selected reservoir."),
+                ("03", "Decide", "Use hybrid intelligence only after engineering feasibility is established."),
             ])
 
     with journey_tab:
-        section_title("Decision Journey", "Engineering evidence remains ahead of recommendation.")
+        section_title("Decision Journey", "A consistent evidence chain across the application.")
         journey = pd.DataFrame({
             "Stage": ["Portfolio", "Candidates", "Engineering Gate", "Hybrid Intelligence", "Insights"],
-            "Purpose": [
-                "See where opportunity is concentrated",
-                "Identify reservoirs for review",
-                "Test deterministic feasibility",
-                "Rank methods with ML support",
-                "Translate results into actions",
-            ],
+            "What the user sees": ["Where opportunity sits", "Which reservoirs are worth review", "Why techniques pass or fail", "How ML changes the ranking", "What to do next"],
         })
         st.dataframe(journey, use_container_width=True, hide_index=True)
