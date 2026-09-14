@@ -27,7 +27,7 @@ def initialize_ui() -> None:
             z-index:999;
             background:rgba(247,248,250,.97);
             border-bottom:1px solid #E4E7EC;
-            padding:.35rem 0 .1rem;
+            padding:.45rem 0 .55rem;
             margin:0 0 .85rem;
             backdrop-filter:blur(10px);
         }
@@ -37,42 +37,44 @@ def initialize_ui() -> None:
             font-weight:700;
             letter-spacing:.12em;
             text-transform:uppercase;
-            margin:0 0 .25rem .1rem;
+            margin:0 0 .3rem .1rem;
         }
-        .atlas-top-nav-shell [data-testid="stRadio"] > div {
-            gap:.25rem;
-            flex-wrap:wrap;
-        }
-        .atlas-top-nav-shell [data-testid="stRadio"] label {
-            border:1px solid transparent;
+        .atlas-top-nav-shell div[data-testid="stButton"] > button {
+            min-height:2.2rem;
+            padding:.35rem .5rem;
             border-radius:999px;
-            padding:.33rem .62rem;
-            background:transparent;
-            color:#475467 !important;
-            transition:all .15s ease;
-        }
-        .atlas-top-nav-shell [data-testid="stRadio"] label:hover {
-            background:#fff;
-            border-color:#D0D5DD;
-            color:#182230 !important;
-        }
-        .atlas-top-nav-shell [data-testid="stRadio"] label:has(input:checked) {
-            background:#EAF7F6;
-            border-color:#9ADBD7;
-            color:#0F4B4A !important;
-            font-weight:700;
-        }
-        .atlas-top-nav-shell [data-testid="stRadio"] label > div:first-child { display:none; }
-        .atlas-top-nav-shell [data-testid="stRadio"] p {
-            font-size:.72rem !important;
-            font-weight:650 !important;
-            color:inherit !important;
+            font-size:.72rem;
+            font-weight:650;
             white-space:nowrap;
+            box-shadow:none;
+        }
+        .atlas-top-nav-shell div[data-testid="stButton"] > button[kind="secondary"] {
+            background:#fff;
+            color:#475467;
+            border-color:#D0D5DD;
+        }
+        .atlas-top-nav-shell div[data-testid="stButton"] > button[kind="secondary"]:hover {
+            background:#F9FAFB;
+            color:#182230;
+            border-color:#98A2B3;
+        }
+        .atlas-top-nav-shell div[data-testid="stButton"] > button[kind="primary"] {
+            background:#EAF7F6;
+            color:#0F4B4A;
+            border-color:#8ED3CF;
+            box-shadow:0 2px 6px rgba(0,161,156,.08);
+        }
+        .atlas-top-nav-shell div[data-testid="stButton"] > button[kind="primary"]:hover {
+            background:#DFF4F2;
+            color:#0F4B4A;
+            border-color:#71C7C1;
+        }
+        @media(max-width:1100px) {
+            .atlas-top-nav-shell { position:relative; }
+            .atlas-top-nav-shell div[data-testid="stHorizontalBlock"] { flex-wrap:wrap; }
+            .atlas-top-nav-shell div[data-testid="stButton"] > button { font-size:.68rem; }
         }
         @media(max-width:900px) {
-            .atlas-top-nav-shell { position:relative; }
-            .atlas-top-nav-shell [data-testid="stRadio"] > div { overflow-x:auto; flex-wrap:nowrap; padding-bottom:.2rem; }
-            .atlas-top-nav-shell [data-testid="stRadio"] label { flex:0 0 auto; }
             .page-title { font-size:1.55rem !important; }
             .page-subtitle { font-size:.86rem !important; }
             .block-container { padding-left:1rem !important; padding-right:1rem !important; }
