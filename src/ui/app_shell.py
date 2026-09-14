@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import streamlit as st
 
 from ui.components import page_header
@@ -14,6 +12,25 @@ from ui.theme import inject_theme
 def initialize_ui() -> None:
     """Apply the visual system before rendering page content."""
     inject_theme()
+    st.markdown(
+        """
+        <style>
+        /* Shared UX polish: keep status text readable on light surfaces. */
+        .status-strip > span:first-child { color:#344054 !important; }
+        .status-strip { background:#F6FBFA !important; }
+        .stTabs [role="tab"] { padding:.72rem 1rem; border-radius:10px 10px 0 0; }
+        .stTabs [role="tab"] p { font-weight:650; }
+        .stTabs [role="tab"][aria-selected="true"] { background:#EAF7F6; color:#0F4B4A; }
+        div[data-testid="stVerticalBlock"] > div:has(> div[data-testid="stHorizontalBlock"]) { min-width:0; }
+        @media (max-width:900px) {
+            .page-title { font-size:1.55rem !important; }
+            .page-subtitle { font-size:.86rem !important; }
+            .block-container { padding-left:1rem !important; padding-right:1rem !important; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_shell_header() -> None:
