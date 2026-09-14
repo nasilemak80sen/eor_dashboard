@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -36,3 +35,17 @@ def test_application_services_are_cached_across_reruns():
     source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
     assert "@st.cache_resource(show_spinner=False)" in source
     assert "def _safe_services()" in source
+
+
+def test_decision_ux_module_and_hand_offs_exist():
+    decision = (ROOT / "src" / "ui" / "decision.py").read_text(encoding="utf-8")
+    candidates = (ROOT / "src" / "pages_ui" / "candidates.py").read_text(encoding="utf-8")
+    screening = (ROOT / "src" / "pages_ui" / "screening.py").read_text(encoding="utf-8")
+    intelligence = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
+    assert "def decision_hero" in decision
+    assert "def decision_trace" in decision
+    assert "def why_why_not" in decision
+    assert "def next_steps" in decision
+    assert "eor_candidate_shortlist" in candidates
+    assert "decision_hero(" in intelligence
+    assert "decision_trace(" in screening
