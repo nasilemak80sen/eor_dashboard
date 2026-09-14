@@ -119,8 +119,8 @@ def _persist_base_run(
     user: Optional[str],
     mode: str,
     model_version: Optional[str] = None,
-) -> Any:
-    """Create the root ScreeningRun and preserve its exact input/result trace."""
+) -> Dict[str, Any]:
+    """Create the root ScreeningRun and return detached scalar metadata only."""
     session = DatabaseManager.get_session()
     try:
         repo = ScreeningRepository(session)
@@ -158,7 +158,19 @@ def _persist_base_run(
             },
         )
         repo.save_eligibility_results(row.id, _engineering_map(screening_result))
-        return row
+
+        # Copy scalar metadata before the ORM instance becomes detached.
+        run_id = int(row.id)
+        timestamp = row.timestamp
+        reference = run_reference(run_id, timestamp)
+        return {
+            "id": run_id,
+            "timestamp": timestamp,
+            "reference": reference,
+            "recommendation_status": best.get("Status", ""),
+            "recommendation_score": float(best.get("Score (%)", 0.0)),
+            "recommended_technique": best.get("EOR Technique", ""),
+        }
     finally:
         session.close()
 
@@ -170,8 +182,8 @@ def persist_engineering_run(
     *,
     user: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Persist an Engineering Screening submission and return its report-card metadata."""
-    row = _persist_base_run(
+    """Persist an Engineering Screening submission and return report-card metadata."""
+    metadata = _persist_base_run(
         inputs=inputs,
         formation=formation,
         screening_result=screening_result,
@@ -179,9 +191,9 @@ def persist_engineering_run(
         mode="ENGINEERING",
     )
     return {
-        "id": row.id,
-        "reference": run_reference(row.id, row.timestamp),
-        "timestamp": row.timestamp,
+        "id": metadata["id"],
+        "reference": metadata["reference"],
+        "timestamp": metadata["timestamp"],
         "mode": "ENGINEERING",
     }
 
@@ -199,7 +211,7 @@ def persist_hybrid_run(
     formation = result.get("formation", "Unknown")
     model_info = result.get("model_info", {}) or {}
 
-    row = _persist_base_run(
+    metadata = _persist_base_run(
         inputs=inputs,
         formation=formation,
         screening_result=screening_result,
@@ -207,15 +219,16 @@ def persist_hybrid_run(
         mode="HYBRID",
         model_version=str(model_info.get("version") or model_info.get("model_version") or "Unknown"),
     )
+    run_id = metadata["id"]
 
     session = DatabaseManager.get_session()
     try:
         repo = ScreeningRepository(session)
         ml_probabilities = result.get("ml_probabilities", {}) or {}
-        repo.save_ml_results(row.id, {str(k): float(v) for k, v in ml_probabilities.items()})
+        repo.save_ml_results(run_id, {str(k): float(v) for k, v in ml_probabilities.items()})
 
         ranking = (result.get("hybrid", {}) or {}).get("ranking", []) or []
-        session.execute(text("DELETE FROM hybrid_results WHERE screening_id = :screening_id"), {"screening_id": row.id})
+        session.execute(text("DELETE FROM hybrid_results WHERE screening_id = :screening_id"), {"screening_id": run_id})
         for rank, item in enumerate(ranking, start=1):
             session.execute(
                 text(
@@ -227,7 +240,7 @@ def persist_hybrid_run(
                             :is_recommended, :details)"""
                 ),
                 {
-                    "screening_id": row.id,
+                    "screening_id": run_id,
                     "rank": rank,
                     "technique": item.get("EOR Technique", ""),
                     "hybrid_score": float(item.get("Hybrid Score", 0.0)),
@@ -242,29 +255,33 @@ def persist_hybrid_run(
         hybrid = result.get("hybrid", {}) or {}
         recommendation = hybrid.get("recommendation", {}) or {}
         session.execute(
-            text("""UPDATE screening_runs
-                    SET recommended_technique = :technique,
-                        recommendation_status = :status,
-                        recommendation_score = :score,
-                        recommendation_mode = 'HYBRID',
-                        evidence_summary = :evidence
-                    WHERE id = :id"""),
+            text(
+                """UPDATE screening_runs
+                   SET recommended_technique = :technique,
+                       recommendation_status = :status,
+                       recommendation_score = :score,
+                       recommendation_mode = 'HYBRID',
+                       evidence_summary = :evidence
+                   WHERE id = :id"""
+            ),
             {
-                "id": row.id,
-                "technique": recommendation.get("EOR Technique", row.recommended_technique),
-                "status": recommendation.get("Engineering Status", row.recommendation_status),
-                "score": float(recommendation.get("Hybrid Score", row.recommendation_score or 0.0)),
+                "id": run_id,
+                "technique": recommendation.get("EOR Technique", metadata["recommended_technique"]),
+                "status": recommendation.get("Engineering Status", metadata["recommendation_status"]),
+                "score": float(recommendation.get("Hybrid Score", metadata["recommendation_score"] or 0.0)),
                 "evidence": json.dumps(
-                    _json_safe({
-                        "run_reference": run_reference(row.id, row.timestamp),
-                        "record_type": "HYBRID",
-                        "production_path": "Excel Gate -> CatBoost -> Decision Fusion",
-                        "weights": hybrid.get("weights", {}),
-                        "ml_available": result.get("ml_available", False),
-                        "ml_error": result.get("ml_error"),
-                        "model_info": model_info,
-                        "opportunity_context": hybrid.get("opportunity_context", {}),
-                    }),
+                    _json_safe(
+                        {
+                            "run_reference": metadata["reference"],
+                            "record_type": "HYBRID",
+                            "production_path": "Excel Gate -> CatBoost -> Decision Fusion",
+                            "weights": hybrid.get("weights", {}),
+                            "ml_available": result.get("ml_available", False),
+                            "ml_error": result.get("ml_error"),
+                            "model_info": model_info,
+                            "opportunity_context": hybrid.get("opportunity_context", {}),
+                        }
+                    ),
                     ensure_ascii=False,
                 ),
             },
@@ -274,9 +291,9 @@ def persist_hybrid_run(
         session.close()
 
     return {
-        "id": row.id,
-        "reference": run_reference(row.id, row.timestamp),
-        "timestamp": row.timestamp,
+        "id": run_id,
+        "reference": metadata["reference"],
+        "timestamp": metadata["timestamp"],
         "mode": "HYBRID",
     }
 
