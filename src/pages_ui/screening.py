@@ -1,11 +1,10 @@
 """Engineering Screening page."""
-
 from __future__ import annotations
-
 import streamlit as st
 
 from data.screening_history import persist_engineering_run
 from ui.components import insight_cards, reset_button, section_title, kpi_cards
+from ui.decision import data_quality, decision_trace, next_steps, view_mode, why_why_not
 
 
 def render() -> None:
@@ -23,13 +22,13 @@ def render() -> None:
     last_run = st.session_state.get("screening_last_run")
     status = "Result available" if result else "Awaiting screening"
     kpi_cards([
-        ("Workflow", status, "Current page state"),
+        ("Workflow", "Result available" if result else "Awaiting screening", "Current page state"),
         ("Primary input", "Current So", "Core screening parameter"),
         ("Decision rule", "Excel Gate", "Deterministic engineering layer"),
         ("Report Card", last_run.get("reference", "Not saved") if last_run else "Not saved", "Persistent screening record"),
     ])
 
-    inputs_tab, result_tab = st.tabs(["Reservoir Inputs", "Engineering Gate"])
+    inputs_tab, result_tab = st.tabs(["Reservoir Inputs", "Engineering Decision"])
     with inputs_tab:
         action_col, _ = st.columns([1, 4])
         with action_col:
@@ -67,7 +66,7 @@ def render() -> None:
     result = st.session_state.get("excel_screening_result")
     with result_tab:
         if not result:
-            st.info("No screening result yet. Complete the Reservoir Inputs tab and submit the Engineering Gate.")
+            st.info("No screening result yet. Complete Reservoir Inputs and submit the Engineering Gate.")
             return
         section_title(
             "Engineering Gate Result",
@@ -81,3 +80,38 @@ def render() -> None:
             _app.render_excel_screening_result(result)
         except Exception as exc:
             st.error(f"Screening result could not be displayed: {exc}")
+            return
+
+        rows = result.get("results") or result.get("techniques") or result.get("ranking") or []
+        if isinstance(rows, dict):
+            rows = list(rows.values())
+        pass_count = conditional_count = fail_count = 0
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            status = str(row.get("Status") or row.get("status") or row.get("Engineering Status") or "").upper()
+            pass_count += status == "PASS"
+            conditional_count += status == "CONDITIONAL"
+            fail_count += status == "FAIL"
+        kpi_cards([
+            ("Engineering PASS", pass_count, "Techniques meeting the gate"),
+            ("Conditional", conditional_count, "Requires further validation"),
+            ("FAIL", fail_count, "Excluded from downstream hybrid logic"),
+            ("Decision anchor", "Excel Gate", "Deterministic engineering basis"),
+        ])
+
+        if mode == "Engineering":
+            with st.expander("Decision Trace", expanded=True):
+                decision_trace(result, None, rows if isinstance(rows, list) else [])
+            with st.expander("Why / Why Not", expanded=True):
+                why_why_not(rows if isinstance(rows, list) else [])
+            with st.expander("Data & Assumption Quality", expanded=False):
+                data_quality(inputs_state)
+        else:
+            st.info("Leadership view keeps the outcome focused on feasibility, status and the downstream decision hand-off.")
+            with st.expander("Why / Why Not", expanded=True):
+                why_why_not(rows if isinstance(rows, list) else [], max_items=2)
+
+        with st.expander("Recommended Next Steps", expanded=True):
+            recommendation = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else None
+            next_steps(recommendation)

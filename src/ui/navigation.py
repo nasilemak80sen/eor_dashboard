@@ -60,6 +60,9 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
     """Keep the sidebar as a secondary system/status panel only."""
     state = system_state or {}
 
+def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
+    """Keep the collapsed sidebar as a secondary system/status panel."""
+    state = system_state or {}
     st.sidebar.markdown(
         """
         <div class="atlas-brand">

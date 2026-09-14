@@ -1,16 +1,14 @@
 """Hybrid Intelligence page."""
-
 from __future__ import annotations
-
 import streamlit as st
 
 from data.screening_history import persist_hybrid_run
 from ui.components import insight_cards, reset_button, section_title, kpi_cards
+from ui.decision import data_quality, decision_trace, next_steps, view_mode, why_why_not, decision_hero
 
 
 def render(services: dict) -> None:
     import hybrid_app as _hybrid
-
     insight_cards([
         ("01 · GATE", "Engineering anchor", "Hard engineering failures remain excluded before ML contributes to the recommendation."),
         ("02 · MODEL", "CatBoost signal", "The active model contributes a data-driven technique probability after the form is submitted."),
