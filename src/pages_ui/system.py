@@ -19,22 +19,29 @@ def render(services: dict) -> None:
     model_ready = bool(model_service is not None and model_service.is_loaded())
     workbook_ready = bool(path_status.get("workbook")) or bool(services.get("workbook_sheets"))
     config_ready = bool(path_status.get("config"))
+    services_ready = bool(services)
 
     kpi_cards([
         ("Excel Gate", "READY" if workbook_ready else "CHECK", "Workbook connection"),
         ("CatBoost", "READY" if model_ready else "CHECK", "Active model availability"),
         ("Decision Fusion", "READY", "Hybrid decision service"),
-        ("UI State", "Interactive", "Page-local controls and results"),
+        ("Services", "CACHED" if services_ready else "CHECK", "Reused across UI reruns"),
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
     insight_cards([
         ("HEALTH", "Can the stack run?", "Workbook, configuration and model readiness are checked before production workflows."),
-        ("MODEL", "What is active?", "Model metadata and production-compatible configuration are visible without exposing implementation clutter."),
-        ("DIAGNOSTICS", "What changed?", "Runtime paths and state are available when troubleshooting is required."),
+        ("EXECUTION", "When does it compute?", "Input widgets collect values without executing the decision stack; explicit submit actions start engineering or hybrid calculations."),
+        ("GOVERNANCE", "What is authoritative?", "The Excel Gate remains the deterministic engineering anchor ahead of CatBoost and Decision Fusion."),
     ])
 
-    health_tab, model_tab, runtime_tab = st.tabs(["System Health", "Active Model", "Runtime Diagnostics"])
+    health_tab, model_tab, workflow_tab, runtime_tab = st.tabs([
+        "System Health",
+        "Active Model",
+        "Decision Workflow",
+        "Runtime Diagnostics",
+    ])
+
     with health_tab:
         section_title("System Health", "The minimum components required by the production decision path.")
         status_grid([
@@ -42,8 +49,9 @@ def render(services: dict) -> None:
             ("ML configuration", config_ready),
             ("CatBoost model", model_ready),
             ("Decision Fusion", True),
+            ("Cached services", services_ready),
         ])
-        st.info("Keep this page as the operational backstop. Candidate and Screening pages intentionally keep their own local reset controls.")
+        st.info("Candidate exploration is descriptive. EOR Screening is deterministic. Hybrid Intelligence adds CatBoost only after the engineering gate. Local reset controls remain page-owned.")
 
     with model_tab:
         section_title("Active Model", "Current production-compatible CatBoost metadata and training-readiness boundary.")
@@ -55,10 +63,31 @@ def render(services: dict) -> None:
         else:
             st.warning("The active CatBoost model is unavailable; hybrid recommendations cannot use the production model.")
         section_title("V3 Training Readiness", "Engineering-aware CatBoost v2 stays isolated until independently labelled historical data and validation are available.")
-        st.caption("Live production path: Excel Gate → CatBoost → Decision Fusion.")
+        st.caption("The active production model is a compatibility bridge; do not train on ScreenTool-generated labels.")
+
+    with workflow_tab:
+        section_title("Decision Workflow", "This is the business-logic contract implemented by the production dashboard.")
+        workflow = [
+            ("1", "Candidate Discovery", "Filter and compare reservoir records; no EOR recommendation is executed."),
+            ("2", "Excel Gate", "Run deterministic EOR criteria only after the user submits the completed reservoir form."),
+            ("3", "CatBoost", "Generate model probabilities only during an explicit Hybrid Intelligence submission."),
+            ("4", "Decision Fusion", "Combine engineering and model signals, while hard engineering failures remain excluded."),
+            ("5", "Decision Review", "Inspect recommendation, ranking, engineering status and model context."),
+        ]
+        st.dataframe(
+            workflow,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "0": "Stage",
+                "1": "Business Layer",
+                "2": "Behaviour",
+            },
+        )
 
     with runtime_tab:
         section_title("Runtime Diagnostics", "Compact technical details for troubleshooting, not the primary decision workflow.")
         st.write(f"Environment: `{getattr(_app.settings, 'environment', 'unknown')}`")
         st.write(f"Workbook path: `{getattr(_app.settings, 'workbook_path', 'unknown')}`")
         st.write(f"Model loaded: `{model_ready}`")
+        st.write("Service lifecycle: cached at the application-shell level to avoid repeated model/workbook loading on ordinary Streamlit reruns.")
