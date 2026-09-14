@@ -28,31 +28,30 @@ NAV_ITEMS = (
 
 
 def render_top_nav() -> str:
-    """Render persistent primary navigation above every page."""
+    """Render persistent pill-button navigation above every page."""
     current = st.session_state.get("atlas_page", "overview")
-    labels = [f"{item.icon}  {item.label}" for item in NAV_ITEMS]
-    lookup = {label: item.key for label, item in zip(labels, NAV_ITEMS)}
-    current_label = next(
-        (label for label, item in zip(labels, NAV_ITEMS) if item.key == current),
-        labels[0],
-    )
 
     st.markdown(
         '<div class="atlas-top-nav-shell"><div class="atlas-top-nav-kicker">EOR ATLAS</div>',
         unsafe_allow_html=True,
     )
-    selected_label = st.radio(
-        "Primary navigation",
-        labels,
-        index=labels.index(current_label),
-        horizontal=True,
-        key="atlas_top_navigation",
-        label_visibility="collapsed",
-    )
-    selected = lookup[selected_label]
+
+    columns = st.columns(len(NAV_ITEMS))
+    selected = current
+    for column, item in zip(columns, NAV_ITEMS):
+        with column:
+            if st.button(
+                f"{item.icon}  {item.label}",
+                key=f"top_nav_{item.key}",
+                use_container_width=True,
+                type="primary" if item.key == current else "secondary",
+            ):
+                selected = item.key
+
     if selected != current:
         st.session_state["atlas_page"] = selected
         st.rerun()
+
     st.markdown('</div>', unsafe_allow_html=True)
     return selected
 
