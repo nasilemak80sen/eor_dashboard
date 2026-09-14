@@ -12,45 +12,53 @@ class NavItem:
     key: str
     label: str
     icon: str
-    section: str
 
 
 NAV_ITEMS = (
-    NavItem("overview", "Overview", "🏠", "Overview"),
-    NavItem("candidates", "Candidates", "🎯", "Discovery"),
-    NavItem("screening", "Screening", "🔍", "Discovery"),
-    NavItem("intelligence", "Hybrid", "🧠", "Decision"),
-    NavItem("insights", "Insights", "📊", "Decision"),
-    NavItem("historical", "Historical", "📚", "Knowledge"),
-    NavItem("challenges", "Challenges", "⚠️", "Knowledge"),
-    NavItem("ceor", "CEOR Lab", "🧪", "Technology"),
-    NavItem("system", "System", "⚙", "System"),
+    NavItem("overview", "Overview", "🏠"),
+    NavItem("candidates", "Candidates", "🎯"),
+    NavItem("screening", "Screening", "🔍"),
+    NavItem("intelligence", "Hybrid", "🧠"),
+    NavItem("insights", "Insights", "📊"),
+    NavItem("historical", "Historical", "📚"),
+    NavItem("challenges", "Challenges", "⚠️"),
+    NavItem("ceor", "CEOR Lab", "🧪"),
+    NavItem("system", "System", "⚙"),
 )
 
 
 def render_top_nav() -> str:
-    """Render the persistent primary navigation bar above every page."""
+    """Render persistent pill-button navigation above every page."""
     current = st.session_state.get("atlas_page", "overview")
-    labels = [f"{item.icon}  {item.label}" for item in NAV_ITEMS]
-    lookup = {label: item.key for label, item in zip(labels, NAV_ITEMS)}
-    current_label = next((label for label, item in zip(labels, NAV_ITEMS) if item.key == current), labels[0])
 
-    st.markdown('<div class="atlas-top-nav-shell"><div class="atlas-top-nav-kicker">EOR ATLAS</div>', unsafe_allow_html=True)
-    selected_label = st.radio(
-        "Primary navigation",
-        labels,
-        index=labels.index(current_label),
-        horizontal=True,
-        key="atlas_top_navigation",
-        label_visibility="collapsed",
+    st.markdown(
+        '<div class="atlas-top-nav-shell"><div class="atlas-top-nav-kicker">EOR ATLAS</div>',
+        unsafe_allow_html=True,
     )
-    selected = lookup[selected_label]
+
+    columns = st.columns(len(NAV_ITEMS))
+    selected = current
+    for column, item in zip(columns, NAV_ITEMS):
+        with column:
+            if st.button(
+                f"{item.icon}  {item.label}",
+                key=f"top_nav_{item.key}",
+                use_container_width=True,
+                type="primary" if item.key == current else "secondary",
+            ):
+                selected = item.key
+
     if selected != current:
         st.session_state["atlas_page"] = selected
         st.rerun()
+
     st.markdown('</div>', unsafe_allow_html=True)
     return selected
 
+
+def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
+    """Keep the sidebar as a secondary system/status panel only."""
+    state = system_state or {}
 
 def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
     """Keep the collapsed sidebar as a secondary system/status panel."""
@@ -81,10 +89,9 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
             unsafe_allow_html=True,
         )
 
-    st.sidebar.markdown('<div style="height:.35rem"></div>', unsafe_allow_html=True)
     st.sidebar.caption("Secondary panel • system status and diagnostics")
 
 
 def render_sidebar_status(*, system_state: dict[str, bool] | None = None) -> None:
-    """Compatibility alias for callers that used the old sidebar renderer."""
+    """Compatibility alias for legacy callers."""
     render_sidebar(system_state=system_state)

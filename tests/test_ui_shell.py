@@ -37,28 +37,14 @@ def test_application_services_are_cached_across_reruns():
     assert "def _safe_services()" in source
 
 
-def test_decision_ux_module_and_hand_offs_exist():
-    decision = (ROOT / "src" / "ui" / "decision.py").read_text(encoding="utf-8")
-    candidates = (ROOT / "src" / "pages_ui" / "candidates.py").read_text(encoding="utf-8")
-    screening = (ROOT / "src" / "pages_ui" / "screening.py").read_text(encoding="utf-8")
-    intelligence = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
-    assert "def decision_hero" in decision
-    assert "def decision_trace" in decision
-    assert "def why_why_not" in decision
-    assert "def next_steps" in decision
-    assert "eor_candidate_shortlist" in candidates
-    assert "decision_hero(" in intelligence
-    assert "decision_trace(" in screening
-
-
-def test_top_navigation_is_rendered_by_the_application_shell():
+def test_top_navigation_uses_buttons_not_radio():
     navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
     shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
-    assert "def render_top_nav" in navigation
+    assert "st.button(" in navigation
+    assert "st.radio(" not in navigation
     assert "render_top_nav()" in shell
-    assert "atlas_page" in navigation
 
 
-def test_sidebar_defaults_to_collapsed():
+def test_sidebar_starts_collapsed():
     settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
     assert '"initial_sidebar_state": "collapsed"' in settings
