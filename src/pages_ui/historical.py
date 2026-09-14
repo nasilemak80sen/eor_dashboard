@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
-import altair as alt
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from data.historical_studies import load_historical_studies, merge_manual_studies
@@ -103,24 +103,48 @@ def _stacked_bar(frame: pd.DataFrame, category: str, title: str) -> None:
         st.info("No historical records match the selected Field / EOR Study filters.")
         return
 
-    chart = (
-        alt.Chart(frame)
-        .mark_bar(size=24)
-        .encode(
-            x=alt.X("Field:N", sort="-y", title="Field", axis=alt.Axis(labelAngle=-60, labelLimit=140)),
-            y=alt.Y("sum(Incremental EUR (MMstb)):Q", title="INCREMENTAL EUR (MMSTB)"),
-            color=alt.Color(f"{category}:N", title=category),
-            order=alt.Order("sum(Incremental EUR (MMstb))", sort="descending"),
-            tooltip=[
-                alt.Tooltip("Field:N"),
-                alt.Tooltip(f"{category}:N"),
-                alt.Tooltip("sum(Incremental EUR (MMstb)):Q", format=",.2f", title="Incremental EUR (MMstb)"),
-            ],
-        )
-        .properties(title=title, height=410)
-        .interactive()
+    chart_frame = frame[["Field", category, "Incremental EUR (MMstb)"]].copy()
+    chart_frame[category] = chart_frame[category].fillna("Unknown")
+    chart_frame = (
+        chart_frame.groupby(["Field", category], as_index=False)["Incremental EUR (MMstb)"]
+        .sum()
     )
-    st.altair_chart(chart, use_container_width=True)
+
+    fig = px.bar(
+        chart_frame,
+        x="Field",
+        y="Incremental EUR (MMstb)",
+        color=category,
+        barmode="stack",
+        title=title,
+        labels={
+            "Field": "Field",
+            "Incremental EUR (MMstb)": "INCREMENTAL EUR (MMSTB)",
+            category: category,
+        },
+        custom_data=[category],
+    )
+    fig.update_traces(
+        hovertemplate=(
+            "<b>%{x}</b><br>"
+            f"{category}: %{{customdata[0]}}<br>"
+            "Incremental EUR: %{y:,.2f} MMstb<extra></extra>"
+        )
+    )
+    field_order = (
+        chart_frame.groupby("Field")["Incremental EUR (MMstb)"]
+        .sum()
+        .sort_values(ascending=False)
+        .index.tolist()
+    )
+    fig.update_layout(
+        height=430,
+        margin=dict(l=50, r=20, t=55, b=110),
+        legend_title_text=category,
+        xaxis={"categoryorder": "array", "categoryarray": field_order, "tickangle": -60},
+        yaxis_title="INCREMENTAL EUR (MMSTB)",
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def _render_historical_eor_reference_section() -> None:
@@ -153,17 +177,8 @@ def _render_historical_eor_reference_section() -> None:
     )
 
     st.markdown("#### 📊 Past EOR Screening Result")
-    _stacked_bar(
-        filtered,
-        "EOR Study",
-        "INCREMENTAL EUR (MMSTB) by Field and EOR Studies",
-    )
-
-    _stacked_bar(
-        filtered,
-        "Reservoir",
-        "INCREMENTAL EUR (MMSTB) by Field and Reservoir",
-    )
+    _stacked_bar(filtered, "EOR Study", "INCREMENTAL EUR (MMSTB) by Field and EOR Studies")
+    _stacked_bar(filtered, "Reservoir", "INCREMENTAL EUR (MMSTB) by Field and Reservoir")
 
     with st.expander("View filtered historical records", expanded=False):
         st.dataframe(
@@ -193,7 +208,6 @@ def _render_register(records: list[Dict[str, Any]]) -> int | None:
     df["Recommendation"] = df["recommended_technique"].fillna("—")
     df["Score"] = pd.to_numeric(df["recommendation_score"], errors="coerce").round(1)
     df["Status"] = df["recommendation_status"].fillna("—")
-
     view = df[["Reference", "Timestamp", "Formation", "Mode", "Recommendation", "Status", "Score"]].copy()
     view.columns = ["Run ID", "Timestamp", "Formation", "Run Type", "Recommendation", "Status", "Score"]
     st.dataframe(view, use_container_width=True, hide_index=True)
@@ -220,10 +234,7 @@ def _render_input_snapshot(inputs: Dict[str, Any]) -> None:
     ]
     keys = [key for key in preferred_order if key in inputs]
     keys += [key for key in inputs if key not in keys]
-    rows = [
-        {"Parameter": key.replace("_", " ").title(), "Value": inputs[key] if inputs[key] not in (None, "") else "—"}
-        for key in keys
-    ]
+    rows = [{"Parameter": key.replace("_", " ").title(), "Value": inputs[key] if inputs[key] not in (None, "") else "—"} for key in keys]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
@@ -272,11 +283,7 @@ def _render_report_card(card: Dict[str, Any]) -> None:
     evidence = _parse_json(run.get("evidence_summary")) or {}
     assumptions = _parse_json(run.get("assumptions")) or {}
 
-    section_title(
-        f"Screening Report Card · {reference}",
-        "Exact submitted inputs plus the independent Engineering, CatBoost and Hybrid decision records captured for this run.",
-    )
-
+    section_title(f"Screening Report Card · {reference}", "Exact submitted inputs plus the independent Engineering, CatBoost and Hybrid decision records captured for this run.")
     recommendation = run.get("recommended_technique") or "No recommendation"
     score = run.get("recommendation_score")
     mode = run.get("recommendation_mode") or "ENGINEERING"
@@ -337,7 +344,6 @@ def render() -> None:
 
     st.title("Historical EOR")
     st.caption("Past EOR study evidence and saved EOR Atlas screening decisions.")
-
     _render_historical_eor_reference_section()
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
