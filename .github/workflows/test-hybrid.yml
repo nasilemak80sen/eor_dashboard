@@ -32,6 +32,7 @@ jobs:
             src/data/screening_history.py \
             src/data/historical_studies.py \
             src/data/challenges.py \
+            src/data/ceor_evidence.py \
             src/ui/theme.py \
             src/ui/components.py \
             src/ui/navigation.py \
@@ -54,9 +55,9 @@ jobs:
         env:
           PYTHONPATH: src
         run: |
-          python -c "import eor_atlas; import data.screening_history; import data.historical_studies; import data.challenges; import ui.theme; import ui.components; import ui.navigation; import ui.app_shell; import pages_ui.overview; import pages_ui.candidates; import pages_ui.screening; import pages_ui.intelligence; import pages_ui.insights; import pages_ui.historical; import pages_ui.ceor; import pages_ui.challenges; import pages_ui.system"
+          python -c "import eor_atlas; import data.screening_history; import data.historical_studies; import data.challenges; import data.ceor_evidence; import ui.theme; import ui.components; import ui.navigation; import ui.app_shell; import pages_ui.overview; import pages_ui.candidates; import pages_ui.screening; import pages_ui.intelligence; import pages_ui.insights; import pages_ui.historical; import pages_ui.ceor; import pages_ui.challenges; import pages_ui.system"
 
-      - name: Run hybrid and UI regression tests
+      - name: Run hybrid, CEOR and UI regression tests
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py tests/test_screening_history.py tests/test_historical_studies.py tests/test_challenges.py tests/test_ui_shell.py
+        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py tests/test_screening_history.py tests/test_historical_studies.py tests/test_challenges.py tests/test_ceor_evidence.py tests/test_ui_shell.py
