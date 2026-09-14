@@ -122,11 +122,12 @@ def _persist_base_run(
             status="completed",
         )
 
+        best = _best_engineering(screening_result)
         repo.update_results(
             row.id,
-            recommended_technique=_best_engineering(screening_result).get("EOR Technique", ""),
-            recommendation_status=_best_engineering(screening_result).get("Status", ""),
-            recommendation_score=float(_best_engineering(screening_result).get("Score (%)", 0.0)),
+            recommended_technique=best.get("EOR Technique", ""),
+            recommendation_status=best.get("Status", ""),
+            recommendation_score=float(best.get("Score (%)", 0.0)),
             recommendation_mode=mode,
         )
         repo.update_run_metadata(
@@ -180,6 +181,8 @@ def persist_hybrid_run(
     user: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Persist Engineering + CatBoost + Hybrid results as one report-card run."""
+    ensure_history_schema()
+
     screening_result = result.get("screening", {}) or {}
     inputs = result.get("inputs", {}) or {}
     formation = result.get("formation", "Unknown")
@@ -267,44 +270,85 @@ def persist_hybrid_run(
     }
 
 
-def list_report_cards(days: int = 3650) -> List[Any]:
-    """Return saved report-card roots newest first."""
+def list_report_cards(days: int = 3650) -> List[Dict[str, Any]]:
+    """Return a plain-data register suitable for Streamlit rendering."""
     session = DatabaseManager.get_session()
     try:
-        return ScreeningRepository(session).get_recent(days=days)
+        cutoff = datetime.utcnow().timestamp() - (days * 86400)
+        rows = session.execute(
+            text(
+                """SELECT id, timestamp, formation, user, status, recommendation_mode,
+                          recommended_technique, recommendation_status, recommendation_score,
+                          data_readiness_pct, model_version
+                   FROM screening_runs
+                   WHERE timestamp >= datetime(:cutoff, 'unixepoch')
+                   ORDER BY timestamp DESC"""
+            ),
+            {"cutoff": cutoff},
+        ).mappings().all()
+        return [dict(row) for row in rows]
     finally:
-        # The returned SQLAlchemy objects have already been populated by the query;
-        # detach by keeping the session open only for the rendering turn.
-        pass
+        session.close()
 
 
 def get_report_card(run_id: int) -> Optional[Dict[str, Any]]:
-    """Load a complete persisted report card by numeric screening id."""
+    """Load a complete plain-data report card by numeric screening id."""
     ensure_history_schema()
     session = DatabaseManager.get_session()
     try:
-        repo = ScreeningRepository(session)
-        run = repo.get_detail(run_id)
-        if run is None:
+        row = session.execute(
+            text(
+                """SELECT id, timestamp, formation, user, status,
+                          depth_ft, porosity_pct, perm_md, api, visc_cp, so_pct,
+                          data_quality_status, data_readiness_pct,
+                          recommended_technique, recommendation_status, recommendation_score,
+                          recommendation_mode, input_payload, rule_trace, assumptions,
+                          workbook_version, rule_version, model_version, evidence_summary
+                   FROM screening_runs
+                   WHERE id = :id"""
+            ),
+            {"id": run_id},
+        ).mappings().first()
+        if row is None:
             return None
 
-        hybrid_rows = session.execute(
-            text("""SELECT rank, technique, hybrid_score, catboost_probability,
+        engineering = session.execute(
+            text(
+                """SELECT technique, status, criteria_passed, criteria_total, details
+                   FROM eligibility_results
+                   WHERE screening_id = :id
+                   ORDER BY id"""
+            ),
+            {"id": run_id},
+        ).mappings().all()
+
+        ml = session.execute(
+            text(
+                """SELECT technique, probability, is_top_prediction, confidence
+                   FROM ml_results
+                   WHERE screening_id = :id
+                   ORDER BY probability DESC"""
+            ),
+            {"id": run_id},
+        ).mappings().all()
+
+        hybrid = session.execute(
+            text(
+                """SELECT rank, technique, hybrid_score, catboost_probability,
                           engineering_score, engineering_status, is_recommended, details
                    FROM hybrid_results
-                   WHERE screening_id = :screening_id
-                   ORDER BY rank"""),
-            {"screening_id": run.id},
+                   WHERE screening_id = :id
+                   ORDER BY rank"""
+            ),
+            {"id": run_id},
         ).mappings().all()
 
         return {
-            "run": run,
-            "reference": run_reference(run.id, run.timestamp),
-            "engineering": [item for item in (run.eligibility_results or [])],
-            "ml": [item for item in (run.ml_results or [])],
-            "hybrid": [dict(item) for item in hybrid_rows],
+            "run": dict(row),
+            "reference": run_reference(int(row["id"]), row["timestamp"]),
+            "engineering": [dict(item) for item in engineering],
+            "ml": [dict(item) for item in ml],
+            "hybrid": [dict(item) for item in hybrid],
         }
     finally:
-        # Caller renders immediately, but the ORM objects reference lazy
-        # collections. Keep the session alive for that render.
-        pass
+        session.close()
