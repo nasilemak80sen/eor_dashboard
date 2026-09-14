@@ -1,9 +1,9 @@
-"""CEOR evidence data access from the repository engineering workbook.
+"""CEOR evidence access from the repository engineering workbook.
 
-The CEOR pages intentionally use the workbook as the source of truth rather than
-hard-coded demonstration values. A few workbook revisions use different sheet
-names for the same evidence panel; aliases are handled explicitly and exposed in
-metadata so the UI can remain transparent about its source.
+The CEOR page is intentionally workbook-backed. Workbook revisions can rename
+some evidence sheets or use slightly different column labels, so this module
+normalises those differences explicitly and never lets one missing panel break
+the other CEOR tab.
 """
 
 from __future__ import annotations
@@ -16,28 +16,35 @@ import streamlit as st
 
 from config.settings import settings
 
-
 WORKBOOK_NAME = "EOR_Screening_Tool_2026.xlsx"
 
-# Requested panel names -> repository workbook aliases observed in current source.
 SHEET_ALIASES: dict[str, tuple[str, ...]] = {
     "Vis_Shear": ("Vis_Shear",),
     "PB_2003": ("PB_2003",),
     "PB_2013_A": ("PB_2013_A",),
     "PB_2013_B": ("PB_2013_B", "PB_2013_S"),
     "IFT_sur_F": ("IFT_sur_F",),
-    # Page 5's second IFT panel is explicitly Polymer IFT Range.
     "IFT_sur_T": ("IFT_sur_T", "IFT_poly_F"),
     "adsorption": ("adsorption", "Adsorption"),
     "Coreflood": ("Coreflood",),
-    "Sor_F": ("Sor_F",),
-    # Used only for contextual year / temperature / polymer metadata on adsorption.
+    "Sor_F": ("Sor_F", "SOR_F", "Sor F", "Sor_Reduction", "Sor Reduction"),
     "Thermal": ("Thermal",),
 }
 
 
-def _normalise_sheet(value: str) -> str:
-    return "".join(ch.lower() for ch in str(value).strip() if ch.isalnum())
+def _safe_project_root() -> Path:
+    configured = getattr(settings, "project_root", None)
+    if configured:
+        return Path(configured)
+    return Path(__file__).resolve().parents[2]
+
+
+def _empty() -> pd.DataFrame:
+    return pd.DataFrame()
+
+
+def _normalise_sheet(value: Any) -> str:
+    return "".join(ch.lower() for ch in str(value or "").strip() if ch.isalnum())
 
 
 def _resolve_sheet(sheet_names: list[str], requested: str) -> str | None:
@@ -51,137 +58,191 @@ def _resolve_sheet(sheet_names: list[str], requested: str) -> str | None:
 
 
 def _clean_columns(frame: pd.DataFrame) -> pd.DataFrame:
-    frame = frame.copy()
-    frame.columns = [str(column).strip() for column in frame.columns]
-    return frame
+    result = frame.copy()
+    result.columns = [str(column).strip() for column in result.columns]
+    return result
+
+
+def _column_key(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    for token in ["_", "-", "/", "(", ")", ":"]:
+        text = text.replace(token, " ")
+    return " ".join(text.split())
 
 
 def _first_column(frame: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
-    normalised = {" ".join(str(c).lower().replace("_", " ").split()): c for c in frame.columns}
+    if frame.empty:
+        return None
+    normalised = {_column_key(column): column for column in frame.columns}
     for alias in aliases:
-        key = " ".join(alias.lower().replace("_", " ").split())
-        if key in normalised:
-            return normalised[key]
+        exact = normalised.get(_column_key(alias))
+        if exact is not None:
+            return exact
     for column in frame.columns:
-        text = " ".join(str(column).lower().replace("_", " ").split())
-        if any(alias.lower() in text for alias in aliases):
-            return column
+        text = _column_key(column)
+        for alias in aliases:
+            if _column_key(alias) in text:
+                return column
     return None
 
 
-def _empty() -> pd.DataFrame:
-    return pd.DataFrame()
+def _numeric(frame: pd.DataFrame, column: str | None) -> pd.Series:
+    if column is None:
+        return pd.Series(pd.NA, index=frame.index, dtype="Float64")
+    return pd.to_numeric(frame[column], errors="coerce")
+
+
+def _text(frame: pd.DataFrame, column: str | None, default: str = "Unknown") -> pd.Series:
+    if column is None:
+        return pd.Series(default, index=frame.index, dtype="string")
+    return frame[column].astype("string").str.strip()
 
 
 def _normalise_vis_shear(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
-    year = _first_column(frame, ("Year",))
-    polymer = _first_column(frame, ("Polymer", "Polymer Type"))
-    shear = _first_column(frame, ("Shear Rate", "Shear Rate (1/sec)"))
-    viscosity = _first_column(frame, ("Apparent Viscosity",))
-    out = pd.DataFrame({
-        "Year": pd.to_numeric(frame[year], errors="coerce") if year else pd.NA,
-        "Polymer": frame[polymer].astype(str).str.strip() if polymer else "Unknown",
-        "Shear Rate": pd.to_numeric(frame[shear], errors="coerce") if shear else pd.NA,
-        "Apparent Viscosity": pd.to_numeric(frame[viscosity], errors="coerce") if viscosity else pd.NA,
-    })
-    return out.dropna(subset=["Shear Rate", "Apparent Viscosity"])
+    out = pd.DataFrame(
+        {
+            "Year": _numeric(frame, _first_column(frame, ("Year",))),
+            "Polymer": _text(frame, _first_column(frame, ("Polymer", "Polymer Type"))),
+            "Shear Rate": _numeric(frame, _first_column(frame, ("Shear Rate", "Shear Rate (1/sec)"))),
+            "Apparent Viscosity": _numeric(frame, _first_column(frame, ("Apparent Viscosity",))),
+        }
+    )
+    return out.dropna(subset=["Shear Rate", "Apparent Viscosity"]).reset_index(drop=True)
 
 
 def _normalise_phase(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
-    formulation = _first_column(frame, ("Formulation",))
-    precip = _first_column(frame, ("Percipitation", "Precipitation"))
-    no_precip = _first_column(frame, ("No Percepitation", "No Precipitation"))
-    year = _first_column(frame, ("Year",))
-    out = pd.DataFrame({
-        "Year": pd.to_numeric(frame[year], errors="coerce") if year else pd.NA,
-        "Formulation": frame[formulation].astype(str).str.strip() if formulation else "Unknown",
-        "Precipitation": pd.to_numeric(frame[precip], errors="coerce") if precip else pd.NA,
-        "No Precipitation": pd.to_numeric(frame[no_precip], errors="coerce") if no_precip else pd.NA,
-    })
-    return out.dropna(subset=["Formulation"])
+    out = pd.DataFrame(
+        {
+            "Year": _numeric(frame, _first_column(frame, ("Year",))),
+            "Formulation": _text(frame, _first_column(frame, ("Formulation", "Formulation (A/S/P)"))),
+            "Precipitation": _numeric(frame, _first_column(frame, ("Percipitation", "Precipitation"))),
+            "No Precipitation": _numeric(frame, _first_column(frame, ("No Percepitation", "No Precipitation"))),
+        }
+    )
+    return out.dropna(subset=["Formulation"]).reset_index(drop=True)
 
 
 def _normalise_ift(frame: pd.DataFrame, kind: str) -> pd.DataFrame:
     frame = _clean_columns(frame)
-    name = _first_column(frame, ("Surfactant", "Polymer"))
-    low = _first_column(frame, ("IFT low", "IFT low dyne/cm"))
-    high = _first_column(frame, ("IFT high", "IFT high dyne/cm"))
-    year = _first_column(frame, ("Year",))
-    out = pd.DataFrame({
-        "Year": pd.to_numeric(frame[year], errors="coerce") if year else pd.NA,
-        "Material": frame[name].astype(str).str.strip() if name else "Unknown",
-        "IFT Low": pd.to_numeric(frame[low], errors="coerce") if low else pd.NA,
-        "IFT High": pd.to_numeric(frame[high], errors="coerce") if high else pd.NA,
-    })
+    name = _first_column(frame, ("Surfactant", "Polymer", "Material"))
+    low = _first_column(frame, ("IFT low", "IFT low dyne/cm", "IFT low dyne/cm "))
+    high = _first_column(frame, ("IFT high", "IFT high dyne/cm", "IFT high dyne/cm "))
+    out = pd.DataFrame(
+        {
+            "Year": _numeric(frame, _first_column(frame, ("Year",))),
+            "Material": _text(frame, name),
+            "IFT Low": _numeric(frame, low),
+            "IFT High": _numeric(frame, high),
+        }
+    )
     out["Material Type"] = kind
-    return out.dropna(subset=["Material", "IFT Low", "IFT High"])
+    return out.dropna(subset=["Material", "IFT Low", "IFT High"]).reset_index(drop=True)
 
 
 def _normalise_adsorption(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
-    year = _first_column(frame, ("Year",))
-    field = _first_column(frame, ("Field",))
-    surfactant = _first_column(frame, ("Surfactant",))
-    days = _first_column(frame, ("Days",))
-    adsorption = _first_column(frame, ("Adsorption c/cO", "Adsorption"))
-    out = pd.DataFrame({
-        "Year": pd.to_numeric(frame[year], errors="coerce") if year else pd.NA,
-        "Field": frame[field].astype(str).str.strip() if field else "Unknown",
-        "Material": frame[surfactant].astype(str).str.strip() if surfactant else "Unknown",
-        "Days": pd.to_numeric(frame[days], errors="coerce") if days else pd.NA,
-        "Adsorption c/cO": pd.to_numeric(frame[adsorption], errors="coerce") if adsorption else pd.NA,
-    })
-    return out.dropna(subset=["Days", "Adsorption c/cO"])
+    temperature_col = _first_column(frame, ("Temperature", "Temperature C", "Temperature (C)", "Temp"))
+    polymer_col = _first_column(frame, ("Polymer Type", "Polymer", "Polymer Name"))
+    surfactant_col = _first_column(frame, ("Surfactant", "Formulation", "Chemical"))
+    out = pd.DataFrame(
+        {
+            "Year": _numeric(frame, _first_column(frame, ("Year",))),
+            "Field": _text(frame, _first_column(frame, ("Field",))),
+            "Material": _text(frame, surfactant_col),
+            "Days": _numeric(frame, _first_column(frame, ("Days", "Time", "Time Days"))),
+            "Adsorption c/cO": _numeric(frame, _first_column(frame, ("Adsorption c/cO", "Adsorption", "Adsorption ratio"))),
+            "Temperature": _numeric(frame, temperature_col),
+            "Polymer Type": _text(frame, polymer_col) if polymer_col else pd.Series(pd.NA, index=frame.index, dtype="string"),
+        }
+    )
+    return out.dropna(subset=["Days", "Adsorption c/cO"]).reset_index(drop=True)
 
 
 def _normalise_coreflood(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
-    mapping = {
-        "Core sample": ("Core sample",),
+    aliases: dict[str, tuple[str, ...]] = {
+        "Core sample": ("Core sample", "Core Flood Sample", "Core Floof Sample"),
         "Year": ("Year",),
-        "Water Flood": ("Water Flood Recovery, % OOIP",),
-        "AS": ("Alkaline- Surfactant (AS) Recovery, % OOIP",),
-        "Polymer": ("Polymer (P) Recovery, % OOIP",),
-        "Alkaline": ("Alkaline(A) Recovery",),
-        "Surfactant": ("Surfactant (S) Recovery",),
-        "SP": ("Surfactant +Polymer (SP) Recovery",),
-        "ASP": ("Alkali +Surfactant +Polymer (ASP) Recovery",),
+        "Water Flood": ("Water Flood Recovery, % OOIP", "Water Flood Recovery"),
+        "AS": ("Alkaline- Surfactant (AS) Recovery, % OOIP", "AS Recovery"),
+        "Polymer": ("Polymer (P) Recovery, % OOIP", "Polymer Recovery"),
+        "Alkaline": ("Alkaline(A) Recovery", "Alkaline Recovery"),
+        "Surfactant": ("Surfactant (S) Recovery", "Surfactant Recovery"),
+        "SP": ("Surfactant +Polymer (SP) Recovery", "Surfactant + Polymer (SP) Recovery"),
+        "ASP": ("Alkali +Surfactant +Polymer (ASP) Recovery", "ASP Recovery"),
         "Sor Reduction AS": ("% Sor Reduction (AS)",),
-        "Sor Reduction ASP": ("% Sor Reduction (AS,P)",),
+        "Sor Reduction ASP": ("% Sor Reduction (AS,P)", "% Sor Reduction (ASP)"),
         "Sor Reduction SP": ("% Sor Reduction (SP)",),
     }
     data: dict[str, Any] = {}
-    for target, aliases in mapping.items():
-        column = _first_column(frame, aliases)
-        data[target] = pd.to_numeric(frame[column], errors="coerce") if column and target != "Core sample" else (
-            frame[column].astype(str).str.strip() if column else "Unknown"
-        )
+    for target, names in aliases.items():
+        column = _first_column(frame, names)
+        data[target] = _text(frame, column) if target == "Core sample" else _numeric(frame, column)
     out = pd.DataFrame(data)
-    out["Year"] = pd.to_numeric(out["Year"], errors="coerce")
-    return out.dropna(subset=["Core sample"])
+    return out.dropna(subset=["Core sample"]).reset_index(drop=True)
+
+
+def _normalise_sor_sheet(frame: pd.DataFrame) -> pd.DataFrame:
+    """Support both long and wide Sor_F workbook layouts."""
+    frame = _clean_columns(frame)
+    core = _first_column(frame, ("Core sample", "Core Flood Sample", "Core Floof Sample", "Sample"))
+    year = _first_column(frame, ("Year",))
+    method = _first_column(frame, ("Method", "Recovery Type", "Sor Reduction Method", "Process", "Type"))
+    value = _first_column(frame, ("Sor Reduction", "Sor Reduction (%)", "% Sor Reduction", "Sor reduction from core flood"))
+
+    if core is not None and method is not None and value is not None:
+        return pd.DataFrame(
+            {
+                "Core sample": _text(frame, core),
+                "Year": _numeric(frame, year),
+                "Method": _text(frame, method),
+                "Sor Reduction (%)": _numeric(frame, value),
+            }
+        ).dropna(subset=["Sor Reduction (%)"]).reset_index(drop=True)
+
+    sor_columns = []
+    for column in frame.columns:
+        key = _column_key(column)
+        if "sor reduction" in key and "core" not in key:
+            sor_columns.append(column)
+    if core is None or not sor_columns:
+        return _empty()
+
+    records: list[pd.DataFrame] = []
+    for column in sor_columns:
+        part = pd.DataFrame(
+            {
+                "Core sample": _text(frame, core),
+                "Year": _numeric(frame, year),
+                "Method": str(column).strip(),
+                "Sor Reduction (%)": _numeric(frame, column),
+            }
+        )
+        records.append(part.dropna(subset=["Sor Reduction (%)"]))
+    return pd.concat(records, ignore_index=True) if records else _empty()
 
 
 def _derive_sor_from_coreflood(coreflood: pd.DataFrame) -> pd.DataFrame:
-    columns = ["Sor Reduction AS", "Sor Reduction ASP", "Sor Reduction SP"]
-    available = [column for column in columns if column in coreflood.columns]
-    parts = []
-    for column in available:
-        label = column.replace("Sor Reduction ", "").strip()
+    parts: list[pd.DataFrame] = []
+    for column in ("Sor Reduction AS", "Sor Reduction ASP", "Sor Reduction SP"):
+        if column not in coreflood.columns:
+            continue
+        method = column.replace("Sor Reduction ", "").strip()
         part = coreflood[["Core sample", "Year", column]].copy()
         part = part.rename(columns={column: "Sor Reduction (%)"})
-        part["Method"] = label
+        part["Method"] = method
         parts.append(part)
     if not parts:
         return _empty()
-    return pd.concat(parts, ignore_index=True).dropna(subset=["Sor Reduction (%)"])
+    return pd.concat(parts, ignore_index=True).dropna(subset=["Sor Reduction (%)"]).reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False)
 def load_ceor_evidence() -> dict[str, Any]:
-    """Load the CEOR evidence panels from the repository workbook."""
-    workbook_path = settings.project_root / WORKBOOK_NAME
+    project_root = _safe_project_root()
+    workbook_path = project_root / WORKBOOK_NAME
     if not workbook_path.is_file():
         raise FileNotFoundError(f"Repository CEOR workbook not found: {workbook_path}")
 
@@ -191,7 +252,7 @@ def load_ceor_evidence() -> dict[str, Any]:
     source_map: dict[str, str] = {}
     missing: list[str] = []
 
-    for requested, aliases in SHEET_ALIASES.items():
+    for requested in SHEET_ALIASES:
         source = _resolve_sheet(sheets, requested)
         if source is None:
             missing.append(requested)
@@ -208,43 +269,24 @@ def load_ceor_evidence() -> dict[str, Any]:
     adsorption = _normalise_adsorption(raw.get("adsorption", _empty()))
     coreflood = _normalise_coreflood(raw.get("Coreflood", _empty()))
 
-    sor = _empty()
-    sor_requested_source = source_map.get("Sor_F")
-    if sor_requested_source:
-        sor_raw = _clean_columns(raw["Sor_F"])
-        core = _first_column(sor_raw, ("Core sample", "Core Flood Sample"))
-        year = _first_column(sor_raw, ("Year",))
-        method = _first_column(sor_raw, ("Method", "Recovery Type", "Sor Reduction Method"))
-        value = _first_column(sor_raw, ("Sor Reduction", "Sor Reduction (%)"))
-        if core and method and value:
-            sor = pd.DataFrame({
-                "Core sample": sor_raw[core].astype(str).str.strip(),
-                "Year": pd.to_numeric(sor_raw[year], errors="coerce") if year else pd.NA,
-                "Method": sor_raw[method].astype(str).str.strip(),
-                "Sor Reduction (%)": pd.to_numeric(sor_raw[value], errors="coerce"),
-            }).dropna(subset=["Sor Reduction (%)"])
-
+    sor = _normalise_sor_sheet(raw.get("Sor_F", _empty()))
+    sor_source = source_map.get("Sor_F")
     if sor.empty:
         sor = _derive_sor_from_coreflood(coreflood)
+        sor_source = "derived from Coreflood"
 
-    metadata = {
+    metadata: dict[str, Any] = {
         "workbook": str(workbook_path),
         "workbook_name": workbook_path.name,
         "sheet_names": sheets,
         "source_map": source_map,
         "missing_requested_sheets": missing,
-        "sor_source": sor_requested_source or ("derived from Coreflood" if not sor.empty else None),
-        "adsorption_has_temperature": False,
-        "adsorption_has_polymer_type": False,
+        "sor_source": sor_source,
     }
 
-    thermal_source = source_map.get("Thermal")
-    if thermal_source:
-        thermal = _clean_columns(raw["Thermal"])
-        metadata["adsorption_context_years"] = sorted(pd.to_numeric(thermal[_first_column(thermal, ("Year",))], errors="coerce").dropna().unique().tolist()) if _first_column(thermal, ("Year",)) else []
-        metadata["adsorption_context_temperatures"] = sorted(pd.to_numeric(thermal[_first_column(thermal, ("Temperature",))], errors="coerce").dropna().unique().tolist()) if _first_column(thermal, ("Temperature",)) else []
-        polymer_col = _first_column(thermal, ("Polymer Type", "Polymer"))
-        metadata["adsorption_context_polymer_types"] = sorted(thermal[polymer_col].dropna().astype(str).str.strip().unique().tolist()) if polymer_col else []
+    metadata["adsorption_available_years"] = sorted(adsorption["Year"].dropna().astype(int).unique().tolist()) if not adsorption.empty else []
+    metadata["adsorption_available_temperatures"] = sorted(adsorption["Temperature"].dropna().unique().tolist()) if "Temperature" in adsorption else []
+    metadata["adsorption_available_polymer_types"] = sorted(adsorption["Polymer Type"].dropna().astype(str).unique().tolist(), key=str.casefold) if "Polymer Type" in adsorption else []
 
     return {
         "Vis_Shear": vis,
