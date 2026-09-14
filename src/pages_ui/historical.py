@@ -30,16 +30,20 @@ def _fmt_number(value: Any, decimals: int = 2) -> str:
         return "—"
 
 
+def _reference_for_record(row: Dict[str, Any]) -> str:
+    timestamp = str(row.get("timestamp") or "")
+    return f"EOR-{timestamp[:4] or 'RUN'}-{int(row['id']):06d}"
+
+
 def _render_register(records: list[Dict[str, Any]]) -> int | None:
     if not records:
         st.info("No screening report cards have been saved yet. Run EOR Screening or Hybrid Intelligence first.")
         return None
 
     df = pd.DataFrame(records)
-    df["Reference"] = df.apply(
-        lambda row: f"EOR-{str(row.get('timestamp', ''))[:4]}-{int(row['id']):06d}", axis=1
-    )
+    df["Reference"] = df.apply(_reference_for_record, axis=1)
     df["Timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M")
+    df["Formation"] = df["formation"].fillna("—")
     df["Mode"] = df["recommendation_mode"].fillna("—")
     df["Recommendation"] = df["recommended_technique"].fillna("—")
     df["Score"] = pd.to_numeric(df["recommendation_score"], errors="coerce").round(1)
@@ -49,15 +53,8 @@ def _render_register(records: list[Dict[str, Any]]) -> int | None:
     view.columns = ["Run ID", "Timestamp", "Formation", "Run Type", "Recommendation", "Status", "Score"]
     st.dataframe(view, use_container_width=True, hide_index=True)
 
-    options = {
-        row["Reference"]: int(row["id"])
-        for _, row in df.iterrows()
-    }
-    selected_label = st.selectbox(
-        "Open a report card",
-        list(options.keys()),
-        key="historical_selected_run",
-    )
+    options = {row["Reference"]: int(row["id"]) for _, row in df.iterrows()}
+    selected_label = st.selectbox("Open a report card", list(options.keys()), key="historical_selected_run")
     return options[selected_label]
 
 
@@ -80,13 +77,10 @@ def _render_input_snapshot(inputs: Dict[str, Any]) -> None:
     keys = [key for key in preferred_order if key in inputs]
     keys += [key for key in inputs if key not in keys]
 
-    rows = []
-    for key in keys:
-        value = inputs[key]
-        rows.append({
-            "Parameter": key.replace("_", " ").title(),
-            "Value": value if value not in (None, "") else "—",
-        })
+    rows = [
+        {"Parameter": key.replace("_", " ").title(), "Value": inputs[key] if inputs[key] not in (None, "") else "—"}
+        for key in keys
+    ]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
@@ -96,20 +90,16 @@ def _render_engineering(card: Dict[str, Any]) -> None:
         st.info("No engineering result records were stored for this run.")
         return
     frame = pd.DataFrame(rows)
-    if "details" in frame.columns:
-        details = frame["details"].map(_parse_json)
-        detail_rows = [item for item in details if isinstance(item, dict)]
-        if detail_rows:
-            frame = pd.DataFrame(detail_rows)
+    details = frame["details"].map(_parse_json) if "details" in frame.columns else pd.Series(dtype=object)
+    detail_rows = [item for item in details if isinstance(item, dict)]
+    if detail_rows:
+        frame = pd.DataFrame(detail_rows)
     wanted = [
         "EOR Technique", "Status", "Suitability", "Score (%)", "ΔRF_EOR (%)",
         "Final RF (%)", "EUR (MMstb)", "Cause of Fail/Pass",
     ]
     available = [column for column in wanted if column in frame.columns]
-    if available:
-        st.dataframe(frame[available], use_container_width=True, hide_index=True)
-    else:
-        st.dataframe(frame, use_container_width=True, hide_index=True)
+    st.dataframe(frame[available] if available else frame, use_container_width=True, hide_index=True)
 
 
 def _render_ml(card: Dict[str, Any]) -> None:
@@ -118,8 +108,7 @@ def _render_ml(card: Dict[str, Any]) -> None:
         st.info("No CatBoost result records were stored. This may be an Engineering-only run.")
         return
     frame = pd.DataFrame(rows)
-    frame["Probability"] = pd.to_numeric(frame["probability"], errors="coerce").fillna(0.0)
-    frame["Probability"] = (frame["Probability"] * 100).round(2).astype(str) + "%"
+    frame["Probability"] = pd.to_numeric(frame["probability"], errors="coerce").fillna(0.0).map(lambda value: f"{value:.2%}")
     frame["Top Prediction"] = frame["is_top_prediction"].map(lambda value: "Yes" if bool(value) else "No")
     st.dataframe(
         frame[["technique", "Probability", "Top Prediction", "confidence"]].rename(
@@ -205,15 +194,6 @@ def _render_report_card(card: Dict[str, Any]) -> None:
         )
 
 
-def _numeric_input_map(card: Dict[str, Any]) -> Dict[str, float]:
-    inputs = _parse_json(card["run"].get("input_payload")) or {}
-    output: Dict[str, float] = {}
-    for key, value in inputs.items():
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            output[key] = float(value)
-    return output
-
-
 def _render_compare(left: Dict[str, Any], right: Dict[str, Any]) -> None:
     st.markdown("### Compare Screening Runs")
     left_ref, right_ref = left["reference"], right["reference"]
@@ -226,11 +206,8 @@ def _render_compare(left: Dict[str, Any], right: Dict[str, Any]) -> None:
     for key in keys:
         lv, rv = left_inputs.get(key), right_inputs.get(key)
         delta = None
-        try:
-            if isinstance(lv, (int, float)) and isinstance(rv, (int, float)):
-                delta = float(rv) - float(lv)
-        except (TypeError, ValueError):
-            delta = None
+        if isinstance(lv, (int, float)) and isinstance(rv, (int, float)):
+            delta = float(rv) - float(lv)
         rows.append({
             "Parameter": key.replace("_", " ").title(),
             left_ref: lv if lv not in (None, "") else "—",
@@ -239,19 +216,22 @@ def _render_compare(left: Dict[str, Any], right: Dict[str, Any]) -> None:
         })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
-    result_cols = st.columns(3)
-    for col, title, card in [
-        (result_cols[0], "Engineering Recommendation", left),
-        (result_cols[1], "CatBoost Signal", right),
-        (result_cols[2], "Hybrid Recommendation", right),
-    ]:
-        with col:
-            run = card["run"]
-            st.metric(title, run.get("recommended_technique") or "—")
-            st.caption(
-                f"Mode: {run.get('recommendation_mode') or '—'} · "
-                f"Score: {_fmt_number(run.get('recommendation_score'), 1)}"
-            )
+    left_run, right_run = left["run"], right["run"]
+    summary = pd.DataFrame([
+        {
+            "Run": left_ref,
+            "Type": left_run.get("recommendation_mode") or "—",
+            "Recommendation": left_run.get("recommended_technique") or "—",
+            "Score": left_run.get("recommendation_score"),
+        },
+        {
+            "Run": right_ref,
+            "Type": right_run.get("recommendation_mode") or "—",
+            "Recommendation": right_run.get("recommended_technique") or "—",
+            "Score": right_run.get("recommendation_score"),
+        },
+    ])
+    st.dataframe(summary, use_container_width=True, hide_index=True)
 
 
 def render() -> None:
@@ -271,9 +251,7 @@ def render() -> None:
         ("Audit Source", "SQLite", "Persistent local decision history"),
     ])
 
-    register_tab, card_tab, compare_tab = st.tabs([
-        "Run Register", "Screening Report Card", "Compare Runs",
-    ])
+    register_tab, card_tab, compare_tab = st.tabs(["Run Register", "Screening Report Card", "Compare Runs"])
 
     with register_tab:
         section_title(
@@ -306,10 +284,7 @@ def render() -> None:
         if len(records) < 2:
             st.info("At least two saved screening runs are required for comparison.")
             return
-        options = {
-            f"EOR-{str(row.get('timestamp', ''))[:4]}-{int(row['id']):06d}": int(row["id"])
-            for row in records
-        }
+        options = {_reference_for_record(row): int(row["id"]) for row in records}
         labels = list(options.keys())
         left_label = st.selectbox("Left run", labels, index=0, key="historical_compare_left")
         right_label = st.selectbox("Right run", labels, index=1 if len(labels) > 1 else 0, key="historical_compare_right")
