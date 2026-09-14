@@ -35,15 +35,15 @@ def render(services: dict) -> None:
         with left:
             section_title("Opportunity Distribution", "Use the distribution to understand the breadth of recovery-gap opportunity before field prioritisation.")
             if not rf.dropna().empty:
-                chart_df = pd.DataFrame({"RF Gap": rf.dropna().sort_values().reset_index(drop=True)})
+                chart_df = pd.DataFrame({"Reservoir Rank": range(1, len(rf.dropna()) + 1), "RF Gap": rf.dropna().sort_values().reset_index(drop=True)})
                 try:
                     import altair as alt
-                    chart = alt.Chart(chart_df).mark_line().encode(x=alt.X("index:Q", title="Reservoir rank"), y=alt.Y("RF Gap:Q", title="RF Gap")).interactive()
+                    chart = alt.Chart(chart_df).mark_line().encode(x=alt.X("Reservoir Rank:Q", title="Reservoir rank"), y=alt.Y("RF Gap:Q", title="RF Gap"), tooltip=[alt.Tooltip("Reservoir Rank:Q"), alt.Tooltip("RF Gap:Q", format=",.1f")]).interactive()
                     st.altair_chart(chart, use_container_width=True)
                 except Exception:
-                    st.line_chart(chart_df)
+                    st.line_chart(chart_df.set_index("Reservoir Rank"))
         with right:
-            section_title("Field Prioritisation", "Click the chart legend/marks to inspect portfolio concentration interactively.")
+            section_title("Field Prioritisation", "Use the ranked field view to identify where the signal is concentrated.")
             if {"Field", "RF Gap"}.issubset(df.columns):
                 ranked = df[["Field", "RF Gap"]].copy()
                 ranked["RF Gap"] = pd.to_numeric(ranked["RF Gap"], errors="coerce")
