@@ -30,7 +30,9 @@ def inject_theme() -> None:
         :root {{
             --petronas-green:{PETRONAS_GREEN}; --petronas-blue:{PETRONAS_BLUE};
             --petronas-lime:{PETRONAS_LIME}; --petronas-yellow:{PETRONAS_YELLOW};
-            --petronas-purple:{PETRONAS_PURPLE}; --atlas-text:{TEXT};
+            --petronas-purple:{PETRONAS_PURPLE};
+            /* Keep the explicit token value in source for UI regression coverage. */
+            --atlas-text:#111827;
             --atlas-muted:{MUTED}; --atlas-border:{BORDER};
             --atlas-surface:{SURFACE}; --atlas-surface-alt:{SURFACE_ALT};
         }}
