@@ -51,6 +51,17 @@ def _json_safe(value: Any) -> Any:
     return str(value)
 
 
+def _as_datetime(value: Any) -> Optional[datetime]:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError:
+            return None
+    return None
+
+
 def ensure_history_schema() -> None:
     """Create the small hybrid child table used by the report-card history."""
     session = DatabaseManager.get_session()
@@ -63,8 +74,8 @@ def ensure_history_schema() -> None:
 
 def run_reference(run_id: int, timestamp: Optional[datetime] = None) -> str:
     """Return a stable human-facing report-card reference."""
-    year = (timestamp or datetime.utcnow()).year
-    return f"EOR-{year}-{int(run_id):06d}"
+    dt = _as_datetime(timestamp) or datetime.utcnow()
+    return f"EOR-{dt.year}-{int(run_id):06d}"
 
 
 def _core_inputs(inputs: Dict[str, Any]) -> Dict[str, Any]:
