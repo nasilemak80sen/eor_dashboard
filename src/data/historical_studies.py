@@ -1,9 +1,10 @@
 """Historical EOR study data access for the Historical EOR workspace.
 
 The production dashboard reference page is driven by a historical workbook sheet
-named ``Screening_Parameters``. This module keeps the workbook contract flexible:
-it searches known workbook locations and resolves common column-name variants for
-field, reservoir, EOR study/method and incremental EUR.
+named ``Screening_Parameters``. The source workbook stores the primary successful
+EOR method in ``MOST SUITABLE PROCESS`` and additional passing alternatives in
+``OTHERS PASS METHOD``. This module normalises those source fields without
+artificially duplicating Incremental EUR across alternative methods.
 """
 
 from __future__ import annotations
@@ -24,6 +25,12 @@ _RESERVOIR_ALIASES = {"reservoir", "reservoir name", "reservoir_name", "res"}
 _STUDY_ALIASES = {
     "eor study", "eor studies", "eor method", "eor methods", "eor type",
     "types of eor", "study type", "eor study / method", "eor_study",
+    "most suitable process", "most suitable eor process", "recommended eor process",
+    "successful eor method", "successful eor process",
+}
+_OTHER_STUDY_ALIASES = {
+    "others pass method", "other pass method", "other passing method",
+    "others passing method", "others pass methods", "other eor methods",
 }
 _EUR_ALIASES = {
     "incremental eur", "incremental eur mmstb", "incremental eur (mmstb)",
@@ -89,29 +96,61 @@ def _status_is_success(value: Any) -> bool:
     return text in {"pass", "passed", "success", "successful", "yes", "eligible", "candidate"}
 
 
+def _clean_method(value: Any) -> Optional[str]:
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "n/a", "na", "-"}:
+        return None
+    return text
+
+
+def _method_tokens(value: Any) -> list[str]:
+    """Split alternative methods while preserving method names such as ``G/H``."""
+    text = _clean_method(value)
+    if not text:
+        return []
+    parts = [part.strip() for part in str(text).replace("\n", ";").split(";")]
+    expanded: list[str] = []
+    for part in parts:
+        for token in part.split(","):
+            cleaned = token.strip()
+            if cleaned:
+                expanded.append(cleaned)
+    return list(dict.fromkeys(expanded))
+
+
 def _prepare_frame(frame: pd.DataFrame, source_path: Path) -> tuple[pd.DataFrame, Dict[str, Any]]:
     frame = frame.copy().dropna(how="all")
     frame.columns = [str(column).strip() for column in frame.columns]
+    columns = list(frame.columns)
 
-    field_col = _find_column(list(frame.columns), _FIELD_ALIASES)
-    reservoir_col = _find_column(list(frame.columns), _RESERVOIR_ALIASES)
-    study_col = _find_column(list(frame.columns), _STUDY_ALIASES)
-    eur_col = _find_column(list(frame.columns), _EUR_ALIASES)
-    status_col = _find_column(list(frame.columns), _STATUS_ALIASES)
+    field_col = _find_column(columns, _FIELD_ALIASES)
+    reservoir_col = _find_column(columns, _RESERVOIR_ALIASES)
+    study_col = _find_column(columns, _STUDY_ALIASES)
+    other_study_col = _find_column(columns, _OTHER_STUDY_ALIASES)
+    eur_col = _find_column(columns, _EUR_ALIASES)
+    status_col = _find_column(columns, _STATUS_ALIASES)
 
-    required = {"Field": field_col, "Reservoir": reservoir_col, "EOR Study": study_col, "Incremental EUR": eur_col}
+    required = {
+        "Field": field_col,
+        "Reservoir": reservoir_col,
+        "EOR Study / Most Suitable Process": study_col,
+        "Incremental EUR": eur_col,
+    }
     missing = [label for label, column in required.items() if column is None]
     if missing:
         raise ValueError(
             f"Historical workbook '{source_path.name}' contains '{SHEET_NAME}' but "
             f"could not resolve required columns: {', '.join(missing)}. "
-            f"Available columns: {list(frame.columns)}"
+            f"Available columns: {columns}"
         )
 
     output = pd.DataFrame({
         "Field": frame[field_col].astype(str).str.strip(),
         "Reservoir": frame[reservoir_col].astype(str).str.strip(),
-        "EOR Study": frame[study_col].astype(str).str.strip(),
+        "EOR Study": frame[study_col].map(_clean_method),
+        "Other Passing Methods": frame[other_study_col].map(_clean_method) if other_study_col else None,
         "Incremental EUR (MMstb)": pd.to_numeric(frame[eur_col], errors="coerce"),
     })
 
@@ -119,11 +158,13 @@ def _prepare_frame(frame: pd.DataFrame, source_path: Path) -> tuple[pd.DataFrame
     output = output.replace({"nan": None, "None": None, "": None})
     output = output.dropna(subset=["Field", "EOR Study", "Incremental EUR (MMstb)"])
     output = output[output["Field"].str.strip().ne("")]
-    output = output[output["EOR Study"].str.strip().ne("")]
+    output = output[output["EOR Study"].map(_clean_method).notna()]
 
     if status_col:
         output = output[output["Status"].map(_status_is_success)]
 
+    output["EOR Study"] = output["EOR Study"].map(_clean_method)
+    output["Other Passing Methods"] = output["Other Passing Methods"].map(_clean_method)
     output["Incremental EUR (MMstb)"] = output["Incremental EUR (MMstb)"].astype(float)
     output = output.drop_duplicates().reset_index(drop=True)
 
@@ -133,6 +174,8 @@ def _prepare_frame(frame: pd.DataFrame, source_path: Path) -> tuple[pd.DataFrame
         "sheet_name": SHEET_NAME,
         "rows": int(len(output)),
         "status_column": status_col,
+        "primary_method_column": study_col,
+        "alternative_method_column": other_study_col,
     }
     return output, metadata
 
@@ -166,12 +209,17 @@ def merge_manual_studies(frame: pd.DataFrame, manual_rows: list[dict[str, Any]])
     if not manual_rows:
         return frame.copy()
     manual = pd.DataFrame(manual_rows)
-    expected = ["Field", "Reservoir", "EOR Study", "Incremental EUR (MMstb)", "Status"]
+    expected = [
+        "Field", "Reservoir", "EOR Study", "Other Passing Methods",
+        "Incremental EUR (MMstb)", "Status",
+    ]
     for column in expected:
         if column not in manual.columns:
             manual[column] = "Historical study" if column == "Status" else None
     manual = manual[expected].copy()
-    manual["Incremental EUR (MMstb)"] = pd.to_numeric(manual["Incremental EUR (MMstb)"], errors="coerce")
+    manual["Incremental EUR (MMstb)"] = pd.to_numeric(
+        manual["Incremental EUR (MMstb)"], errors="coerce"
+    )
     manual = manual.dropna(subset=["Field", "EOR Study", "Incremental EUR (MMstb)"])
     merged = pd.concat([frame, manual], ignore_index=True)
     return merged.drop_duplicates().reset_index(drop=True)
