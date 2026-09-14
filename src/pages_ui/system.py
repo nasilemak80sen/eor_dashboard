@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from ui.components import kpi_cards, section_title, status_grid, insight_cards
@@ -67,23 +68,14 @@ def render(services: dict) -> None:
 
     with workflow_tab:
         section_title("Decision Workflow", "This is the business-logic contract implemented by the production dashboard.")
-        workflow = [
-            ("1", "Candidate Discovery", "Filter and compare reservoir records; no EOR recommendation is executed."),
-            ("2", "Excel Gate", "Run deterministic EOR criteria only after the user submits the completed reservoir form."),
-            ("3", "CatBoost", "Generate model probabilities only during an explicit Hybrid Intelligence submission."),
-            ("4", "Decision Fusion", "Combine engineering and model signals, while hard engineering failures remain excluded."),
-            ("5", "Decision Review", "Inspect recommendation, ranking, engineering status and model context."),
-        ]
-        st.dataframe(
-            workflow,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "0": "Stage",
-                "1": "Business Layer",
-                "2": "Behaviour",
-            },
-        )
+        workflow = pd.DataFrame([
+            {"Stage": "1", "Business Layer": "Candidate Discovery", "Behaviour": "Filter and compare reservoir records; no EOR recommendation is executed."},
+            {"Stage": "2", "Business Layer": "Excel Gate", "Behaviour": "Run deterministic EOR criteria only after the user submits the completed reservoir form."},
+            {"Stage": "3", "Business Layer": "CatBoost", "Behaviour": "Generate model probabilities only during an explicit Hybrid Intelligence submission."},
+            {"Stage": "4", "Business Layer": "Decision Fusion", "Behaviour": "Combine engineering and model signals, while hard engineering failures remain excluded."},
+            {"Stage": "5", "Business Layer": "Decision Review", "Behaviour": "Inspect recommendation, ranking, engineering status and model context."},
+        ])
+        st.dataframe(workflow, use_container_width=True, hide_index=True)
 
     with runtime_tab:
         section_title("Runtime Diagnostics", "Compact technical details for troubleshooting, not the primary decision workflow.")
