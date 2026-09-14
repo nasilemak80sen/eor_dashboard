@@ -36,3 +36,16 @@ def test_application_services_are_cached_across_reruns():
     source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
     assert "@st.cache_resource(show_spinner=False)" in source
     assert "def _safe_services()" in source
+
+
+def test_top_navigation_uses_buttons_not_radio():
+    navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
+    shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
+    assert "st.button(" in navigation
+    assert "st.radio(" not in navigation
+    assert "render_top_nav()" in shell
+
+
+def test_sidebar_starts_collapsed():
+    settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
+    assert '"initial_sidebar_state": "collapsed"' in settings
