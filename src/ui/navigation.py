@@ -1,4 +1,4 @@
-"""Sidebar navigation for the EOR Atlas application shell."""
+"""Primary top navigation and secondary sidebar status for EOR Atlas."""
 
 from __future__ import annotations
 
@@ -12,24 +12,53 @@ class NavItem:
     key: str
     label: str
     icon: str
-    section: str
 
 
 NAV_ITEMS = (
-    NavItem("overview", "Executive Overview", "🏠", "Overview"),
-    NavItem("candidates", "EOR Candidates", "🎯", "Discovery"),
-    NavItem("screening", "EOR Screening", "🔍", "Discovery"),
-    NavItem("intelligence", "Hybrid Intelligence", "🧠", "Decision"),
-    NavItem("insights", "EOR Insights", "📊", "Decision"),
-    NavItem("historical", "Historical EOR", "📚", "Knowledge"),
-    NavItem("challenges", "Challenges & Lessons", "⚠️", "Knowledge"),
-    NavItem("ceor", "CEOR Lab", "🧪", "Technology"),
-    NavItem("system", "System & Model", "⚙", "System"),
+    NavItem("overview", "Overview", "🏠"),
+    NavItem("candidates", "Candidates", "🎯"),
+    NavItem("screening", "Screening", "🔍"),
+    NavItem("intelligence", "Hybrid", "🧠"),
+    NavItem("insights", "Insights", "📊"),
+    NavItem("historical", "Historical", "📚"),
+    NavItem("challenges", "Challenges", "⚠️"),
+    NavItem("ceor", "CEOR Lab", "🧪"),
+    NavItem("system", "System", "⚙"),
 )
 
 
-def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
-    """Render global navigation only; page-local input reset lives on each form page."""
+def render_top_nav() -> str:
+    """Render persistent primary navigation above every page."""
+    current = st.session_state.get("atlas_page", "overview")
+    labels = [f"{item.icon}  {item.label}" for item in NAV_ITEMS]
+    lookup = {label: item.key for label, item in zip(labels, NAV_ITEMS)}
+    current_label = next(
+        (label for label, item in zip(labels, NAV_ITEMS) if item.key == current),
+        labels[0],
+    )
+
+    st.markdown(
+        '<div class="atlas-top-nav-shell"><div class="atlas-top-nav-kicker">EOR ATLAS</div>',
+        unsafe_allow_html=True,
+    )
+    selected_label = st.radio(
+        "Primary navigation",
+        labels,
+        index=labels.index(current_label),
+        horizontal=True,
+        key="atlas_top_navigation",
+        label_visibility="collapsed",
+    )
+    selected = lookup[selected_label]
+    if selected != current:
+        st.session_state["atlas_page"] = selected
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    return selected
+
+
+def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
+    """Keep the sidebar as a secondary system/status panel only."""
     state = system_state or {}
 
     st.sidebar.markdown(
@@ -41,40 +70,11 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
                 <div class="atlas-brand-subtitle">Reservoir Engineering Decision Support</div>
             </div>
         </div>
+        <div class="nav-section-label">SYSTEM STATUS</div>
         """,
         unsafe_allow_html=True,
     )
 
-    current = st.session_state.get("atlas_page", "overview")
-    selected = current
-
-    sections: list[str] = []
-    for item in NAV_ITEMS:
-        if item.section not in sections:
-            sections.append(item.section)
-
-    for section in sections:
-        st.sidebar.markdown(
-            f'<div class="nav-section-label">{section}</div>',
-            unsafe_allow_html=True,
-        )
-        for item in (x for x in NAV_ITEMS if x.section == section):
-            active = item.key == current
-            label = f"{'▌ ' if active else ''}{item.icon}  {item.label}"
-            if st.sidebar.button(
-                label,
-                key=f"nav_{item.key}",
-                use_container_width=True,
-                type="primary" if active else "secondary",
-            ):
-                selected = item.key
-                st.session_state["atlas_page"] = item.key
-
-    st.sidebar.markdown('<div style="height:.8rem"></div>', unsafe_allow_html=True)
-    st.sidebar.markdown(
-        '<div class="nav-section-label">System Status</div>',
-        unsafe_allow_html=True,
-    )
     for label, ready in (
         ("Excel Gate", bool(state.get("workbook"))),
         ("CatBoost", bool(state.get("model"))),
@@ -87,7 +87,9 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> str:
             unsafe_allow_html=True,
         )
 
-    st.sidebar.markdown('<div style="height:.35rem"></div>', unsafe_allow_html=True)
-    st.sidebar.caption("EOR Atlas • ScreenTool v3 • Hybrid decision stack")
+    st.sidebar.caption("Secondary panel • system status and diagnostics")
 
-    return selected
+
+def render_sidebar_status(*, system_state: dict[str, bool] | None = None) -> None:
+    """Compatibility alias for legacy callers."""
+    render_sidebar(system_state=system_state)
