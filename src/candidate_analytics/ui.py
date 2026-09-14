@@ -85,6 +85,7 @@ def _safe_metric_value(value: Any, suffix: str = "") -> str:
     except (TypeError, ValueError):
         return str(value)
 
+
 def _render_summary_cards(
     analysis: CandidateAnalysis,
     dataframe: pd.DataFrame,
@@ -171,6 +172,7 @@ def _render_summary_cards(
             unsafe_allow_html=True,
         )
 
+
 def _render_scatter(
     analysis: CandidateAnalysis,
     dataframe: pd.DataFrame,
@@ -241,40 +243,155 @@ def _render_scatter(
 
 
 def _render_candidate_map(dataframe: pd.DataFrame) -> None:
+    """Render a reactive field-oriented 3D candidate location map.
+
+    Spatial axes are always longitude (X) and latitude (Y). The categorical
+    Z dimension is represented by the Field grouping: each field is rendered
+    as a 3D column at its reservoir locations, with column height reflecting
+    the number of visible reservoirs in that field. This keeps the map
+    conceptually aligned with the scatter plot's Field grouping.
+    """
     st.subheader("Candidate Location Map")
+    st.caption(
+        "X = Longitude · Y = Latitude · Z = Field grouping. "
+        "Map updates automatically with the candidate filters above. "
+        "Hover a field column to inspect its reservoir portfolio."
+    )
 
     if pdk is None:
         st.info("PyDeck is not available. The analytical table remains fully available below.")
         return
 
-    map_df = dataframe.dropna(subset=["LATITUDE", "LONGITUDE"]).copy()
+    required = {"LATITUDE", "LONGITUDE", "Field"}
+    missing = sorted(required.difference(dataframe.columns))
+    if missing:
+        st.warning(f"Candidate location mapping is missing required columns: {', '.join(missing)}")
+        return
+
+    map_df = dataframe.dropna(subset=["LATITUDE", "LONGITUDE", "Field"]).copy()
     if map_df.empty:
         st.info("No latitude/longitude values are available for the current filter selection.")
+        return
+
+    map_df["Field"] = map_df["Field"].astype(str).str.strip()
+    map_df = map_df[map_df["Field"] != ""].copy()
+    if map_df.empty:
+        st.info("No named fields are available for the current map selection.")
         return
 
     map_df["CR_Potential"] = pd.to_numeric(
         map_df.get("CR volume potential = RF Gap x STOIIP  (MMSTB)"),
         errors="coerce",
     ).fillna(0.0)
-    map_df["Map_Radius"] = map_df["CR_Potential"].clip(lower=0.0)
-    if float(map_df["Map_Radius"].max()) == 0.0:
-        map_df["Map_Radius"] = 1.0
+    map_df["STOIIP"] = pd.to_numeric(
+        map_df.get("STOIIP_ARPR 1.1.2025"),
+        errors="coerce",
+    ).fillna(0.0)
+
+    field_summary = (
+        map_df.groupby("Field", dropna=False)
+        .agg(
+            Reservoirs=("Reservoir", "nunique"),
+            Records=("Field", "size"),
+            STOIIP=("STOIIP", "sum"),
+            CR_Potential=("CR_Potential", "sum"),
+            Latitude=("LATITUDE", "mean"),
+            Longitude=("LONGITUDE", "mean"),
+        )
+        .reset_index()
+        .sort_values(["Reservoirs", "Field"], ascending=[False, True])
+        .reset_index(drop=True)
+    )
+
+    focus_options = ["All fields"] + field_summary["Field"].tolist()
+    control_col, info_col = st.columns([1.2, 2.8])
+    with control_col:
+        focus_field = st.selectbox(
+            "Map focus",
+            focus_options,
+            key="candidate_map_focus",
+            help="Focus the 3D map on one field or show the full filtered portfolio.",
+        )
+
+    visible = map_df if focus_field == "All fields" else map_df.loc[map_df["Field"] == focus_field].copy()
+    visible_fields = field_summary if focus_field == "All fields" else field_summary.loc[field_summary["Field"] == focus_field].copy()
+
+    with info_col:
+        st.markdown(
+            f"**{len(visible):,} reservoirs** across **{visible['Field'].nunique():,} field(s)** with coordinates in the current view."
+        )
+
+    if visible.empty:
+        st.info("The selected field has no coordinates in the current filter selection.")
+        return
+
+    # Stable, field-level colours keep the map and scatter grouping visually coherent.
+    palette = [
+        [0, 161, 156, 220],
+        [32, 65, 154, 220],
+        [191, 215, 48, 230],
+        [253, 185, 36, 230],
+        [118, 63, 152, 220],
+        [14, 116, 144, 220],
+        [33, 150, 83, 220],
+        [214, 93, 14, 220],
+        [91, 33, 182, 220],
+        [0, 120, 140, 220],
+    ]
+    field_order = {field: index for index, field in enumerate(field_summary["Field"].tolist())}
+    visible["Field_Index"] = visible["Field"].map(field_order).fillna(0).astype(int)
+    visible["Field_Color"] = visible["Field_Index"].map(lambda index: palette[index % len(palette)])
+
+    visible = visible.merge(
+        visible_fields[["Field", "Reservoirs"]],
+        on="Field",
+        how="left",
+        suffixes=("", "_Field"),
+    )
+    visible["Z_Elevation"] = visible["Reservoirs"].fillna(1).clip(lower=1).astype(float) * 18000.0
 
     tooltip = {
         "html": (
             "<b>{Field}</b><br/>"
             "Reservoir: {Reservoir}<br/>"
-            "Temp: {Temp (deg C)} °C<br/>"
+            "Field reservoirs: {Reservoirs}<br/>"
+            "Temperature: {Temp (deg C)} °C<br/>"
             "Oil API: {Oil API}<br/>"
             "Permeability: {Avg Permeability (mD)} mD<br/>"
             "STOIIP: {STOIIP_ARPR 1.1.2025} MMSTB<br/>"
             "CR Potential: {CR_Potential} MMSTB"
         ),
-        "style": {"backgroundColor": "steelblue", "color": "white"},
+        "style": {"backgroundColor": "#182230", "color": "white"},
     }
 
-    center_lat = float(map_df["LATITUDE"].mean())
-    center_lon = float(map_df["LONGITUDE"].mean())
+    center_lat = float(visible["LATITUDE"].mean())
+    center_lon = float(visible["LONGITUDE"].mean())
+
+    layers = [
+        pdk.Layer(
+            "ColumnLayer",
+            data=visible,
+            get_position="[LONGITUDE, LATITUDE]",
+            get_elevation="Z_Elevation",
+            elevation_scale=1,
+            radius=2200,
+            get_fill_color="Field_Color",
+            pickable=True,
+            auto_highlight=True,
+            material=True,
+            coverage=0.85,
+        ),
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=visible,
+            get_position="[LONGITUDE, LATITUDE]",
+            get_fill_color=[255, 255, 255, 235],
+            get_radius=650,
+            radius_min_pixels=3,
+            radius_max_pixels=9,
+            pickable=True,
+        ),
+    ]
 
     st.pydeck_chart(
         pdk.Deck(
@@ -282,25 +399,40 @@ def _render_candidate_map(dataframe: pd.DataFrame) -> None:
             initial_view_state=pdk.ViewState(
                 latitude=center_lat,
                 longitude=center_lon,
-                zoom=4.2,
-                pitch=20,
+                zoom=4.2 if len(visible_fields) > 1 else 5.2,
+                pitch=48,
+                bearing=0,
             ),
-            layers=[
-                pdk.Layer(
-                    "ScatterplotLayer",
-                    data=map_df,
-                    get_position="[LONGITUDE, LATITUDE]",
-                    get_fill_color="[255, 120, 60, 210]",
-                    get_radius="Map_Radius * 1000",
-                    radius_min_pixels=5,
-                    radius_max_pixels=24,
-                    pickable=True,
-                )
-            ],
             tooltip=tooltip,
+            layers=layers,
         ),
         use_container_width=True,
+        height=620,
     )
+
+    summary_display = visible_fields[["Field", "Reservoirs", "STOIIP", "CR_Potential"]].copy()
+    summary_display.columns = ["Field", "Reservoirs", "STOIIP (MMSTB)", "CR Potential (MMSTB)"]
+    summary_display["STOIIP (MMSTB)"] = summary_display["STOIIP (MMSTB)"].round(1)
+    summary_display["CR Potential (MMSTB)"] = summary_display["CR Potential (MMSTB)"].round(1)
+    summary_display = summary_display.sort_values("Reservoirs", ascending=False)
+
+    table_col, note_col = st.columns([2.4, 1])
+    with table_col:
+        st.dataframe(
+            summary_display,
+            use_container_width=True,
+            hide_index=True,
+            height=min(360, 72 + 42 * len(summary_display)),
+        )
+    with note_col:
+        st.markdown(
+            "**How to read the map**\n\n"
+            "**X** — longitude\n\n"
+            "**Y** — latitude\n\n"
+            "**Z / Field** — each field is represented by its own column and colour. Column height scales with the number of visible reservoirs in that field.\n\n"
+            "**Dot** — individual reservoir coordinate.\n\n"
+            "Use the map focus selector to isolate one field."
+        )
 
 
 def _render_detail_panel(dataframe: pd.DataFrame) -> None:
@@ -461,50 +593,53 @@ def render_field_reservoir_parameters_tab(
         return
 
     st.divider()
-    st.subheader("Graph Properties")
+    graph_tab, location_tab = st.tabs(["Relationship Explorer", "Candidate Location"])
 
-    controls = st.columns(3)
-    axis_options = analysis.axis_options()
+    with graph_tab:
+        st.subheader("Graph Properties")
+        controls = st.columns(3)
+        axis_options = analysis.axis_options()
 
-    default_x = "Temp (deg C)" if "Temp (deg C)" in axis_options else axis_options[0]
-    default_y = (
-        "CR volume potential = RF Gap x STOIIP  (MMSTB)"
-        if "CR volume potential = RF Gap x STOIIP  (MMSTB)" in axis_options
-        else axis_options[min(1, len(axis_options) - 1)]
-    )
-
-    with controls[0]:
-        x_column = st.selectbox(
-            "X-Axis Parameter",
-            axis_options,
-            index=axis_options.index(default_x),
-            format_func=analysis.axis_label,
-            key="candidate_x_axis",
-        )
-    with controls[1]:
-        y_column = st.selectbox(
-            "Y-Axis Parameter",
-            axis_options,
-            index=axis_options.index(default_y),
-            format_func=analysis.axis_label,
-            key="candidate_y_axis",
-        )
-    with controls[2]:
-        group_by = st.selectbox(
-            "Z Axis (Categorical)",
-            list(GROUP_COLUMNS.keys()),
-            index=0,
-            key="candidate_group_by",
+        default_x = "Temp (deg C)" if "Temp (deg C)" in axis_options else axis_options[0]
+        default_y = (
+            "CR volume potential = RF Gap x STOIIP  (MMSTB)"
+            if "CR volume potential = RF Gap x STOIIP  (MMSTB)" in axis_options
+            else axis_options[min(1, len(axis_options) - 1)]
         )
 
-    st.caption(
-        "Marker size represents CR volume potential where available. "
-        "Use the legend to focus the selected Field/Reservoir grouping."
-    )
-    _render_scatter(analysis, filtered, x_column, y_column, group_by)
+        with controls[0]:
+            x_column = st.selectbox(
+                "X-Axis Parameter",
+                axis_options,
+                index=axis_options.index(default_x),
+                format_func=analysis.axis_label,
+                key="candidate_x_axis",
+            )
+        with controls[1]:
+            y_column = st.selectbox(
+                "Y-Axis Parameter",
+                axis_options,
+                index=axis_options.index(default_y),
+                format_func=analysis.axis_label,
+                key="candidate_y_axis",
+            )
+        with controls[2]:
+            group_by = st.selectbox(
+                "Z Axis / Group",
+                list(GROUP_COLUMNS.keys()),
+                index=list(GROUP_COLUMNS.keys()).index("Field"),
+                key="candidate_group_by",
+                help="Field is the recommended grouping when you want the relationship chart and location map to read consistently.",
+            )
 
-    st.divider()
-    _render_candidate_map(filtered)
+        st.caption(
+            "Marker size represents CR volume potential. Use the legend to focus the selected Field/Reservoir grouping. "
+            "For a field-to-location comparison, keep Z Axis / Group = Field."
+        )
+        _render_scatter(analysis, filtered, x_column, y_column, group_by)
+
+    with location_tab:
+        _render_candidate_map(filtered)
 
     st.divider()
     st.subheader("Candidate Reservoir Table")
