@@ -67,6 +67,7 @@ def _render_phase_chart(df: pd.DataFrame, title: str) -> None:
     if df.empty:
         st.info(f"{title}: no usable records in the workbook.")
         return
+
     work = df.copy()
     work["Precipitation"] = pd.to_numeric(work["Precipitation"], errors="coerce").fillna(0) * 100
     work["No Precipitation"] = pd.to_numeric(work["No Precipitation"], errors="coerce").fillna(0) * 100
@@ -76,6 +77,10 @@ def _render_phase_chart(df: pd.DataFrame, title: str) -> None:
         var_name="Outcome",
         value_name="Percent",
     )
+
+    # Do not pass None into Plotly Express label configuration. Recent Plotly
+    # releases can internally concatenate axis-label strings and raise:
+    # TypeError: unsupported operand type(s) for +: 'NoneType' and 'str'.
     fig = px.bar(
         long,
         x="Percent",
@@ -84,10 +89,16 @@ def _render_phase_chart(df: pd.DataFrame, title: str) -> None:
         orientation="h",
         barmode="stack",
         text=long["Percent"].map(lambda value: f"{value:.0f}%" if value >= 8 else ""),
-        labels={"Percent": "Share of test condition (%)", "Formulation": None},
-        title=title,
+        labels={"Percent": "Share of test condition (%)"},
+        title=str(title),
     )
-    fig.update_layout(height=max(300, 90 + 42 * len(work)), margin=dict(l=30, r=20, t=50, b=45), legend_title="Phase behaviour")
+    fig.update_layout(
+        height=max(300, 90 + 42 * len(work)),
+        margin=dict(l=30, r=20, t=50, b=45),
+        legend_title="Phase behaviour",
+        xaxis_title="Share of test condition (%)",
+        yaxis_title="Formulation",
+    )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -114,9 +125,9 @@ def _render_ift_chart(df: pd.DataFrame, title: str) -> None:
         )
     )
     fig.update_layout(
-        title=title,
+        title=str(title),
         xaxis_title="IFT (dynes/cm)",
-        yaxis_title=None,
+        yaxis_title="Material",
         height=max(310, 100 + 36 * len(work)),
         margin=dict(l=25, r=20, t=50, b=55),
         showlegend=False,
