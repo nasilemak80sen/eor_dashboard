@@ -201,6 +201,28 @@ const detailRows = document.getElementById("detailRows");
 let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
+let rendererReady = false;
+let startupStage = "initializing";
+
+function showRuntimeFailure(error, stage){
+  const message = error && error.message ? error.message : String(error);
+  console.error("OpenGlobus runtime failure:", error);
+  if (!rendererReady) {
+    status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
+      escapeHtml(message) +
+      "</span><br><span style='font-size:10px;color:#63767a'>Stage: " +
+      escapeHtml(stage || startupStage) +
+      "</span>";
+  }
+}
+
+window.addEventListener("error", event => {
+  if (event && event.error) showRuntimeFailure(event.error, "browser runtime");
+});
+
+window.addEventListener("unhandledrejection", event => {
+  if (event && event.reason) showRuntimeFailure(event.reason, "async runtime");
+});
 
 // These constructors are used by helper functions defined outside boot().
 // Keep them at module scope because the OpenGlobus module is loaded
@@ -346,7 +368,6 @@ async function loadOpenGlobus() {
 }
 
 async function boot() {
-let startupStage = "initializing";
 try {
   startupStage = "loading OpenGlobus module";
   const {module: openGlobus, candidate} = await loadOpenGlobus();
@@ -396,14 +417,24 @@ try {
   startupStage = "rendering map entities";
   renderLayer();
   startupStage = "starting renderer";
+  if(globe.renderer && globe.renderer.events){
+    const markRendererReady = () => {
+      rendererReady = true;
+      status.classList.add("hidden");
+      globe.renderer.events.off("postdraw", markRendererReady);
+    };
+    globe.renderer.events.on("postdraw", markRendererReady);
+  }
   globe.start();
   status.textContent = "Rendering 3D Earth…";
-  window.setTimeout(() => status.classList.add("hidden"), 350);
+  window.setTimeout(() => {
+    if (!rendererReady) {
+      status.textContent = "Rendering 3D Earth · waiting for the first frame…";
+    }
+  }, 5000);
 } catch(error){
   console.error("OpenGlobus initialization failed:",error);
-  status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
-    String(error && error.message ? error.message : error) +
-    "</span><br><span style='font-size:10px;color:#63767a'>Stage: " + startupStage + "</span>";
+  showRuntimeFailure(error, startupStage);
 }
 }
 
