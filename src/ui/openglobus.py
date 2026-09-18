@@ -328,7 +328,9 @@ async function loadOpenGlobus() {
 }
 
 async function boot() {
+let startupStage = "initializing";
 try {
+  startupStage = "loading OpenGlobus module";
   const {module: openGlobus, candidate} = await loadOpenGlobus();
   const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = openGlobus;
   OGEntity = Entity;
@@ -337,6 +339,7 @@ try {
   const resourceRoot = candidate.resources.replace(/\\/+$|\/$/g, "");
   const skybox = scene.SkyBox.createDefault(resourceRoot + "/");
 
+  startupStage = "creating globe";
   globe = new Globe({
     target: "globus",
     skybox,
@@ -351,13 +354,16 @@ try {
     autoActivate: false
   });
 
+  startupStage = "creating marker layer";
   markerLayer = new Vector("EOR Atlas Records", {
     entities: [],
     pickingEnabled: true,
-    async: true
+    async: false
   });
+  startupStage = "adding marker layer to globe";
   markerLayer.addTo(globe.planet);
 
+  startupStage = "binding map interaction";
   if(globe.renderer && globe.renderer.events){
     globe.renderer.events.on("lclick", event => {
       const picked = event.pickingObject;
@@ -367,16 +373,18 @@ try {
     });
   }
 
+  startupStage = "setting initial camera";
   globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
+  startupStage = "rendering map entities";
   renderLayer();
+  startupStage = "starting renderer";
   globe.start();
   status.classList.add("hidden");
-  window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
 } catch(error){
   console.error("OpenGlobus initialization failed:",error);
   status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
     String(error && error.message ? error.message : error) +
-    "</span>";
+    "</span><br><span style='font-size:10px;color:#63767a'>Stage: " + startupStage + "</span>";
 }
 }
 
