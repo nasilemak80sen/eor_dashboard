@@ -76,6 +76,7 @@ def _render_reactive_location_map(dataframe: pd.DataFrame) -> None:
         subtitle="OpenGlobus 3D reservoir locations from the filtered candidate portfolio.",
         height=620,
         camera_height=5000000 if focus != "All fields" else 12000000,
+        show_labels=False,
     )
 
     st.caption(
