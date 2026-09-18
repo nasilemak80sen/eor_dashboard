@@ -16,19 +16,19 @@ import streamlit.components.v1 as components
 
 OPEN_GLOBUS_VERSION = "0.28.7"
 OPEN_GLOBUS_JS = (
-    f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js"
+    f"https://sandbox.openglobus.org/external/og/lib/og.es.js"
 )
 OPEN_GLOBUS_CSS = (
-    f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css"
+    f"https://sandbox.openglobus.org/external/og/lib/og.css"
 )
 OPEN_GLOBUS_RESOURCES = (
-    f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/"
+    f"https://sandbox.openglobus.org/external/og/lib/res"
 )
 OPEN_GLOBUS_FONTS = (
-    f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts"
+    f"https://sandbox.openglobus.org/external/og/lib/res/fonts"
 )
 OPEN_GLOBUS_SKYBOX = (
-    f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/"
+    f"https://sandbox.openglobus.org/external/og/lib/res/skybox/"
 )
 
 
@@ -167,16 +167,6 @@ html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:t
 </div>
 
 <script type="module">
-import {
-  Globe,
-  GlobusRgbTerrain,
-  Bing,
-  scene,
-  Vector,
-  Entity,
-  LonLat
-} from "__JS__";
-
 const records = __PAYLOAD__;
 const status = document.getElementById("status");
 const details = document.getElementById("details");
@@ -281,16 +271,19 @@ document.getElementById("resetView").addEventListener("click",()=>{
   }
 });
 
-const skybox = new scene.SkyBox({
-  px: "__SKYBOX__px.webp",
-  nx: "__SKYBOX__nx.webp",
-  py: "__SKYBOX__py.webp",
-  ny: "__SKYBOX__ny.webp",
-  pz: "__SKYBOX__pz.webp",
-  nz: "__SKYBOX__nz.webp"
-});
-
+async function boot() {
 try {
+  const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = await import("__JS__");
+
+  const skybox = new scene.SkyBox({
+    px: "__SKYBOX__px.webp",
+    nx: "__SKYBOX__nx.webp",
+    py: "__SKYBOX__py.webp",
+    ny: "__SKYBOX__ny.webp",
+    pz: "__SKYBOX__pz.webp",
+    nz: "__SKYBOX__nz.webp"
+  });
+
   globe = new Globe({
     target: "globus",
     skybox,
@@ -326,8 +319,13 @@ try {
   window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
 } catch(error){
   console.error("OpenGlobus initialization failed:",error);
-  status.textContent = "3D Earth could not be initialized. Check WebGL and network access.";
+  status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
+    String(error && error.message ? error.message : error) +
+    "</span>";
 }
+}
+
+boot();
 </script>
 </body>
 </html>"""
