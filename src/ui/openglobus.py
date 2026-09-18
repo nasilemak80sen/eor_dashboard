@@ -210,6 +210,10 @@ let OGLonLat = null;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
 const showLabels = __SHOW_LABELS__;
+const markerMaxValue = records.reduce((maxValue, record) => {
+  const number = Number(record.value);
+  return Number.isFinite(number) && number > maxValue ? number : maxValue;
+}, 1);
 
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g, ch => ({
@@ -224,8 +228,7 @@ function formatValue(value){
 }
 
 function markerSvg(value, selected){
-  const magnitudes = records.map(r => Number(r.value)).filter(Number.isFinite);
-  const maxValue = Math.max(...magnitudes,1);
+  const maxValue = markerMaxValue;
   const numeric = Number(value);
   const ratio = Number.isFinite(numeric) ? Math.sqrt(Math.max(numeric,0))/Math.sqrt(maxValue) : .35;
   const radius = 8 + Math.max(.18,Math.min(1,ratio))*12;
@@ -301,12 +304,27 @@ document.getElementById("resetView").addEventListener("click",()=>{
   }
 });
 
+const OPEN_GLOBUS_IMPORT_TIMEOUT_MS = 8000;
+
+function importWithTimeout(url){
+  return Promise.race([
+    import(url),
+    new Promise((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error("Timed out loading OpenGlobus module after " + OPEN_GLOBUS_IMPORT_TIMEOUT_MS + " ms.")),
+        OPEN_GLOBUS_IMPORT_TIMEOUT_MS
+      );
+    })
+  ]);
+}
+
 async function loadOpenGlobus() {
   const failures = [];
 
   for (const candidate of assetCandidates) {
     try {
-      const module = await import(candidate.js);
+      status.textContent = "Loading OpenGlobus · " + candidate.name + "…";
+      const module = await importWithTimeout(candidate.js);
 
       // CSS is cosmetic; append it only after the matching JS bundle loads so
       // a blocked stylesheet cannot prevent the globe from booting.
@@ -379,7 +397,8 @@ try {
   renderLayer();
   startupStage = "starting renderer";
   globe.start();
-  status.classList.add("hidden");
+  status.textContent = "Rendering 3D Earth…";
+  window.setTimeout(() => status.classList.add("hidden"), 350);
 } catch(error){
   console.error("OpenGlobus initialization failed:",error);
   status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
