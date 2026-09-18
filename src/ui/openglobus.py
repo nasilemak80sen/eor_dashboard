@@ -22,14 +22,6 @@ OPEN_GLOBUS_VERSION = "0.28.7"
 # designed to serve ES modules cross-origin instead.
 OPEN_GLOBUS_CANDIDATES = [
     {
-        "name": "esm.sh",
-        "js": f"https://esm.sh/@openglobus/og@{OPEN_GLOBUS_VERSION}?bundle",
-        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
-        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
-        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
-        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
-    },
-    {
         "name": "jsDelivr",
         "js": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
         "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
@@ -44,6 +36,14 @@ OPEN_GLOBUS_CANDIDATES = [
         "resources": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
         "fonts": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
         "skybox": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
+    },
+    {
+        "name": "esm.sh",
+        "js": f"https://esm.sh/@openglobus/og@{OPEN_GLOBUS_VERSION}",
+        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
+        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
+        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
+        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
     },
 ]
 
@@ -334,14 +334,8 @@ try {
   OGEntity = Entity;
   OGLonLat = LonLat;
 
-  const skybox = new scene.SkyBox({
-    px: candidate.skybox + "px.webp",
-    nx: candidate.skybox + "nx.webp",
-    py: candidate.skybox + "py.webp",
-    ny: candidate.skybox + "ny.webp",
-    pz: candidate.skybox + "pz.webp",
-    nz: candidate.skybox + "nz.webp"
-  });
+  const resourceRoot = candidate.resources.replace(/\\/+$|\/$/g, "");
+  const skybox = scene.SkyBox.createDefault(resourceRoot + "/");
 
   globe = new Globe({
     target: "globus",
@@ -351,9 +345,10 @@ try {
     layers: [new Bing()],
     sun: {active: true},
     atmosphereEnabled: true,
-    resourcesSrc: candidate.resources,
+    resourcesSrc: resourceRoot,
     fontsSrc: candidate.fonts,
-    navigation: {mode: "north", inertia: .18, zoomSpeed: 1.15}
+    navigation: {mode: "lockNorth", inertia: .18, zoomSpeed: 1.15},
+    autoActivate: false
   });
 
   markerLayer = new Vector("EOR Atlas Records", {
@@ -372,8 +367,9 @@ try {
     });
   }
 
-  globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+  globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
   renderLayer();
+  globe.start();
   status.classList.add("hidden");
   window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
 } catch(error){
