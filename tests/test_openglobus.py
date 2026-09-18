@@ -49,7 +49,7 @@ def test_openglobus_html_uses_requested_earth_configuration():
     assert "new Globe({" in html
     assert "new GlobusRgbTerrain()" in html
     assert "layers: [new Bing()]" in html
-    assert "scene.SkyBox.createDefault(resourceRoot + "/")" in html
+    assert 'scene.SkyBox.createDefault(resourceRoot + "/")' in html
     assert "autoActivate: false" in html
     assert "globe.start();" in html
     assert "assetCandidates" in html
@@ -99,7 +99,9 @@ def test_openglobus_dynamic_import_constructors_are_available_to_helpers():
                 "value_label": "Records",
                 "details": {},
             }
-        ]
+        ],
+        title="OpenGlobus",
+        subtitle="Regression",
     )
 
     assert "let OGEntity = null;" in html
