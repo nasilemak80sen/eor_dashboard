@@ -57,9 +57,9 @@ def test_openglobus_html_uses_requested_earth_configuration():
     assert "Math.max(...magnitudes" not in html
     assert "const OPEN_GLOBUS_IMPORT_TIMEOUT_MS = 8000;" in html
     assert "importWithTimeout(candidate.js)" in html
-    assert "window.addEventListener(" + String.raw`"error"` + ", event =>" in html
-    assert "window.addEventListener(" + String.raw`"unhandledrejection"` + ", event =>" in html
-    assert "renderer.events.on(" + String.raw`"postdraw"` + ", markRendererReady)" in html
+    assert 'window.addEventListener("error", event =>' in html
+    assert 'window.addEventListener("unhandledrejection", event =>' in html
+    assert 'renderer.events.on("postdraw", markRendererReady)' in html
     assert "async: false" in html
     assert "assetCandidates" in html
     assert "esm.sh/@openglobus/og@0.28.7" in html
