@@ -7,7 +7,7 @@ import streamlit as st
 
 from data.challenges import load_challenges
 from ui.components import kpi_cards, section_title
-\n
+
 
 FIELD_MAP_ALIASES = {
     "field": ("field", "field name", "field_name"),
