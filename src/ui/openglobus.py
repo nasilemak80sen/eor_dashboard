@@ -16,10 +16,19 @@ import streamlit.components.v1 as components
 
 OPEN_GLOBUS_VERSION = "0.28.7"
 
-# External hosts can be blocked by corporate proxies, browser policy, or DNS
-# filtering. Keep more than one known distribution endpoint and select the
-# first one that the Streamlit iframe can actually import.
+# components.html runs the map inside a sandboxed iframe.  The
+# OpenGlobus sandbox site is intended for its own example pages and can reject
+# module imports from an embedded Streamlit origin.  Use package CDNs that are
+# designed to serve ES modules cross-origin instead.
 OPEN_GLOBUS_CANDIDATES = [
+    {
+        "name": "esm.sh",
+        "js": f"https://esm.sh/@openglobus/og@{OPEN_GLOBUS_VERSION}?bundle",
+        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
+        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
+        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
+        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
+    },
     {
         "name": "jsDelivr",
         "js": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
@@ -35,14 +44,6 @@ OPEN_GLOBUS_CANDIDATES = [
         "resources": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
         "fonts": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
         "skybox": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
-    },
-    {
-        "name": "OpenGlobus sandbox",
-        "js": "https://sandbox.openglobus.org/external/og/lib/og.es.js",
-        "css": "https://sandbox.openglobus.org/external/og/lib/og.css",
-        "resources": "https://sandbox.openglobus.org/external/og/lib/res",
-        "fonts": "https://sandbox.openglobus.org/external/og/lib/res/fonts",
-        "skybox": "https://sandbox.openglobus.org/external/og/lib/res/skybox/",
     },
 ]
 
