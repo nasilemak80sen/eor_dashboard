@@ -937,6 +937,8 @@ def render_eor_screening_tab() -> None:
 # =============================================================================
 
 def render_executive_overview_section():
+    from ui.openglobus import render_openglobus_map
+
     st.header("🏠 Executive Overview")
     metrics = [
         ("Fields", 41), ("Reservoirs", 600), ("EOR Techniques", 9),
@@ -959,19 +961,22 @@ def render_executive_overview_section():
     })
 
     st.subheader("Field Opportunity Map")
-    if pdk is not None:
-        tooltip = {
-            "html": """<b>{Field}</b><br/>Status: {EOR_Status}<br/>RF Gap: {RF_Gap}""",
-            "style": {"backgroundColor": "steelblue", "color": "white"},
-        }
-        st.pydeck_chart(
-            pdk.Deck(
-                map_style="light",
-                initial_view_state=pdk.ViewState(latitude=4.3, longitude=103.4, zoom=4, pitch=30),
-                layers=[pdk.Layer("ScatterplotLayer", data=map_df, get_position="[Longitude, Latitude]", get_fill_color="[255, 120, 60, 220]", get_radius="RF_Gap * 1000", radius_min_pixels=6, radius_max_pixels=20, pickable=True)],
-                tooltip=tooltip,
-            )
-        )
+    render_openglobus_map(
+        map_df,
+        latitude="Latitude",
+        longitude="Longitude",
+        name="Field",
+        value="RF_Gap",
+        value_label="RF Gap",
+        detail_columns=[
+            ("EOR status", "EOR_Status"),
+            ("RF Gap", "RF_Gap"),
+        ],
+        title="EOR Atlas · Field Opportunity Globe",
+        subtitle="Legacy overview compatibility view using the OpenGlobus 3D Earth renderer.",
+        height=560,
+        camera_height=8500000,
+    )
     st.dataframe(map_df, use_container_width=True, hide_index=True)
 
 
