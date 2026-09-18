@@ -6,12 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.components import insight_cards, kpi_cards, section_title
-
-try:
-    import pydeck as pdk
-except Exception:
-    pdk = None
-
+\n
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
     normalized = {str(c).strip().lower().replace("_", " "): c for c in df.columns}
@@ -38,17 +33,37 @@ def _map_summary(map_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     work["Longitude"] = pd.to_numeric(work["Longitude"], errors="coerce")
     work = work[(work["Field"] != "") & (work["EOR Method"] != "")].copy()
 
-    field_summary = work.dropna(subset=["Latitude", "Longitude"]).groupby("Field", as_index=False).agg(
-        Latitude=("Latitude", "mean"), Longitude=("Longitude", "mean"), Methods=("EOR Method", "nunique")
+    field_summary = (
+        work.dropna(subset=["Latitude", "Longitude"])
+        .groupby("Field", as_index=False)
+        .agg(
+            Latitude=("Latitude", "mean"),
+            Longitude=("Longitude", "mean"),
+            Methods=("EOR Method", "nunique"),
+            **{"EOR Methods": ("EOR Method", lambda values: ", ".join(sorted(set(values))))},
+        )
     )
-    method_table = work.groupby("EOR Method")["Field"].nunique().sort_values(ascending=False).rename("Fields").reset_index()
+    method_table = (
+        work.groupby("EOR Method")["Field"]
+        .nunique()
+        .sort_values(ascending=False)
+        .rename("Fields")
+        .reset_index()
+    )
     if not method_table.empty and not field_summary.empty:
-        method_table["Mapped Field Share (%)"] = (method_table["Fields"] / field_summary["Field"].nunique() * 100).round(1)
+        method_table["Mapped Field Share (%)"] = (
+            method_table["Fields"] / field_summary["Field"].nunique() * 100
+        ).round(1)
     return field_summary, method_table
 
 
 def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
-    section_title("Portfolio Snapshot", "Start with geography and concentration, then drill into field-level EOR evidence.")
+    from ui.openglobus import render_openglobus_map
+
+    section_title(
+        "Portfolio Snapshot",
+        "Start with geography and concentration, then drill into field-level EOR evidence.",
+    )
     fields, methods = _map_summary(map_df)
     if fields.empty:
         st.warning("The workbook map sheet does not contain the expected field and coordinate structure.")
@@ -61,24 +76,33 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
 
     left, right = st.columns([2.2, 1])
     with left:
-        mode = st.radio("Spatial view", ["Heatmap", "Scatter"], horizontal=True, key="overview_spatial_mode")
         focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
         focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
-        visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus]
-        center_lat = float(visible["Latitude"].mean())
-        center_lon = float(visible["Longitude"].mean())
+        visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus].copy()
 
-        if pdk is None:
-            st.info("PyDeck is not available for the spatial view.")
-        elif mode == "Heatmap":
-            layer = pdk.Layer("HeatmapLayer", data=visible, get_position="[Longitude, Latitude]", get_weight="Methods", radius_pixels=55, intensity=1.1, threshold=0.08)
-            st.pydeck_chart(pdk.Deck(map_style="light", initial_view_state=pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=5.0 if len(visible) < 10 else 4.4, pitch=12), layers=[layer]), use_container_width=True, height=520)
-            st.caption("Heat intensity represents EOR-method coverage concentration by mapped field.")
+        if visible.empty:
+            st.info("No mapped fields are available for the selected focus.")
         else:
-            layer = pdk.Layer("ScatterplotLayer", data=visible, get_position="[Longitude, Latitude]", get_radius=12000, radius_min_pixels=5, radius_max_pixels=18, get_fill_color="[0, 161, 156, 200]", pickable=True, auto_highlight=True)
-            tooltip = {"html": "<b>{Field}</b><br/>Distinct EOR methods: {Methods}", "style": {"backgroundColor": "#182230", "color": "white"}}
-            st.pydeck_chart(pdk.Deck(map_style="light", initial_view_state=pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=5.0 if len(visible) < 10 else 4.4, pitch=5), layers=[layer], tooltip=tooltip), use_container_width=True, height=520)
-            st.caption("Each point is a mapped field. Hover to inspect its EOR-method breadth.")
+            render_openglobus_map(
+                visible,
+                latitude="Latitude",
+                longitude="Longitude",
+                name="Field",
+                value="Methods",
+                value_label="Distinct EOR methods",
+                detail_columns=[
+                    ("Distinct EOR methods", "Methods"),
+                    ("EOR methods", "EOR Methods"),
+                ],
+                title="EOR Atlas · Portfolio Geography",
+                subtitle="OpenGlobus 3D view of mapped fields and their EOR-method coverage.",
+                height=560,
+                camera_height=12000000 if focus == "All fields" else 5000000,
+            )
+            st.caption(
+                "Each marker represents a mapped field. Marker size follows the number of distinct EOR methods; "
+                "click a marker to inspect its EOR-method coverage."
+            )
 
     with right:
         section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
