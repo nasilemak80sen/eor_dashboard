@@ -7,12 +7,7 @@ import streamlit as st
 
 from data.challenges import load_challenges
 from ui.components import kpi_cards, section_title
-
-try:
-    import pydeck as pdk
-except Exception:
-    pdk = None
-
+\n
 
 FIELD_MAP_ALIASES = {
     "field": ("field", "field name", "field_name"),
@@ -61,14 +56,13 @@ def _load_field_coordinates() -> pd.DataFrame:
 
 
 def _render_spatial_atlas(frame: pd.DataFrame, selected_field: str) -> None:
-    """Render a 3D field challenge-intensity view using Overview's coordinates."""
-    if pdk is None:
-        st.info("PyDeck is not available for the 3D spatial view.")
-        return
+    from ui.openglobus import render_openglobus_map
 
     coords = _load_field_coordinates()
     if coords.empty:
-        st.warning("The Overview field-coordinate dataset is unavailable, so the spatial challenge view cannot be plotted.")
+        st.warning(
+            "The Overview field-coordinate dataset is unavailable, so the spatial challenge view cannot be plotted."
+        )
         return
 
     counts = frame.groupby("Field", as_index=False).agg(
@@ -83,39 +77,26 @@ def _render_spatial_atlas(frame: pd.DataFrame, selected_field: str) -> None:
         st.info("No mapped challenge records match the selected field.")
         return
 
-    plot_df["Elevation"] = (plot_df["Challenges"] * 55000).clip(lower=25000)
-    focus = plot_df.iloc[0] if len(plot_df) == 1 else plot_df.loc[plot_df["Challenges"].idxmax()]
-    zoom = 6.2 if len(plot_df) == 1 else 4.7
-
-    layer = pdk.Layer(
-        "ColumnLayer",
-        data=plot_df,
-        get_position="[Longitude, Latitude]",
-        get_elevation="Elevation",
-        elevation_scale=1,
-        radius=18000 if len(plot_df) < 8 else 12000,
-        get_fill_color="[0, 161, 156, 215]",
-        pickable=True,
-        auto_highlight=True,
+    render_openglobus_map(
+        plot_df,
+        latitude="Latitude",
+        longitude="Longitude",
+        name="Field",
+        value="Challenges",
+        value_label="Challenge records",
+        detail_columns=[
+            ("Challenge records", "Challenges"),
+            ("Challenge areas", "Areas"),
+        ],
+        title="EOR Atlas · Challenge Landscape",
+        subtitle="OpenGlobus 3D view of field-level challenge density.",
+        height=560,
+        camera_height=7500000 if selected_field != "All fields" else 12000000,
     )
-    tooltip = {
-        "html": "<b>{Field}</b><br/>Challenge records: {Challenges}<br/>Challenge areas: {Areas}",
-        "style": {"backgroundColor": "#182230", "color": "white"},
-    }
-    deck = pdk.Deck(
-        map_style="light",
-        initial_view_state=pdk.ViewState(
-            latitude=float(focus["Latitude"]),
-            longitude=float(focus["Longitude"]),
-            zoom=zoom,
-            pitch=52,
-            bearing=-8,
-        ),
-        layers=[layer],
-        tooltip=tooltip,
+    st.caption(
+        "Marker size follows the number of recorded challenge items for each mapped field. "
+        "This is a location-and-context view, not a risk score."
     )
-    st.pydeck_chart(deck, use_container_width=True, height=560)
-    st.caption("Column height represents the number of recorded challenge items for each mapped field; it is a digest signal, not a risk score.")
 
 
 def _render_field_story(field_frame: pd.DataFrame, selected_field: str) -> None:
