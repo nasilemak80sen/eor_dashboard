@@ -88,3 +88,26 @@ def test_openglobus_html_has_click_to_detail_behaviour():
     assert 'renderer.events.on("lclick"' in html
     assert "Fly to location" in html
     assert "renderDetails(picked.properties)" in html
+
+
+def test_openglobus_dynamic_import_constructors_are_available_to_helpers():
+    html = _build_openglobus_html(
+        [
+            {
+                "name": "Angsi",
+                "latitude": 4.3,
+                "longitude": 103.1,
+                "value": 1,
+                "value_label": "Records",
+                "details": {},
+            }
+        ]
+    )
+
+    assert "let OGEntity = null;" in html
+    assert "let OGLonLat = null;" in html
+    assert "OGEntity = Entity;" in html
+    assert "OGLonLat = LonLat;" in html
+    assert "new OGEntity({" in html
+    assert "new OGLonLat(record.longitude" in html
+    assert "new OGLonLat(center.lon" in html
