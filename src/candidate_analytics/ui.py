@@ -330,6 +330,7 @@ def _render_candidate_map(dataframe: pd.DataFrame) -> None:
         subtitle="OpenGlobus 3D reservoir locations from the filtered candidate portfolio.",
         height=620,
         camera_height=5000000 if focus_field != "All fields" else 12000000,
+        show_labels=False,
     )
 
     summary_display = visible_fields[["Field", "Reservoirs", "STOIIP", "CR_Potential"]].copy()
