@@ -50,6 +50,13 @@ def test_openglobus_html_uses_requested_earth_configuration():
     assert "new GlobusRgbTerrain()" in html
     assert "layers: [new Bing()]" in html
     assert "new scene.SkyBox({" in html
+    assert "assetCandidates" in html
+    assert "cdn.jsdelivr.net/npm/@openglobus/og@0.28.7" in html
+    assert "unpkg.com/@openglobus/og@0.28.7" in html
+    assert "sandbox.openglobus.org/external/og/lib/og.es.js" in html
+    assert "All OpenGlobus asset hosts failed." in html
+    assert 'stylesheet.rel = "stylesheet"' in html
+    assert '<link rel="stylesheet" href="https://sandbox.openglobus.org' not in html
     assert "skybox/px.webp" in html
     assert "skybox/nx.webp" in html
     assert "skybox/py.webp" in html
