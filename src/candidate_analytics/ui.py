@@ -5,10 +5,6 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-try:
-    import pydeck as pdk
-except Exception:
-    pdk = None
 
 from .analysis import CandidateAnalysis, GROUP_COLUMNS
 from .repository import CandidateRepository, CandidateDataError
@@ -243,40 +239,30 @@ def _render_scatter(
 
 
 def _render_candidate_map(dataframe: pd.DataFrame) -> None:
-    """Render a reactive field-oriented 3D candidate location map.
+    from ui.openglobus import render_openglobus_map
 
-    Spatial axes are always longitude (X) and latitude (Y). The categorical
-    Z dimension is represented by the Field grouping: each field is rendered
-    as a 3D column at its reservoir locations, with column height reflecting
-    the number of visible reservoirs in that field. This keeps the map
-    conceptually aligned with the scatter plot's Field grouping.
-    """
     st.subheader("Candidate Location Map")
     st.caption(
-        "X = Longitude · Y = Latitude · Z = Field grouping. "
+        "Interactive OpenGlobus 3D Earth. Longitude = X · Latitude = Y. "
         "Map updates automatically with the candidate filters above. "
-        "Hover a field column to inspect its reservoir portfolio."
+        "Click a reservoir marker for engineering context."
     )
 
-    if pdk is None:
-        st.info("PyDeck is not available. The analytical table remains fully available below.")
-        return
-
-    required = {"LATITUDE", "LONGITUDE", "Field"}
+    required = {"LATITUDE", "LONGITUDE", "Field", "Reservoir"}
     missing = sorted(required.difference(dataframe.columns))
     if missing:
         st.warning(f"Candidate location mapping is missing required columns: {', '.join(missing)}")
         return
 
-    map_df = dataframe.dropna(subset=["LATITUDE", "LONGITUDE", "Field"]).copy()
+    map_df = dataframe.copy()
+    map_df["LATITUDE"] = pd.to_numeric(map_df["LATITUDE"], errors="coerce")
+    map_df["LONGITUDE"] = pd.to_numeric(map_df["LONGITUDE"], errors="coerce")
+    map_df = map_df.dropna(subset=["LATITUDE", "LONGITUDE", "Field", "Reservoir"]).copy()
+    map_df["Field"] = map_df["Field"].astype(str).str.strip()
+    map_df["Reservoir"] = map_df["Reservoir"].astype(str).str.strip()
+    map_df = map_df[(map_df["Field"] != "") & (map_df["Reservoir"] != "")].copy()
     if map_df.empty:
         st.info("No latitude/longitude values are available for the current filter selection.")
-        return
-
-    map_df["Field"] = map_df["Field"].astype(str).str.strip()
-    map_df = map_df[map_df["Field"] != ""].copy()
-    if map_df.empty:
-        st.info("No named fields are available for the current map selection.")
         return
 
     map_df["CR_Potential"] = pd.to_numeric(
@@ -295,8 +281,6 @@ def _render_candidate_map(dataframe: pd.DataFrame) -> None:
             Records=("Field", "size"),
             STOIIP=("STOIIP", "sum"),
             CR_Potential=("CR_Potential", "sum"),
-            Latitude=("LATITUDE", "mean"),
-            Longitude=("LONGITUDE", "mean"),
         )
         .reset_index()
         .sort_values(["Reservoirs", "Field"], ascending=[False, True])
@@ -310,7 +294,7 @@ def _render_candidate_map(dataframe: pd.DataFrame) -> None:
             "Map focus",
             focus_options,
             key="candidate_map_focus",
-            help="Focus the 3D map on one field or show the full filtered portfolio.",
+            help="Focus the globe on one field or show the full filtered portfolio.",
         )
 
     visible = map_df if focus_field == "All fields" else map_df.loc[map_df["Field"] == focus_field].copy()
@@ -325,89 +309,27 @@ def _render_candidate_map(dataframe: pd.DataFrame) -> None:
         st.info("The selected field has no coordinates in the current filter selection.")
         return
 
-    # Stable, field-level colours keep the map and scatter grouping visually coherent.
-    palette = [
-        [0, 161, 156, 220],
-        [32, 65, 154, 220],
-        [191, 215, 48, 230],
-        [253, 185, 36, 230],
-        [118, 63, 152, 220],
-        [14, 116, 144, 220],
-        [33, 150, 83, 220],
-        [214, 93, 14, 220],
-        [91, 33, 182, 220],
-        [0, 120, 140, 220],
-    ]
-    field_order = {field: index for index, field in enumerate(field_summary["Field"].tolist())}
-    visible["Field_Index"] = visible["Field"].map(field_order).fillna(0).astype(int)
-    visible["Field_Color"] = visible["Field_Index"].map(lambda index: palette[index % len(palette)])
-
-    visible = visible.merge(
-        visible_fields[["Field", "Reservoirs"]],
-        on="Field",
-        how="left",
-        suffixes=("", "_Field"),
-    )
-    visible["Z_Elevation"] = visible["Reservoirs"].fillna(1).clip(lower=1).astype(float) * 18000.0
-
-    tooltip = {
-        "html": (
-            "<b>{Field}</b><br/>"
-            "Reservoir: {Reservoir}<br/>"
-            "Field reservoirs: {Reservoirs}<br/>"
-            "Temperature: {Temp (deg C)} °C<br/>"
-            "Oil API: {Oil API}<br/>"
-            "Permeability: {Avg Permeability (mD)} mD<br/>"
-            "STOIIP: {STOIIP_ARPR 1.1.2025} MMSTB<br/>"
-            "CR Potential: {CR_Potential} MMSTB"
-        ),
-        "style": {"backgroundColor": "#182230", "color": "white"},
-    }
-
-    center_lat = float(visible["LATITUDE"].mean())
-    center_lon = float(visible["LONGITUDE"].mean())
-
-    layers = [
-        pdk.Layer(
-            "ColumnLayer",
-            data=visible,
-            get_position="[LONGITUDE, LATITUDE]",
-            get_elevation="Z_Elevation",
-            elevation_scale=1,
-            radius=2200,
-            get_fill_color="Field_Color",
-            pickable=True,
-            auto_highlight=True,
-            material=True,
-            coverage=0.85,
-        ),
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=visible,
-            get_position="[LONGITUDE, LATITUDE]",
-            get_fill_color=[255, 255, 255, 235],
-            get_radius=650,
-            radius_min_pixels=3,
-            radius_max_pixels=9,
-            pickable=True,
-        ),
-    ]
-
-    st.pydeck_chart(
-        pdk.Deck(
-            map_style="light",
-            initial_view_state=pdk.ViewState(
-                latitude=center_lat,
-                longitude=center_lon,
-                zoom=4.2 if len(visible_fields) > 1 else 5.2,
-                pitch=48,
-                bearing=0,
-            ),
-            tooltip=tooltip,
-            layers=layers,
-        ),
-        use_container_width=True,
+    render_openglobus_map(
+        visible,
+        latitude="LATITUDE",
+        longitude="LONGITUDE",
+        name="Reservoir",
+        value="CR_Potential",
+        value_label="CR Potential (MMSTB)",
+        detail_columns=[
+            ("Field", "Field"),
+            ("Temperature", "Temp (deg C)"),
+            ("Oil API", "Oil API"),
+            ("Permeability", "Avg Permeability (mD)"),
+            ("STOIIP (MMSTB)", "STOIIP"),
+            ("CR Potential (MMSTB)", "CR_Potential"),
+            ("Producing Status", "Reservoir Producing Status"),
+            ("Injected Fluid", "Injected Fluid"),
+        ],
+        title="EOR Atlas · Candidate Reservoirs",
+        subtitle="OpenGlobus 3D reservoir locations from the filtered candidate portfolio.",
         height=620,
+        camera_height=5000000 if focus_field != "All fields" else 12000000,
     )
 
     summary_display = visible_fields[["Field", "Reservoirs", "STOIIP", "CR_Potential"]].copy()
@@ -427,11 +349,10 @@ def _render_candidate_map(dataframe: pd.DataFrame) -> None:
     with note_col:
         st.markdown(
             "**How to read the map**\n\n"
-            "**X** — longitude\n\n"
-            "**Y** — latitude\n\n"
-            "**Z / Field** — each field is represented by its own column and colour. Column height scales with the number of visible reservoirs in that field.\n\n"
-            "**Dot** — individual reservoir coordinate.\n\n"
-            "Use the map focus selector to isolate one field."
+            "**Globe** — geographic context.\n\n"
+            "**Marker** — individual reservoir coordinate.\n\n"
+            "**Marker size** — CR volume potential.\n\n"
+            "**Field focus** — isolate one field."
         )
 
 
