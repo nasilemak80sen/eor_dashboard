@@ -6,7 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.components import insight_cards, kpi_cards, section_title
-\n
+
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
     normalized = {str(c).strip().lower().replace("_", " "): c for c in df.columns}
