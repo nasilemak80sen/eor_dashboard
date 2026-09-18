@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ui.components import insight_cards, kpi_cards, section_title
+from ui.components import insight_cards, kpi_cards, metric_cards, section_title
 
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
