@@ -114,6 +114,7 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
             subtitle="OpenGlobus 3D view of mapped fields and their EOR-method coverage.",
             height=620,
             camera_height=12000000 if focus == "All fields" else 5000000,
+            show_labels=False,
         )
         st.caption(
             "Each marker represents a mapped field. Marker size follows the number of distinct EOR methods; "
