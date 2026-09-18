@@ -106,6 +106,7 @@ def _build_openglobus_html(
     center_lat: float = 4.2,
     center_lon: float = 102.0,
     camera_height: float = 11000000,
+    show_labels: bool = True,
 ) -> str:
     safe_height = max(520, int(height))
     record_list = [dict(record) for record in records]
@@ -188,6 +189,7 @@ let markerLayer = null;
 let selectedRecord = null;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
+const showLabels = __SHOW_LABELS__;
 
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g, ch => ({
@@ -244,14 +246,14 @@ function renderLayer(){
         size: [46,46],
         offset: [0,20]
       },
-      label: {
+      label: showLabels || selected ? {
         text: record.name + valueText,
         size: selected ? 15 : 11,
         offset: [0,30,0],
         color: selected ? "rgba(32,65,154,.98)" : "rgba(24,50,56,.94)",
         outlineColor: "rgba(255,255,255,.96)",
         outline: 2
-      },
+      } : {text:""},
       properties: record
     });
   });
@@ -340,6 +342,7 @@ try {
         .replace("__CENTER_LAT__", str(float(center_lat)))
         .replace("__CENTER_LON__", str(float(center_lon)))
         .replace("__CAMERA_HEIGHT__", str(float(camera_height)))
+        .replace("__SHOW_LABELS__", "true" if show_labels else "false")
         .replace("__TITLE__", _safe_text(title, "EOR Atlas Globe"))
         .replace("__SUBTITLE__", _safe_text(subtitle, "Interactive OpenGlobus map"))
         .replace("__PAYLOAD__", payload)
@@ -359,6 +362,7 @@ def render_openglobus_map(
     subtitle: str = "Interactive 3D EOR portfolio map",
     height: int = 560,
     camera_height: float = 11000000,
+    show_labels: bool = True,
 ) -> None:
     """Render a workbook/dataframe-backed OpenGlobus map inside Streamlit."""
     records = _normalise_records(
@@ -385,6 +389,7 @@ def render_openglobus_map(
             center_lat=center_lat,
             center_lon=center_lon,
             camera_height=camera_height,
+            show_labels=show_labels,
         ),
         height=max(520, int(height)),
         scrolling=False,
