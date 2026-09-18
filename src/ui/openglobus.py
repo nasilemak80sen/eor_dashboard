@@ -202,6 +202,12 @@ let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
 
+// These constructors are used by helper functions defined outside boot().
+// Keep them at module scope because the OpenGlobus module is loaded
+// dynamically at runtime.
+let OGEntity = null;
+let OGLonLat = null;
+
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
 const showLabels = __SHOW_LABELS__;
 
@@ -252,7 +258,7 @@ function renderLayer(){
   const entities = records.map(record => {
     const selected = selectedRecord && selectedRecord.name === record.name && selectedRecord.latitude === record.latitude && selectedRecord.longitude === record.longitude;
     const valueText = record.value === null ? "" : " · " + formatValue(record.value);
-    return new Entity({
+    return new OGEntity({
       name: record.name,
       lonlat: [record.longitude, record.latitude],
       billboard: {
@@ -276,7 +282,7 @@ function renderLayer(){
 
 function flyToRecord(record){
   if(!globe || !globe.planet || !globe.planet.camera) return;
-  globe.planet.camera.flyLonLat(new LonLat(record.longitude,record.latitude,Math.max(800000,center.height/3)),{duration:900});
+  globe.planet.camera.flyLonLat(new OGLonLat(record.longitude,record.latitude,Math.max(800000,center.height/3)),{duration:900});
 }
 
 function clearDetails(){
@@ -291,7 +297,7 @@ document.getElementById("flyTo").addEventListener("click",()=>{if(selectedRecord
 document.getElementById("resetView").addEventListener("click",()=>{
   clearDetails();
   if(globe && globe.planet && globe.planet.camera){
-    globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+    globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
   }
 });
 
@@ -325,6 +331,8 @@ async function boot() {
 try {
   const {module: openGlobus, candidate} = await loadOpenGlobus();
   const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = openGlobus;
+  OGEntity = Entity;
+  OGLonLat = LonLat;
 
   const skybox = new scene.SkyBox({
     px: candidate.skybox + "px.webp",
