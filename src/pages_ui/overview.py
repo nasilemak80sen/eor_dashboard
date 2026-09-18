@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ui.components import insight_cards, kpi_cards, section_title
+from ui.components import insight_cards, kpi_cards, metric_cards, section_title
 
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
@@ -74,42 +74,52 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
     c2.metric("EOR methods", int(methods["EOR Method"].nunique()) if not methods.empty else 0)
     c3.metric("Mapped coordinates", int(map_df.shape[0]))
 
-    left, right = st.columns([2.2, 1])
-    with left:
-        focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
-        focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
-        visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus].copy()
-
-        if visible.empty:
-            st.info("No mapped fields are available for the selected focus.")
-        else:
-            render_openglobus_map(
-                visible,
-                latitude="Latitude",
-                longitude="Longitude",
-                name="Field",
-                value="Methods",
-                value_label="Distinct EOR methods",
-                detail_columns=[
-                    ("Distinct EOR methods", "Methods"),
-                    ("EOR methods", "EOR Methods"),
-                ],
-                title="EOR Atlas · Portfolio Geography",
-                subtitle="OpenGlobus 3D view of mapped fields and their EOR-method coverage.",
-                height=560,
-                camera_height=12000000 if focus == "All fields" else 5000000,
+    section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
+    if methods.empty:
+        st.info("No EOR method records are available.")
+    else:
+        coverage_cards = [
+            (
+                str(row["EOR Method"]),
+                int(row["Fields"]),
+                f'{float(row["Mapped Field Share (%)"]):.1f}% of mapped fields',
             )
-            st.caption(
-                "Each marker represents a mapped field. Marker size follows the number of distinct EOR methods; "
-                "click a marker to inspect its EOR-method coverage."
-            )
+            for _, row in methods.iterrows()
+        ]
+        metric_cards(coverage_cards, columns=min(4, len(coverage_cards)), tone="accent")
 
-    with right:
-        section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
-        if methods.empty:
-            st.info("No EOR method records are available.")
-        else:
-            st.dataframe(methods, use_container_width=True, hide_index=True, height=520)
+    section_title(
+        "Portfolio Geography",
+        "Use the full-width map to explore field distribution and inspect EOR-method coverage at field level.",
+    )
+    focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
+    focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
+    visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus].copy()
+
+    if visible.empty:
+        st.info("No mapped fields are available for the selected focus.")
+    else:
+        render_openglobus_map(
+            visible,
+            latitude="Latitude",
+            longitude="Longitude",
+            name="Field",
+            value="Methods",
+            value_label="Distinct EOR methods",
+            detail_columns=[
+                ("Distinct EOR methods", "Methods"),
+                ("EOR methods", "EOR Methods"),
+            ],
+            title="EOR Atlas · Portfolio Geography",
+            subtitle="OpenGlobus 3D view of mapped fields and their EOR-method coverage.",
+            height=620,
+            camera_height=12000000 if focus == "All fields" else 5000000,
+            show_labels=False,
+        )
+        st.caption(
+            "Each marker represents a mapped field. Marker size follows the number of distinct EOR methods; "
+            "click a marker to inspect its EOR-method coverage."
+        )
 
 
 def render() -> None:
