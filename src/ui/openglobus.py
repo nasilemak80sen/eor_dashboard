@@ -15,21 +15,44 @@ import streamlit.components.v1 as components
 
 
 OPEN_GLOBUS_VERSION = "0.28.7"
-OPEN_GLOBUS_JS = (
-    f"https://sandbox.openglobus.org/external/og/lib/og.es.js"
-)
-OPEN_GLOBUS_CSS = (
-    f"https://sandbox.openglobus.org/external/og/lib/og.css"
-)
-OPEN_GLOBUS_RESOURCES = (
-    f"https://sandbox.openglobus.org/external/og/lib/res"
-)
-OPEN_GLOBUS_FONTS = (
-    f"https://sandbox.openglobus.org/external/og/lib/res/fonts"
-)
-OPEN_GLOBUS_SKYBOX = (
-    f"https://sandbox.openglobus.org/external/og/lib/res/skybox/"
-)
+
+# External hosts can be blocked by corporate proxies, browser policy, or DNS
+# filtering. Keep more than one known distribution endpoint and select the
+# first one that the Streamlit iframe can actually import.
+OPEN_GLOBUS_CANDIDATES = [
+    {
+        "name": "jsDelivr",
+        "js": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
+        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
+        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
+        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
+        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
+    },
+    {
+        "name": "unpkg",
+        "js": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
+        "css": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
+        "resources": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
+        "fonts": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
+        "skybox": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
+    },
+    {
+        "name": "OpenGlobus sandbox",
+        "js": "https://sandbox.openglobus.org/external/og/lib/og.es.js",
+        "css": "https://sandbox.openglobus.org/external/og/lib/og.css",
+        "resources": "https://sandbox.openglobus.org/external/og/lib/res",
+        "fonts": "https://sandbox.openglobus.org/external/og/lib/res/fonts",
+        "skybox": "https://sandbox.openglobus.org/external/og/lib/res/skybox/",
+    },
+]
+
+# Retained for compatibility with callers/tests that referenced the original
+# single-endpoint constants.
+OPEN_GLOBUS_JS = OPEN_GLOBUS_CANDIDATES[0]["js"]
+OPEN_GLOBUS_CSS = OPEN_GLOBUS_CANDIDATES[0]["css"]
+OPEN_GLOBUS_RESOURCES = OPEN_GLOBUS_CANDIDATES[0]["resources"]
+OPEN_GLOBUS_FONTS = OPEN_GLOBUS_CANDIDATES[0]["fonts"]
+OPEN_GLOBUS_SKYBOX = OPEN_GLOBUS_CANDIDATES[0]["skybox"]
 
 
 def _safe_float(value: Any) -> float | None:
@@ -119,7 +142,6 @@ def _build_openglobus_html(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="__CSS__">
 <style>
 html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:transparent;font-family:Inter,Arial,sans-serif}
 #shell{position:relative;width:100%;height:__HEIGHT__px;min-height:520px;overflow:hidden;border-radius:16px;background:radial-gradient(circle at 50% 42%,#ffffff 0%,#edf5f5 60%,#dfeaec 100%);box-shadow:inset 0 0 0 1px rgba(18,47,53,.08)}
@@ -168,6 +190,7 @@ html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:t
 
 <script type="module">
 const records = __PAYLOAD__;
+const assetCandidates = __ASSET_CANDIDATES__;
 const status = document.getElementById("status");
 const details = document.getElementById("details");
 const detailName = document.getElementById("detailName");
@@ -271,17 +294,44 @@ document.getElementById("resetView").addEventListener("click",()=>{
   }
 });
 
+async function loadOpenGlobus() {
+  const failures = [];
+
+  for (const candidate of assetCandidates) {
+    try {
+      const module = await import(candidate.js);
+
+      // CSS is cosmetic; append it only after the matching JS bundle loads so
+      // a blocked stylesheet cannot prevent the globe from booting.
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = candidate.css;
+      document.head.appendChild(stylesheet);
+
+      return {module, candidate};
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      failures.push(candidate.name + ": " + message);
+    }
+  }
+
+  throw new Error(
+    "All OpenGlobus asset hosts failed. " + failures.join(" | ")
+  );
+}
+
 async function boot() {
 try {
-  const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = await import("__JS__");
+  const {module: openGlobus, candidate} = await loadOpenGlobus();
+  const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = openGlobus;
 
   const skybox = new scene.SkyBox({
-    px: "__SKYBOX__px.webp",
-    nx: "__SKYBOX__nx.webp",
-    py: "__SKYBOX__py.webp",
-    ny: "__SKYBOX__ny.webp",
-    pz: "__SKYBOX__pz.webp",
-    nz: "__SKYBOX__nz.webp"
+    px: candidate.skybox + "px.webp",
+    nx: candidate.skybox + "nx.webp",
+    py: candidate.skybox + "py.webp",
+    ny: candidate.skybox + "ny.webp",
+    pz: candidate.skybox + "pz.webp",
+    nz: candidate.skybox + "nz.webp"
   });
 
   globe = new Globe({
@@ -292,8 +342,8 @@ try {
     layers: [new Bing()],
     sun: {active: true},
     atmosphereEnabled: true,
-    resourcesSrc: "__RESOURCES__",
-    fontsSrc: "__FONTS__",
+    resourcesSrc: candidate.resources,
+    fontsSrc: candidate.fonts,
     navigation: {mode: "north", inertia: .18, zoomSpeed: 1.15}
   });
 
@@ -330,12 +380,15 @@ boot();
 </body>
 </html>"""
 
+    asset_candidates = json.dumps(OPEN_GLOBUS_CANDIDATES, ensure_ascii=False, separators=(",", ":"))
+
     return (
         template.replace("__CSS__", OPEN_GLOBUS_CSS)
         .replace("__JS__", OPEN_GLOBUS_JS)
         .replace("__RESOURCES__", OPEN_GLOBUS_RESOURCES)
         .replace("__FONTS__", OPEN_GLOBUS_FONTS)
         .replace("__SKYBOX__", OPEN_GLOBUS_SKYBOX)
+        .replace("__ASSET_CANDIDATES__", asset_candidates)
         .replace("__HEIGHT__", str(safe_height))
         .replace("__CENTER_LAT__", str(float(center_lat)))
         .replace("__CENTER_LON__", str(float(center_lon)))
@@ -396,6 +449,7 @@ def render_openglobus_map(
 
 __all__ = [
     "OPEN_GLOBUS_VERSION",
+    "OPEN_GLOBUS_CANDIDATES",
     "render_openglobus_map",
     "_build_openglobus_html",
     "_normalise_records",
