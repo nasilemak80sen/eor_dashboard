@@ -53,6 +53,10 @@ def test_openglobus_html_uses_requested_earth_configuration():
     assert "autoActivate: false" in html
     assert "globe.start();" in html
     assert "startupStage = \"rendering map entities\"" in html
+    assert "const markerMaxValue = records.reduce" in html
+    assert "Math.max(...magnitudes" not in html
+    assert "const OPEN_GLOBUS_IMPORT_TIMEOUT_MS = 8000;" in html
+    assert "importWithTimeout(candidate.js)" in html
     assert "async: false" in html
     assert "assetCandidates" in html
     assert "esm.sh/@openglobus/og@0.28.7" in html
