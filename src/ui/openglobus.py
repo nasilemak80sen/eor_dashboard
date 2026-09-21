@@ -286,13 +286,11 @@ try{
     name:"EOR Atlas",
     terrain:new GlobusRgbTerrain(),
     layers:[osm],
-    // Start with the safest WebGL pipeline. MSAA, atmosphere and deferred
-    // rendering are not required for the Earth/terrain view.
-    atmosphereEnabled:false,
+    // Keep the globe bootstrap identical to the proven Competency renderer.
+    atmosphereEnabled:true,
     resourcesSrc:"__RESOURCES__",
     fontsSrc:"__FONTS__",
-    msaa:0,
-    deferredDisabled:true,
+    msaa:4,
     idleMode:false,
     navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}
   });
@@ -334,6 +332,21 @@ try{
     flyToRecord(picked.properties);
   });
 
+  // OpenGlobus emits these events only after the planet/terrain pipeline
+  // has entered its normal render lifecycle. Keep the status hidden on a
+  // successful bootstrap, but surface a useful state if the canvas stays
+  // alive without ever completing a planet render.
+  let renderCompleted = false;
+  if(globe.planet && globe.planet.events){
+    globe.planet.events.on("rendercompleted", () => {
+      renderCompleted = true;
+      console.info("EOR Atlas OpenGlobus: planet render completed");
+    });
+    globe.planet.events.on("terraincompleted", () => {
+      console.info("EOR Atlas OpenGlobus: terrain render completed");
+    });
+  }
+
   renderLayer();
 
   if(markerLayer.getEntities().length !== records.length){
@@ -344,7 +357,29 @@ try{
   }
 
   status.classList.add("hidden");
-  window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
+
+  // Do not force a resize before the browser has had a chance to lay out
+  // the Streamlit iframe. This only requests the normal renderer resize.
+  window.setTimeout(() => {
+    window.dispatchEvent(new Event("resize"));
+    console.info("EOR Atlas OpenGlobus:", {
+      canvasWidth: webglCanvas.width,
+      canvasHeight: webglCanvas.height,
+      clientWidth: webglCanvas.clientWidth,
+      clientHeight: webglCanvas.clientHeight,
+      contextLost: !!(webglCanvas.getContext("webgl2") || webglCanvas.getContext("webgl"))?.isContextLost?.(),
+      renderCompleted
+    });
+  }, 250);
+
+  // A successful Globe constructor does not guarantee that a frame was
+  // actually produced. Report that distinction instead of pretending the
+  // black canvas is a successful render.
+  window.setTimeout(() => {
+    if(!renderCompleted){
+      console.warn("EOR Atlas OpenGlobus: no rendercompleted event after startup.");
+    }
+  }, 5000);
 }catch(error){
   console.error("OpenGlobus initialization failed:",error);
   status.innerHTML =
