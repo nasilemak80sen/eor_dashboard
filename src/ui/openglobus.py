@@ -108,6 +108,7 @@ def _build_openglobus_html(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="__CSS__">
 <style>
 html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:transparent;font-family:Inter,Arial,sans-serif}
 #shell{position:relative;width:100%;height:__HEIGHT__px;min-height:520px;overflow:hidden;border-radius:16px;background:radial-gradient(circle at 50% 42%,#ffffff 0%,#edf5f5 60%,#dfeaec 100%);box-shadow:inset 0 0 0 1px rgba(18,47,53,.08)}
@@ -170,6 +171,7 @@ let markerLayer = null;
 let selectedRecord = null;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
+let webglCanvas = null;
 const showLabels = __SHOW_LABELS__;
 
 const markerMaxValue = records.reduce((maxValue, record) => {
@@ -272,22 +274,42 @@ document.getElementById("resetView").addEventListener("click",()=>{
   }
 });
 
+const osm = new OpenStreetMap("OpenStreetMap",{
+  isBaseLayer:true,
+  visibility:true,
+  attribution:"© OpenStreetMap contributors, ODbL"
+});
+
 try{
   globe = new Globe({
     target:"globus",
     name:"EOR Atlas",
     terrain:new GlobusRgbTerrain(),
-    layers:[new OpenStreetMap("OpenStreetMap",{
-      isBaseLayer:true,
-      visibility:true,
-      attribution:"© OpenStreetMap contributors, ODbL"
-    })],
-    atmosphereEnabled:true,
+    layers:[osm],
+    // Start with the safest WebGL pipeline. MSAA, atmosphere and deferred
+    // rendering are not required for the Earth/terrain view.
+    atmosphereEnabled:false,
     resourcesSrc:"__RESOURCES__",
     fontsSrc:"__FONTS__",
-    msaa:4,
+    msaa:0,
+    deferredDisabled:true,
     idleMode:false,
     navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}
+  });
+
+  webglCanvas = document.querySelector("#globus canvas");
+  if(!webglCanvas){
+    throw new Error("OpenGlobus created no WebGL canvas.");
+  }
+  webglCanvas.addEventListener("webglcontextlost", event => {
+    event.preventDefault();
+    status.classList.remove("hidden");
+    status.innerHTML = "<b>WebGL context was lost.</b><br><span style='font-size:11px'>The browser/GPU reset the 3D renderer.</span>";
+    console.error("OpenGlobus WebGL context lost");
+  });
+  webglCanvas.addEventListener("webglcontextrestored", () => {
+    status.classList.add("hidden");
+    console.info("OpenGlobus WebGL context restored");
   });
 
   markerLayer = new Vector("EOR Atlas Records",{
