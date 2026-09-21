@@ -86,100 +86,100 @@ def configure_legacy_page() -> None:
         layout=settings.ui_config["layout"],
     )
 
-st.markdown(
-    """
-    <style>
-    .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 2rem;
-    }
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 1.2rem;
+            padding-bottom: 2rem;
+        }
 
-    .stTabs [role="tablist"] {
-        background: rgba(15, 23, 42, 0.05);
-        border-radius: 10px;
-    }
+        .stTabs [role="tablist"] {
+            background: rgba(15, 23, 42, 0.05);
+            border-radius: 10px;
+        }
 
-    .stTabs [role="tab"] {
-        padding: 0.7rem 1rem;
-    }
+        .stTabs [role="tab"] {
+            padding: 0.7rem 1rem;
+        }
 
-    div[data-testid="stMetricValue"] {
-        font-size: 1.4rem;
-    }
+        div[data-testid="stMetricValue"] {
+            font-size: 1.4rem;
+        }
 
-    .exec-kpi-card {
-        background: linear-gradient(135deg, #00a19c 0%, #bfd730 100%);
-        border-radius: 14px;
-        padding: 1rem 1.1rem;
-        min-height: 110px;
-        margin-bottom: 0.8rem;
-    }
+        .exec-kpi-card {
+            background: linear-gradient(135deg, #00a19c 0%, #bfd730 100%);
+            border-radius: 14px;
+            padding: 1rem 1.1rem;
+            min-height: 110px;
+            margin-bottom: 0.8rem;
+        }
 
-    .exec-kpi-label {
-        color: rgba(255,255,255,0.75);
-        font-size: 0.77rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        margin-bottom: 0.5rem;
-    }
+        .exec-kpi-label {
+            color: rgba(255,255,255,0.75);
+            font-size: 0.77rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
 
-    .exec-kpi-value {
-        color: white;
-        font-size: 1.8rem;
-        font-weight: 700;
-    }
+        .exec-kpi-value {
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
 
-    .top3-card,
-    .model-status-card {
-        border: 1px solid rgba(15, 23, 42, 0.10);
-        border-radius: 14px;
-        padding: 1rem;
-        background: rgba(248, 250, 252, 0.85);
-        margin-bottom: 0.8rem;
-    }
+        .top3-card,
+        .model-status-card {
+            border: 1px solid rgba(15, 23, 42, 0.10);
+            border-radius: 14px;
+            padding: 1rem;
+            background: rgba(248, 250, 252, 0.85);
+            margin-bottom: 0.8rem;
+        }
 
-    .intelligence-note {
-        border-left: 4px solid #2563eb;
-        background: rgba(37, 99, 235, 0.06);
-        padding: 0.8rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
+        .intelligence-note {
+            border-left: 4px solid #2563eb;
+            background: rgba(37, 99, 235, 0.06);
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
 
-    .status-box {
-        background: rgba(15, 23, 42, 0.04);
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        border-radius: 12px;
-        padding: 0.75rem;
-    }
+        .status-box {
+            background: rgba(15, 23, 42, 0.04);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 12px;
+            padding: 0.75rem;
+        }
 
-    .status-row {
-        display: flex;
-        justify-content: space-between;
-        margin: 0.35rem 0;
-        font-size: 0.88rem;
-    }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 0.35rem 0;
+            font-size: 0.88rem;
+        }
 
-    .status-pill {
-        padding: 0.18rem 0.5rem;
-        border-radius: 999px;
-        font-size: 0.72rem;
-        font-weight: 600;
-    }
+        .status-pill {
+            padding: 0.18rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
 
-    .ready {
-        background: rgba(22, 163, 74, 0.12);
-        color: #166534;
-    }
+        .ready {
+            background: rgba(22, 163, 74, 0.12);
+            color: #166534;
+        }
 
-    .warn {
-        background: rgba(245, 158, 11, 0.12);
-        color: #b45309;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        .warn {
+            background: rgba(245, 158, 11, 0.12);
+            color: #b45309;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 
