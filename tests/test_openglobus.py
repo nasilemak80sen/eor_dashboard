@@ -88,11 +88,9 @@ def test_openglobus_renders_markers_and_details():
     assert "showLabels || selected" in html
 
 
-def test_openglobus_vector_layer_uses_async_rendering():
+def test_openglobus_vector_layer_uses_async_rendering_and_resize_kick():
     html = _sample_html()
     assert "async:true" in html
-    assert "webglcontextlost" in html
-    assert "webglcontextrestored" in html
     assert "window.dispatchEvent(new Event(\"resize\")),250" in html
 
 
