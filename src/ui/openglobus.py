@@ -16,9 +16,10 @@ import streamlit.components.v1 as components
 
 OPEN_GLOBUS_VERSION = "0.28.7"
 
-# External hosts can be blocked by corporate proxies, browser policy, or DNS
-# filtering. Keep more than one known distribution endpoint and select the
-# first one that the Streamlit iframe can actually import.
+# components.html runs the map inside a sandboxed iframe.  The
+# OpenGlobus sandbox site is intended for its own example pages and can reject
+# module imports from an embedded Streamlit origin.  Use package CDNs that are
+# designed to serve ES modules cross-origin instead.
 OPEN_GLOBUS_CANDIDATES = [
     {
         "name": "jsDelivr",
@@ -37,12 +38,12 @@ OPEN_GLOBUS_CANDIDATES = [
         "skybox": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
     },
     {
-        "name": "OpenGlobus sandbox",
-        "js": "https://sandbox.openglobus.org/external/og/lib/og.es.js",
-        "css": "https://sandbox.openglobus.org/external/og/lib/og.css",
-        "resources": "https://sandbox.openglobus.org/external/og/lib/res",
-        "fonts": "https://sandbox.openglobus.org/external/og/lib/res/fonts",
-        "skybox": "https://sandbox.openglobus.org/external/og/lib/res/skybox/",
+        "name": "esm.sh",
+        "js": f"https://esm.sh/@openglobus/og@{OPEN_GLOBUS_VERSION}",
+        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
+        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
+        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
+        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
     },
 ]
 
@@ -200,9 +201,50 @@ const detailRows = document.getElementById("detailRows");
 let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
+let rendererReady = false;
+let loadingOverlayHidden = false;
+let startupStage = "initializing";
+
+function hideLoadingOverlay(reason){
+  if (loadingOverlayHidden) return;
+  loadingOverlayHidden = true;
+  status.classList.add("hidden");
+  console.info("OpenGlobus loading overlay hidden:", reason);
+}
+
+function showRuntimeFailure(error, stage){
+  const message = error && error.message ? error.message : String(error);
+  console.error("OpenGlobus runtime failure:", error);
+  if (!rendererReady) {
+    status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
+      escapeHtml(message) +
+      "</span><br><span style='font-size:10px;color:#63767a'>Stage: " +
+      escapeHtml(stage || startupStage) +
+      "</span>";
+    status.classList.remove("hidden");
+  }
+}
+
+window.addEventListener("error", event => {
+  if (event && event.error) showRuntimeFailure(event.error, "browser runtime");
+});
+
+window.addEventListener("unhandledrejection", event => {
+  if (event && event.reason) showRuntimeFailure(event.reason, "async runtime");
+});
+
+// These constructors are used by helper functions defined outside boot().
+// Keep them at module scope because the OpenGlobus module is loaded
+// dynamically at runtime.
+let OGEntity = null;
+let OGLonLat = null;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
 const showLabels = __SHOW_LABELS__;
+const markerMaxValue = records.reduce((maxValue, record) => {
+  const number = Number(record.value);
+  return Number.isFinite(number) && number > maxValue ? number : maxValue;
+}, 1);
 
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g, ch => ({
@@ -217,8 +259,7 @@ function formatValue(value){
 }
 
 function markerSvg(value, selected){
-  const magnitudes = records.map(r => Number(r.value)).filter(Number.isFinite);
-  const maxValue = Math.max(...magnitudes,1);
+  const maxValue = markerMaxValue;
   const numeric = Number(value);
   const ratio = Number.isFinite(numeric) ? Math.sqrt(Math.max(numeric,0))/Math.sqrt(maxValue) : .35;
   const radius = 8 + Math.max(.18,Math.min(1,ratio))*12;
@@ -251,7 +292,7 @@ function renderLayer(){
   const entities = records.map(record => {
     const selected = selectedRecord && selectedRecord.name === record.name && selectedRecord.latitude === record.latitude && selectedRecord.longitude === record.longitude;
     const valueText = record.value === null ? "" : " · " + formatValue(record.value);
-    return new Entity({
+    const entityOptions = {
       name: record.name,
       lonlat: [record.longitude, record.latitude],
       billboard: {
@@ -259,23 +300,28 @@ function renderLayer(){
         size: [46,46],
         offset: [0,20]
       },
-      label: showLabels || selected ? {
+      properties: record
+    };
+
+    if (showLabels || selected) {
+      entityOptions.label = {
         text: record.name + valueText,
         size: selected ? 15 : 11,
         offset: [0,30,0],
         color: selected ? "rgba(32,65,154,.98)" : "rgba(24,50,56,.94)",
         outlineColor: "rgba(255,255,255,.96)",
         outline: 2
-      } : {text:""},
-      properties: record
-    });
+      };
+    }
+
+    return new OGEntity(entityOptions);
   });
   markerLayer.setEntities(entities);
 }
 
 function flyToRecord(record){
   if(!globe || !globe.planet || !globe.planet.camera) return;
-  globe.planet.camera.flyLonLat(new LonLat(record.longitude,record.latitude,Math.max(800000,center.height/3)),{duration:900});
+  globe.planet.camera.flyLonLat(new OGLonLat(record.longitude,record.latitude,Math.max(800000,center.height/3)),{duration:900});
 }
 
 function clearDetails(){
@@ -290,16 +336,31 @@ document.getElementById("flyTo").addEventListener("click",()=>{if(selectedRecord
 document.getElementById("resetView").addEventListener("click",()=>{
   clearDetails();
   if(globe && globe.planet && globe.planet.camera){
-    globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+    globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
   }
 });
+
+const OPEN_GLOBUS_IMPORT_TIMEOUT_MS = 8000;
+
+function importWithTimeout(url){
+  return Promise.race([
+    import(url),
+    new Promise((_, reject) => {
+      window.setTimeout(
+        () => reject(new Error("Timed out loading OpenGlobus module after " + OPEN_GLOBUS_IMPORT_TIMEOUT_MS + " ms.")),
+        OPEN_GLOBUS_IMPORT_TIMEOUT_MS
+      );
+    })
+  ]);
+}
 
 async function loadOpenGlobus() {
   const failures = [];
 
   for (const candidate of assetCandidates) {
     try {
-      const module = await import(candidate.js);
+      status.textContent = "Loading OpenGlobus · " + candidate.name + "…";
+      const module = await importWithTimeout(candidate.js);
 
       // CSS is cosmetic; append it only after the matching JS bundle loads so
       // a blocked stylesheet cannot prevent the globe from booting.
@@ -322,18 +383,16 @@ async function loadOpenGlobus() {
 
 async function boot() {
 try {
+  startupStage = "loading OpenGlobus module";
   const {module: openGlobus, candidate} = await loadOpenGlobus();
   const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = openGlobus;
+  OGEntity = Entity;
+  OGLonLat = LonLat;
 
-  const skybox = new scene.SkyBox({
-    px: candidate.skybox + "px.webp",
-    nx: candidate.skybox + "nx.webp",
-    py: candidate.skybox + "py.webp",
-    ny: candidate.skybox + "ny.webp",
-    pz: candidate.skybox + "pz.webp",
-    nz: candidate.skybox + "nz.webp"
-  });
+  const resourceRoot = candidate.resources.replace(/\\/+$|\/$/g, "");
+  const skybox = scene.SkyBox.createDefault(resourceRoot + "/");
 
+  startupStage = "creating globe";
   globe = new Globe({
     target: "globus",
     skybox,
@@ -342,18 +401,36 @@ try {
     layers: [new Bing()],
     sun: {active: true},
     atmosphereEnabled: true,
-    resourcesSrc: candidate.resources,
+    resourcesSrc: resourceRoot,
     fontsSrc: candidate.fonts,
-    navigation: {mode: "north", inertia: .18, zoomSpeed: 1.15}
+    navigation: {mode: "lockNorth", inertia: .18, zoomSpeed: 1.15},
+    autoActivate: false
   });
 
+  startupStage = "initializing WebGL renderer";
+  globe.renderer.initialize();
+  const handler = globe.renderer && globe.renderer.handler;
+  if (!globe.renderer.isInitialized() || !handler || !handler.isInitialized() || !handler.gl) {
+    throw new Error(
+      "WebGL could not be initialized in the Streamlit iframe. " +
+      "Check browser WebGL/GPU availability."
+    );
+  }
+
+  startupStage = "setting initial camera";
+  globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
+
+  startupStage = "creating marker layer";
   markerLayer = new Vector("EOR Atlas Records", {
     entities: [],
     pickingEnabled: true,
-    async: true
+    async: false
   });
+
+  startupStage = "adding marker layer to globe";
   markerLayer.addTo(globe.planet);
 
+  startupStage = "binding map interaction";
   if(globe.renderer && globe.renderer.events){
     globe.renderer.events.on("lclick", event => {
       const picked = event.pickingObject;
@@ -363,15 +440,37 @@ try {
     });
   }
 
-  globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+  startupStage = "rendering map entities";
   renderLayer();
-  status.classList.add("hidden");
-  window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
+
+  startupStage = "starting renderer";
+  if(globe.renderer && globe.renderer.events){
+    const markRendererReady = () => {
+      rendererReady = true;
+      hideLoadingOverlay("first rendered frame");
+      globe.renderer.events.off("postdraw", markRendererReady);
+    };
+    globe.renderer.events.on("postdraw", markRendererReady);
+  }
+
+  globe.start();
+  hideLoadingOverlay("WebGL renderer initialized");
+
+  window.setTimeout(() => {
+    if (!rendererReady) {
+      if (!globe || !globe.renderer || !globe.renderer.handler || !globe.renderer.handler.isInitialized()) {
+        showRuntimeFailure(
+          new Error("OpenGlobus renderer stopped before producing a frame."),
+          "renderer startup"
+        );
+      } else {
+        console.warn("OpenGlobus renderer is initialized but has not emitted its first postdraw frame.");
+      }
+    }
+  }, 5000);
 } catch(error){
   console.error("OpenGlobus initialization failed:",error);
-  status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
-    String(error && error.message ? error.message : error) +
-    "</span>";
+  showRuntimeFailure(error, startupStage);
 }
 }
 
