@@ -91,6 +91,9 @@ def test_openglobus_renders_markers_and_details():
 def test_openglobus_vector_layer_uses_async_rendering():
     html = _sample_html()
     assert "async:true" in html
+    assert "webglcontextlost" in html
+    assert "webglcontextrestored" in html
+    assert "window.dispatchEvent(new Event(\"resize\"))" not in html
 
 
 def test_openglobus_has_runtime_error_surface():
