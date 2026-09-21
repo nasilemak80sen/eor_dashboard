@@ -54,11 +54,14 @@ def test_openglobus_matches_proven_competency_dashboard_bootstrap():
     assert "import {Globe, GlobusRgbTerrain, OpenStreetMap, control, Vector, Entity, LonLat}" in html
     assert "https://cdn.jsdelivr.net/npm/@openglobus/og@0.28.7/lib/og.es.js" in html
     assert "new OpenStreetMap(" in html
+    assert '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@openglobus/og@0.28.7/lib/og.css">' in html
     assert "© OpenStreetMap contributors" in html
     assert "new GlobusRgbTerrain()" in html
     assert "resourcesSrc:" in html
     assert "fontsSrc:" in html
-    assert 'msaa:4' in html
+    assert 'msaa:0' in html
+    assert 'deferredDisabled:true' in html
+    assert 'atmosphereEnabled:false' in html
     assert 'idleMode:false' in html
     assert 'navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}' in html
 
@@ -92,6 +95,8 @@ def test_openglobus_vector_layer_uses_async_rendering_and_resize_kick():
     html = _sample_html()
     assert "async:true" in html
     assert "window.dispatchEvent(new Event(\"resize\")),250" in html
+    assert "webglcontextlost" in html
+    assert "webglcontextrestored" in html
 
 
 def test_openglobus_has_runtime_error_surface():
