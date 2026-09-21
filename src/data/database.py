@@ -13,8 +13,7 @@ from sqlalchemy import (
     create_engine, Column, Integer, String, Float, DateTime,
     Text, Boolean, ForeignKey, JSON, UniqueConstraint, Index, inspect, text
 )
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
