@@ -301,6 +301,34 @@ try{
     globe.renderer.addControl(new control.KeyboardNavigation());
   }
 
+  const canvas = globe?.renderer?.handler?.gl?.canvas;
+  if(canvas){
+    canvas.addEventListener("webglcontextlost", event => {
+      event.preventDefault();
+      console.error("OpenGlobus WebGL context lost inside Streamlit iframe.", {
+        width: canvas.width,
+        height: canvas.height
+      });
+      status.innerHTML =
+        "<b>3D Earth WebGL context was lost</b><br>" +
+        "<span style='font-size:11px'>The browser/GPU discarded the WebGL context while OpenGlobus was rendering.</span>";
+      status.classList.remove("hidden");
+    }, {passive:false});
+
+    canvas.addEventListener("webglcontextrestored", () => {
+      console.warn("OpenGlobus WebGL context restored. Reloading the globe component.");
+      status.textContent = "WebGL context restored · restarting 3D Earth…";
+      status.classList.remove("hidden");
+      window.setTimeout(() => {
+        if(globe && typeof globe.start === "function"){
+          try { globe.start(); } catch(restartError) {
+            console.error("OpenGlobus restart after context restore failed:", restartError);
+          }
+        }
+      }, 250);
+    });
+  }
+
   if(globe.planet && globe.planet.camera){
     globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
   }
@@ -322,7 +350,6 @@ try{
   }
 
   status.classList.add("hidden");
-  window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
 }catch(error){
   console.error("OpenGlobus initialization failed:",error);
   status.innerHTML =
