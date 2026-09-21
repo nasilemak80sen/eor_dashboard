@@ -151,7 +151,7 @@ html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:t
     <button id="resetView">↺ Reset globe</button>
     <button id="closeDetailControl">× Close detail</button>
   </div>
-  <div id="attribution">OpenGlobus · Bing Maps imagery · EOR Atlas</div>
+  <div id="attribution">OpenGlobus · © OpenStreetMap contributors · EOR Atlas</div>
 </div>
 
 <script type="module">
