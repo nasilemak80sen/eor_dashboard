@@ -93,7 +93,7 @@ def test_openglobus_vector_layer_uses_async_rendering():
     assert "async:true" in html
     assert "webglcontextlost" in html
     assert "webglcontextrestored" in html
-    assert "window.dispatchEvent(new Event(\"resize\"))" not in html
+    assert "window.dispatchEvent(new Event(\"resize\")),250" in html
 
 
 def test_openglobus_has_runtime_error_surface():
