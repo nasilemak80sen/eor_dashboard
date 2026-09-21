@@ -1,8 +1,8 @@
 """Reusable OpenGlobus 3D globe renderer for EOR Atlas.
 
-The renderer mirrors the OpenGlobus setup used successfully in the
-Competency Assessment System while keeping the EOR Atlas data flow in Python.
-Streamlit supplies records; the browser iframe renders the interactive globe.
+The renderer follows the proven OpenGlobus setup used by the Competency
+Assessment System: direct jsDelivr ES-module loading, OpenStreetMap imagery,
+RGB terrain and Streamlit iframe rendering.
 """
 
 from __future__ import annotations
@@ -15,44 +15,10 @@ import streamlit.components.v1 as components
 
 
 OPEN_GLOBUS_VERSION = "0.28.7"
-
-# External hosts can be blocked by corporate proxies, browser policy, or DNS
-# filtering. Keep more than one known distribution endpoint and select the
-# first one that the Streamlit iframe can actually import.
-OPEN_GLOBUS_CANDIDATES = [
-    {
-        "name": "jsDelivr",
-        "js": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
-        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
-        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
-        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
-        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
-    },
-    {
-        "name": "unpkg",
-        "js": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
-        "css": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
-        "resources": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
-        "fonts": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
-        "skybox": f"https://unpkg.com/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
-    },
-    {
-        "name": "OpenGlobus sandbox",
-        "js": "https://sandbox.openglobus.org/external/og/lib/og.es.js",
-        "css": "https://sandbox.openglobus.org/external/og/lib/og.css",
-        "resources": "https://sandbox.openglobus.org/external/og/lib/res",
-        "fonts": "https://sandbox.openglobus.org/external/og/lib/res/fonts",
-        "skybox": "https://sandbox.openglobus.org/external/og/lib/res/skybox/",
-    },
-]
-
-# Retained for compatibility with callers/tests that referenced the original
-# single-endpoint constants.
-OPEN_GLOBUS_JS = OPEN_GLOBUS_CANDIDATES[0]["js"]
-OPEN_GLOBUS_CSS = OPEN_GLOBUS_CANDIDATES[0]["css"]
-OPEN_GLOBUS_RESOURCES = OPEN_GLOBUS_CANDIDATES[0]["resources"]
-OPEN_GLOBUS_FONTS = OPEN_GLOBUS_CANDIDATES[0]["fonts"]
-OPEN_GLOBUS_SKYBOX = OPEN_GLOBUS_CANDIDATES[0]["skybox"]
+OPEN_GLOBUS_JS = f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js"
+OPEN_GLOBUS_CSS = f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css"
+OPEN_GLOBUS_RESOURCES = f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res"
+OPEN_GLOBUS_FONTS = f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts"
 
 
 def _safe_float(value: Any) -> float | None:
@@ -185,24 +151,31 @@ html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:t
     <button id="resetView">↺ Reset globe</button>
     <button id="closeDetailControl">× Close detail</button>
   </div>
-  <div id="attribution">OpenGlobus · Bing Maps imagery · EOR Atlas</div>
+  <div id="attribution">OpenGlobus · © OpenStreetMap contributors · EOR Atlas</div>
 </div>
 
 <script type="module">
+import {Globe, GlobusRgbTerrain, OpenStreetMap, control, Vector, Entity, LonLat} from "__JS__";
+
 const records = __PAYLOAD__;
-const assetCandidates = __ASSET_CANDIDATES__;
 const status = document.getElementById("status");
 const details = document.getElementById("details");
 const detailName = document.getElementById("detailName");
 const detailValue = document.getElementById("detailValue");
 const detailLatLon = document.getElementById("detailLatLon");
 const detailRows = document.getElementById("detailRows");
+
 let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
 const showLabels = __SHOW_LABELS__;
+
+const markerMaxValue = records.reduce((maxValue, record) => {
+  const number = Number(record.value);
+  return Number.isFinite(number) && number > maxValue ? number : maxValue;
+}, 1);
 
 function escapeHtml(value){
   return String(value).replace(/[&<>"']/g, ch => ({
@@ -213,31 +186,32 @@ function escapeHtml(value){
 function formatValue(value){
   if(value === null || value === undefined || value === "") return "—";
   const number = Number(value);
-  return Number.isFinite(number) ? number.toLocaleString(undefined,{maximumFractionDigits:2}) : String(value);
+  return Number.isFinite(number)
+    ? number.toLocaleString(undefined,{maximumFractionDigits:2})
+    : String(value);
 }
 
 function markerSvg(value, selected){
-  const magnitudes = records.map(r => Number(r.value)).filter(Number.isFinite);
-  const maxValue = Math.max(...magnitudes,1);
   const numeric = Number(value);
-  const ratio = Number.isFinite(numeric) ? Math.sqrt(Math.max(numeric,0))/Math.sqrt(maxValue) : .35;
+  const ratio = Number.isFinite(numeric)
+    ? Math.sqrt(Math.max(numeric,0))/Math.sqrt(markerMaxValue)
+    : .35;
   const radius = 8 + Math.max(.18,Math.min(1,ratio))*12;
   const size = Math.ceil(radius*2+10);
   const fill = selected ? "#20419A" : "#00A19C";
-  const cx = size/2, cy = radius+5;
+  const cx = size/2;
+  const cy = radius+5;
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+
     '<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="'+fill+'" fill-opacity=".94" stroke="#fff" stroke-width="3"/>'+
     '<circle cx="'+cx+'" cy="'+cy+'" r="'+Math.max(3,radius*.28)+'" fill="#fff"/></svg>';
-  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+  return "data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
 }
 
 function renderDetails(record){
   selectedRecord = record;
   detailName.textContent = record.name;
-  detailValue.textContent = record.value === null
-    ? ""
-    : String(record.value_label || "Value") + ": " + formatValue(record.value);
+  detailValue.textContent = record.value === null ? "" : String(record.value_label || "Value") + ": " + formatValue(record.value);
   detailLatLon.textContent = Number(record.latitude).toFixed(4) + " / " + Number(record.longitude).toFixed(4);
   detailRows.innerHTML = Object.entries(record.details || {}).map(([label,value]) =>
     '<div class="detail-row"><span class="detail-label">'+escapeHtml(label)+': </span><span class="detail-value">'+escapeHtml(value || "—")+'</span></div>'
@@ -249,33 +223,37 @@ function renderDetails(record){
 function renderLayer(){
   if(!markerLayer) return;
   const entities = records.map(record => {
-    const selected = selectedRecord && selectedRecord.name === record.name && selectedRecord.latitude === record.latitude && selectedRecord.longitude === record.longitude;
+    const selected = selectedRecord &&
+      selectedRecord.name === record.name &&
+      selectedRecord.latitude === record.latitude &&
+      selectedRecord.longitude === record.longitude;
     const valueText = record.value === null ? "" : " · " + formatValue(record.value);
-    return new Entity({
+    const entityOptions = {
       name: record.name,
-      lonlat: [record.longitude, record.latitude],
-      billboard: {
-        src: markerSvg(record.value, selected),
-        size: [46,46],
-        offset: [0,20]
-      },
-      label: showLabels || selected ? {
+      lonlat: [record.longitude,record.latitude],
+      billboard: {src: markerSvg(record.value,selected),size:[46,46],offset:[0,20]},
+      properties: record
+    };
+    if(showLabels || selected){
+      entityOptions.label = {
         text: record.name + valueText,
         size: selected ? 15 : 11,
         offset: [0,30,0],
         color: selected ? "rgba(32,65,154,.98)" : "rgba(24,50,56,.94)",
         outlineColor: "rgba(255,255,255,.96)",
         outline: 2
-      } : {text:""},
-      properties: record
-    });
+      };
+    }
+    return new Entity(entityOptions);
   });
   markerLayer.setEntities(entities);
 }
 
 function flyToRecord(record){
   if(!globe || !globe.planet || !globe.planet.camera) return;
-  globe.planet.camera.flyLonLat(new LonLat(record.longitude,record.latitude,Math.max(800000,center.height/3)),{duration:900});
+  globe.planet.camera.flyLonLat(new LonLat(
+    record.longitude,record.latitude,Math.max(800000,center.height/3)
+  ),{duration:900});
 }
 
 function clearDetails(){
@@ -286,7 +264,7 @@ function clearDetails(){
 
 document.getElementById("closeDetails").addEventListener("click",clearDetails);
 document.getElementById("closeDetailControl").addEventListener("click",clearDetails);
-document.getElementById("flyTo").addEventListener("click",()=>{if(selectedRecord) flyToRecord(selectedRecord)});
+document.getElementById("flyTo").addEventListener("click",()=>{if(selectedRecord)flyToRecord(selectedRecord)});
 document.getElementById("resetView").addEventListener("click",()=>{
   clearDetails();
   if(globe && globe.planet && globe.planet.camera){
@@ -294,101 +272,74 @@ document.getElementById("resetView").addEventListener("click",()=>{
   }
 });
 
-async function loadOpenGlobus() {
-  const failures = [];
-
-  for (const candidate of assetCandidates) {
-    try {
-      const module = await import(candidate.js);
-
-      // CSS is cosmetic; append it only after the matching JS bundle loads so
-      // a blocked stylesheet cannot prevent the globe from booting.
-      const stylesheet = document.createElement("link");
-      stylesheet.rel = "stylesheet";
-      stylesheet.href = candidate.css;
-      document.head.appendChild(stylesheet);
-
-      return {module, candidate};
-    } catch (error) {
-      const message = error && error.message ? error.message : String(error);
-      failures.push(candidate.name + ": " + message);
-    }
-  }
-
-  throw new Error(
-    "All OpenGlobus asset hosts failed. " + failures.join(" | ")
-  );
-}
-
-async function boot() {
-try {
-  const {module: openGlobus, candidate} = await loadOpenGlobus();
-  const { Globe, GlobusRgbTerrain, Bing, scene, Vector, Entity, LonLat } = openGlobus;
-
-  const skybox = new scene.SkyBox({
-    px: candidate.skybox + "px.webp",
-    nx: candidate.skybox + "nx.webp",
-    py: candidate.skybox + "py.webp",
-    ny: candidate.skybox + "ny.webp",
-    pz: candidate.skybox + "pz.webp",
-    nz: candidate.skybox + "nz.webp"
-  });
-
+try{
   globe = new Globe({
-    target: "globus",
-    skybox,
-    name: "EOR Atlas",
-    terrain: new GlobusRgbTerrain(),
-    layers: [new Bing()],
-    sun: {active: true},
-    atmosphereEnabled: true,
-    resourcesSrc: candidate.resources,
-    fontsSrc: candidate.fonts,
-    navigation: {mode: "north", inertia: .18, zoomSpeed: 1.15}
+    target:"globus",
+    name:"EOR Atlas",
+    terrain:new GlobusRgbTerrain(),
+    layers:[new OpenStreetMap("OpenStreetMap",{
+      isBaseLayer:true,
+      visibility:true,
+      attribution:"© OpenStreetMap contributors, ODbL"
+    })],
+    atmosphereEnabled:true,
+    resourcesSrc:"__RESOURCES__",
+    fontsSrc:"__FONTS__",
+    msaa:4,
+    idleMode:false,
+    navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}
   });
 
-  markerLayer = new Vector("EOR Atlas Records", {
-    entities: [],
-    pickingEnabled: true,
-    async: true
+  markerLayer = new Vector("EOR Atlas Records",{
+    entities:[],
+    pickingEnabled:true,
+    async:true
   });
   markerLayer.addTo(globe.planet);
 
-  if(globe.renderer && globe.renderer.events){
-    globe.renderer.events.on("lclick", event => {
-      const picked = event.pickingObject;
-      if(!picked || !picked.properties || !picked.properties.name) return;
-      renderDetails(picked.properties);
-      flyToRecord(picked.properties);
-    });
+  if(control.KeyboardNavigation){
+    globe.renderer.addControl(new control.KeyboardNavigation());
   }
 
-  globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+  if(globe.planet && globe.planet.camera){
+    globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+  }
+
+  globe.renderer.events.on("lclick",event=>{
+    const picked = event.pickingObject;
+    if(!picked || !picked.properties || !picked.properties.name) return;
+    renderDetails(picked.properties);
+    flyToRecord(picked.properties);
+  });
+
   renderLayer();
+
+  if(markerLayer.getEntities().length !== records.length){
+    throw new Error(
+      "EOR Atlas vector layer entity count mismatch: " +
+      markerLayer.getEntities().length + " vs " + records.length
+    );
+  }
+
   status.classList.add("hidden");
   window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
-} catch(error){
+}catch(error){
   console.error("OpenGlobus initialization failed:",error);
-  status.innerHTML = "<b>OpenGlobus failed to start</b><br><span style='font-size:11px'>" +
-    String(error && error.message ? error.message : error) +
+  status.innerHTML =
+    "<b>3D Earth could not be initialized</b><br>" +
+    "<span style='font-size:11px'>" +
+    escapeHtml(error && error.message ? error.message : String(error)) +
     "</span>";
 }
-}
-
-boot();
 </script>
 </body>
 </html>"""
-
-    asset_candidates = json.dumps(OPEN_GLOBUS_CANDIDATES, ensure_ascii=False, separators=(",", ":"))
 
     return (
         template.replace("__CSS__", OPEN_GLOBUS_CSS)
         .replace("__JS__", OPEN_GLOBUS_JS)
         .replace("__RESOURCES__", OPEN_GLOBUS_RESOURCES)
         .replace("__FONTS__", OPEN_GLOBUS_FONTS)
-        .replace("__SKYBOX__", OPEN_GLOBUS_SKYBOX)
-        .replace("__ASSET_CANDIDATES__", asset_candidates)
         .replace("__HEIGHT__", str(safe_height))
         .replace("__CENTER_LAT__", str(float(center_lat)))
         .replace("__CENTER_LON__", str(float(center_lon)))
@@ -449,7 +400,7 @@ def render_openglobus_map(
 
 __all__ = [
     "OPEN_GLOBUS_VERSION",
-    "OPEN_GLOBUS_CANDIDATES",
+    "OPEN_GLOBUS_JS",
     "render_openglobus_map",
     "_build_openglobus_html",
     "_normalise_records",

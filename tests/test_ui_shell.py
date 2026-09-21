@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 
@@ -9,6 +10,13 @@ def test_hybrid_app_direct_entrypoint_delegates_to_eor_atlas():
     assert "from eor_atlas import main as atlas_main" in source
     assert "_app.render_executive_overview_section()" not in source
     assert "tabs = st.tabs(" not in source
+
+
+def test_eor_atlas_does_not_depend_on_private_hybrid_app_internals():
+    source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    assert "engine._app" not in source
+    assert 'logging.getLogger("eor_atlas")' in source
+    assert "st.exception(exc)" in source
 
 
 def test_new_ui_entrypoint_exists():
@@ -30,6 +38,39 @@ def test_decision_pages_use_submit_driven_forms():
     assert "st.form_submit_button(" in screening
     assert 'st.form("hybrid_reservoir_form"' in intelligence
     assert "st.form_submit_button(" in intelligence
+
+
+def test_legacy_app_is_import_safe():
+    source = (ROOT / "src" / "app_2.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    top_level_streamlit_calls = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)):
+            continue
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+                if isinstance(child.func.value, ast.Name) and child.func.value.id == "st":
+                    top_level_streamlit_calls.append(child.func.attr)
+
+    assert "set_page_config" not in top_level_streamlit_calls
+    assert "markdown" not in top_level_streamlit_calls
+    assert "def configure_legacy_page()" in source
+    assert "configure_legacy_page()" in source
+
+
+def test_production_entrypoint_configures_streamlit_before_rendering():
+    source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+
+    first_stmt = main.body[0]
+    assert isinstance(first_stmt, ast.Expr)
+    assert isinstance(first_stmt.value, ast.Call)
+    assert isinstance(first_stmt.value.func, ast.Attribute)
+    assert isinstance(first_stmt.value.func.value, ast.Name)
+    assert first_stmt.value.func.value.id == "st"
+    assert first_stmt.value.func.attr == "set_page_config"
 
 
 def test_application_services_are_cached_across_reruns():

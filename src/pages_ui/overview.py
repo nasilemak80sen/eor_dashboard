@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ui.components import insight_cards, kpi_cards, section_title
+from ui.components import insight_cards, kpi_cards, metric_cards, section_title
 
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
@@ -58,8 +58,6 @@ def _map_summary(map_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
-    from ui.openglobus import render_openglobus_map
-
     section_title(
         "Portfolio Snapshot",
         "Start with geography and concentration, then drill into field-level EOR evidence.",
@@ -74,42 +72,63 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
     c2.metric("EOR methods", int(methods["EOR Method"].nunique()) if not methods.empty else 0)
     c3.metric("Mapped coordinates", int(map_df.shape[0]))
 
-    left, right = st.columns([2.2, 1])
-    with left:
-        focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
-        focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
-        visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus].copy()
-
-        if visible.empty:
-            st.info("No mapped fields are available for the selected focus.")
-        else:
-            render_openglobus_map(
-                visible,
-                latitude="Latitude",
-                longitude="Longitude",
-                name="Field",
-                value="Methods",
-                value_label="Distinct EOR methods",
-                detail_columns=[
-                    ("Distinct EOR methods", "Methods"),
-                    ("EOR methods", "EOR Methods"),
-                ],
-                title="EOR Atlas · Portfolio Geography",
-                subtitle="OpenGlobus 3D view of mapped fields and their EOR-method coverage.",
-                height=560,
-                camera_height=12000000 if focus == "All fields" else 5000000,
+    section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
+    if methods.empty:
+        st.info("No EOR method records are available.")
+    else:
+        coverage_cards = [
+            (
+                str(row["EOR Method"]),
+                int(row["Fields"]),
+                f'{float(row["Mapped Field Share (%)"]):.1f}% of mapped fields',
             )
-            st.caption(
-                "Each marker represents a mapped field. Marker size follows the number of distinct EOR methods; "
-                "click a marker to inspect its EOR-method coverage."
-            )
+            for _, row in methods.iterrows()
+        ]
+        metric_cards(coverage_cards, columns=min(4, len(coverage_cards)), tone="accent")
 
-    with right:
-        section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
-        if methods.empty:
-            st.info("No EOR method records are available.")
-        else:
-            st.dataframe(methods, use_container_width=True, hide_index=True, height=520)
+    section_title(
+        "Portfolio Geography",
+        "Explore the EOR field footprint directly on the interactive 3D Earth.",
+    )
+    focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
+    focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
+    visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus].copy()
+
+    if visible.empty:
+        st.info("No mapped fields are available for the selected focus.")
+        return
+
+    if focus == "All fields":
+        globe_lat, globe_lon, globe_height = 4.2, 102.0, 12000000
+    else:
+        globe_lat = float(visible.iloc[0]["Latitude"])
+        globe_lon = float(visible.iloc[0]["Longitude"])
+        globe_height = 5000000
+
+    from ui.openglobus import render_openglobus_map
+
+    render_openglobus_map(
+        visible,
+        latitude="Latitude",
+        longitude="Longitude",
+        name="Field",
+        value="Methods",
+        value_label="Distinct EOR methods",
+        detail_columns=[
+            ("Distinct EOR methods", "Methods"),
+            ("EOR methods", "EOR Methods"),
+        ],
+        title="EOR Atlas · Portfolio Geography",
+        subtitle="Interactive 3D field map with EOR-method coverage and field-level details.",
+        height=620,
+        camera_height=globe_height,
+        show_labels=True,
+    )
+
+    st.caption(
+        "Each marker represents a mapped field. Marker size reflects the number of distinct EOR methods. "
+        "Click a marker to inspect the field and fly to its location."
+    )
 
 
 def render() -> None:
@@ -132,13 +151,18 @@ def render() -> None:
     ])
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    portfolio_tab, signals_tab, journey_tab = st.tabs(["Portfolio Snapshot", "Opportunity Signals", "Decision Journey"])
 
-    with portfolio_tab:
-        if isinstance(map_df, pd.DataFrame) and not map_df.empty:
-            _render_spatial_snapshot(map_df)
-        else:
-            st.info("The workbook map sheet is unavailable in this session.")
+    # Keep the WebGL component outside st.tabs. Streamlit 1.39 has a
+    # confirmed iframe/custom-component sizing issue in tab containers, which
+    # can initialize a WebGL canvas at an invalid size. The proven competency
+    # dashboard also renders its globe in a normal visible page container.
+    if isinstance(map_df, pd.DataFrame) and not map_df.empty:
+        _render_spatial_snapshot(map_df)
+    else:
+        st.info("The workbook map sheet is unavailable in this session.")
+
+    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    signals_tab, journey_tab = st.tabs(["Opportunity Signals", "Decision Journey"])
 
     with signals_tab:
         left, right = st.columns([1.4, 1])
