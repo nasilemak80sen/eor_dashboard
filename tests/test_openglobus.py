@@ -54,6 +54,7 @@ def test_openglobus_matches_proven_competency_dashboard_bootstrap():
     assert "import {Globe, GlobusRgbTerrain, OpenStreetMap, control, Vector, Entity, LonLat}" in html
     assert "https://cdn.jsdelivr.net/npm/@openglobus/og@0.28.7/lib/og.es.js" in html
     assert "new OpenStreetMap(" in html
+    assert "© OpenStreetMap contributors" in html
     assert "new GlobusRgbTerrain()" in html
     assert "resourcesSrc:" in html
     assert "fontsSrc:" in html
