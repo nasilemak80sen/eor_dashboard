@@ -40,7 +40,13 @@ COLUMN_ALIASES = {
     "visc_max": ["Oil viscosity max (cp)", "visc_max_cp", "viscosity_max_cp", "visc_max"],
     "so_min": ["So at start min (%)", "so_start_min_pct", "so_min"],
     "so_max": ["So at start max (%)", "so_start_max_pct", "so_max"],
+    "source_group": [
+        "source_id", "source_group", "publication_id", "report_id",
+        "project_id", "field_id", "Field", "Field Name",
+    ],
 }
+
+MINIMUM_GROUPS_PER_CLASS = 6
 
 def normalize_col(s: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(s).strip().lower()).strip("_")
@@ -74,7 +80,8 @@ def discover_candidate_tables() -> List[Dict[str, Any]]:
             formation = find_column(df, COLUMN_ALIASES["formation"])
             range_hits = sum(
                 find_column(df, COLUMN_ALIASES[k]) is not None
-                for k in COLUMN_ALIASES if k not in {"technique", "formation"}
+                for k in COLUMN_ALIASES
+                if k not in {"technique", "formation", "source_group"}
             )
             candidates.append({
                 "path": str(path),
@@ -130,6 +137,10 @@ def standardize_training_table(df: pd.DataFrame) -> pd.DataFrame:
     })
 
     out = out.replace([np.inf, -np.inf], np.nan).dropna(subset=required).copy()
+    if "source_group" in out.columns:
+        source_groups = out["source_group"].astype("string").str.strip()
+        missing_groups = source_groups.str.lower().isin(["", "nan", "none", "null"])
+        out["source_group"] = source_groups.mask(missing_groups, pd.NA)
 
     for lo, hi in [
             ("depth_min", "depth_max"), ("por_min", "por_max"), ("perm_min", "perm_max"),
@@ -137,24 +148,289 @@ def standardize_training_table(df: pd.DataFrame) -> pd.DataFrame:
     
             out = out[out[hi] >= out[lo]]
     
-    # Create one fingerprint per actual observation.
+    out["record_fingerprint"] = _fingerprints(out[required])
+
+    duplicate_key = ["record_fingerprint"]
+    if "source_group" in out.columns:
+        duplicate_key.append("source_group")
+    duplicate_count = int(out.duplicated(duplicate_key).sum())
+    out = out.drop_duplicates(duplicate_key, keep="first").reset_index(drop=True)
+    out.attrs["exact_duplicates_removed"] = duplicate_count
+    return out
+
+
+def build_multilabel_table(
+    df: pd.DataFrame,
+) -> Tuple[pd.DataFrame, List[Tuple[str, ...]], np.ndarray | None]:
+    """Aggregate identical input profiles into one row with all associated labels."""
+    required = [
+        "technique", "formation",
+        "depth_min", "depth_max", "por_min", "por_max",
+        "perm_min", "perm_max", "api_min", "api_max",
+        "visc_min", "visc_max", "so_min", "so_max",
+    ]
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        raise ValueError(f"Cannot build multi-label data; missing fields: {missing}")
+
+    feature_columns = [column for column in required if column != "technique"]
+    feature_fingerprints = _fingerprints(df[feature_columns])
+    working = df.copy()
+    working["feature_fingerprint"] = feature_fingerprints
+
+    has_source_groups = "source_group" in working.columns
+    source_series = None
+    if has_source_groups:
+        source_series = working["source_group"].astype("string").str.strip()
+        source_series = source_series.mask(
+            source_series.str.lower().isin(["", "nan", "none", "null"]),
+            pd.NA,
+        )
+
+    parents: dict[str, str] = {}
+
+    def find(node: str) -> str:
+        parents.setdefault(node, node)
+        if parents[node] != node:
+            parents[node] = find(parents[node])
+        return parents[node]
+
+    def union(left: str, right: str) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parents[right_root] = left_root
+
+    representatives = []
+    label_sets: List[Tuple[str, ...]] = []
+    group_nodes: List[str | None] = []
+    for fingerprint, profile in working.groupby(
+        "feature_fingerprint", sort=False, dropna=False
+    ):
+        profile_index = profile.index
+        profile_labels = tuple(sorted(profile["technique"].astype(str).unique()))
+        representatives.append(profile.iloc[0].drop(labels=["feature_fingerprint"]))
+        label_sets.append(profile_labels)
+
+        if not has_source_groups:
+            group_nodes.append(None)
+            continue
+
+        profile_sources = source_series.loc[profile_index]
+        if profile_sources.isna().any():
+            group_nodes.append(None)
+            continue
+
+        profile_node = f"profile:{fingerprint}"
+        for source_id in profile_sources.unique():
+            source_node = f"source:{source_id}"
+            union(profile_node, source_node)
+        group_nodes.append(profile_node)
+
+    record_columns = list(df.columns)
+    records = pd.DataFrame(representatives).reindex(columns=record_columns).reset_index(drop=True)
+    if not has_source_groups:
+        return records, label_sets, None
+
+    resolved_groups = [
+        find(node) if node is not None else pd.NA
+        for node in group_nodes
+    ]
+    return records, label_sets, np.asarray(resolved_groups, dtype=object)
+
+
+def _fingerprints(frame: pd.DataFrame) -> List[str]:
     fingerprints = []
-    
-    for row in out[required].itertuples(index=False, name=None):
-            payload = "|".join(
-                "" if pd.isna(v) else str(v)
-                for v in row
+    for row in frame.itertuples(index=False, name=None):
+        payload = "|".join("" if pd.isna(value) else str(value) for value in row)
+        fingerprints.append(hashlib.sha1(payload.encode("utf-8")).hexdigest()[:16])
+    return fingerprints
+
+
+def class_group_support(
+    labels: pd.Series | np.ndarray,
+    groups: pd.Series | np.ndarray,
+    *,
+    classes: List[str] | np.ndarray | None = None,
+) -> Dict[str, int]:
+    """Count independent source groups per class for single- or multi-label targets."""
+    values = np.asarray(labels)
+    group_values = np.asarray(groups)
+    if values.ndim == 1:
+        frame = pd.DataFrame({"label": values, "group": group_values})
+        return {
+            str(label): int(group.nunique())
+            for label, group in frame.groupby("label", dropna=False)["group"]
+        }
+    if values.ndim != 2 or len(values) != len(group_values):
+        raise ValueError("labels must be a 1D or 2D matrix aligned with groups.")
+    class_names = list(classes) if classes is not None else [str(i) for i in range(values.shape[1])]
+    if len(class_names) != values.shape[1]:
+        raise ValueError("classes must have one name for each multi-label column.")
+    return {
+        str(class_names[index]): int(
+            pd.Series(group_values[values[:, index].astype(bool)]).nunique()
+        )
+        for index in range(values.shape[1])
+    }
+
+
+def validate_grouped_dataset(
+    labels: pd.Series | np.ndarray,
+    groups: pd.Series | np.ndarray | None,
+    *,
+    minimum_groups_per_class: int = MINIMUM_GROUPS_PER_CLASS,
+    classes: List[str] | np.ndarray | None = None,
+) -> Dict[str, int]:
+    """Reject evaluation data without independent source groups and class support."""
+    if groups is None:
+        raise ValueError(
+            "Cannot claim independent-field/project validation: the dataset has no "
+            "source_group identifier. Add a field, project, report, or publication ID."
+        )
+    group_values = pd.Series(np.asarray(groups), dtype="string").str.strip()
+    missing_groups = group_values.isna() | group_values.str.lower().isin(
+        ["", "nan", "none", "null"]
+    )
+    if missing_groups.any():
+        raise ValueError("source_group contains blank values; resolve them before evaluation.")
+
+    label_values = np.asarray(labels)
+    if label_values.ndim == 2:
+        positive_labels = np.any(label_values.astype(bool), axis=0)
+        negative_labels = np.any(~label_values.astype(bool), axis=0)
+        unsupported = np.flatnonzero(~(positive_labels & negative_labels))
+        if len(unsupported):
+            names = (
+                list(classes)
+                if classes is not None
+                else [str(index) for index in range(label_values.shape[1])]
             )
-    
-            fingerprints.append(
-                hashlib.sha1(
-                    payload.encode("utf-8")
-                ).hexdigest()[:16]
+            raise ValueError(
+                "Each technique must have both positive and negative profiles for "
+                "one-vs-rest learning. Unsupported techniques: "
+                + ", ".join(str(names[index]) for index in unsupported)
             )
-    
-    out["record_fingerprint"] = fingerprints
-    
-    return out.reset_index(drop=True)
+
+    support = class_group_support(labels, group_values, classes=classes)
+    sparse = {
+        label: count
+        for label, count in support.items()
+        if count < minimum_groups_per_class
+    }
+    if sparse:
+        details = ", ".join(f"{label}: {count}" for label, count in sorted(sparse.items()))
+        raise ValueError(
+            f"At least {minimum_groups_per_class} independent source groups per class "
+            f"are required for the grouped holdout and cross-validation. Sparse classes: {details}"
+        )
+    return support
+
+
+def grouped_holdout_indices(
+    labels: pd.Series | np.ndarray,
+    groups: pd.Series | np.ndarray,
+    *,
+    test_size: float = 0.2,
+    random_state: int = SEED,
+    minimum_groups_per_class: int = MINIMUM_GROUPS_PER_CLASS,
+    classes: List[str] | np.ndarray | None = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Create a reproducible group holdout with every technique represented."""
+    labels = np.asarray(labels)
+    groups = np.asarray(groups)
+    if not 0 < test_size < 1:
+        raise ValueError("test_size must be between 0 and 1.")
+    validate_grouped_dataset(
+        labels,
+        groups,
+        minimum_groups_per_class=minimum_groups_per_class,
+        classes=classes,
+    )
+    splitter = GroupShuffleSplit(
+        n_splits=100,
+        test_size=test_size,
+        random_state=random_state,
+    )
+    all_classes = np.arange(labels.shape[1]) if labels.ndim == 2 else np.unique(labels)
+    for train_indices, test_indices in splitter.split(
+        np.zeros(len(labels)), labels, groups
+    ):
+        train_labels = labels[train_indices]
+        test_labels = labels[test_indices]
+        if labels.ndim == 2:
+            train_classes = np.flatnonzero(np.any(train_labels.astype(bool), axis=0))
+            test_classes = np.flatnonzero(np.any(test_labels.astype(bool), axis=0))
+            train_negative = np.flatnonzero(np.any(~train_labels.astype(bool), axis=0))
+            test_negative = np.flatnonzero(np.any(~test_labels.astype(bool), axis=0))
+        else:
+            train_classes = np.unique(train_labels)
+            test_classes = np.unique(test_labels)
+            train_negative = test_negative = all_classes
+        if (
+            set(train_classes) == set(all_classes)
+            and set(test_classes) == set(all_classes)
+            and set(train_negative) == set(all_classes)
+            and set(test_negative) == set(all_classes)
+        ):
+            return train_indices, test_indices
+    raise ValueError(
+        "Could not form a grouped holdout containing every technique in both sets. "
+        "Collect more independent source groups or review the multi-label distribution."
+    )
+
+
+def grouped_cv_splits(
+    labels: pd.Series | np.ndarray,
+    groups: pd.Series | np.ndarray,
+    *,
+    max_splits: int = 5,
+) -> List[Tuple[np.ndarray, np.ndarray]]:
+    """Build grouped CV folds and reject folds missing a technique."""
+    labels = np.asarray(labels)
+    groups = np.asarray(groups)
+    support = class_group_support(labels, groups)
+    n_splits = min(max_splits, min(support.values(), default=0))
+    if n_splits < 2:
+        raise ValueError("At least two independent source groups per class are required for CV.")
+
+    all_classes = set(
+        np.arange(labels.shape[1]) if labels.ndim == 2 else np.unique(labels)
+    )
+    splitter = GroupKFold(n_splits=n_splits)
+    splits = []
+    for train_indices, validation_indices in splitter.split(
+        np.zeros(len(labels)), labels, groups
+    ):
+        validation_labels = labels[validation_indices]
+        if labels.ndim == 2:
+            train_labels = labels[train_indices]
+            train_classes = np.flatnonzero(
+                np.any(train_labels.astype(bool), axis=0)
+            )
+            train_negative = np.flatnonzero(np.any(~train_labels.astype(bool), axis=0))
+            validation_classes = np.flatnonzero(
+                np.any(validation_labels.astype(bool), axis=0)
+            )
+            validation_negative = np.flatnonzero(
+                np.any(~validation_labels.astype(bool), axis=0)
+            )
+        else:
+            train_classes = np.unique(labels[train_indices])
+            validation_classes = np.unique(validation_labels)
+            train_negative = validation_negative = all_classes
+        if (
+            set(train_classes) == all_classes
+            and set(validation_classes) == all_classes
+            and set(train_negative) == all_classes
+            and set(validation_negative) == all_classes
+        ):
+            splits.append((train_indices, validation_indices))
+    if len(splits) < 2:
+        raise ValueError(
+            "Fewer than two grouped CV folds contain every technique. "
+            "Collect more independent source groups per class."
+        )
+    return splits
 
 def build_feature_table(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, List[str]]:
     X = pd.DataFrame(index=df.index)
@@ -177,18 +453,32 @@ def build_feature_table(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, List
 
     return X.astype(float), df["technique"].copy(), list(X.columns)
 
-def top_k_accuracy(y_true, proba, k=3):
-    pred = np.argsort(np.asarray(proba), axis=1)[:, -k:]
-    return float(np.mean([y in row for y, row in zip(np.asarray(y_true), pred)]))
+def multilabel_top_k_metrics(y_true, probabilities, k=3):
+    """Return sample-level top-k hit rate and recall for multi-label targets."""
+    y_true = np.asarray(y_true, dtype=bool)
+    probabilities = np.asarray(probabilities, dtype=float)
+    if y_true.shape != probabilities.shape:
+        raise ValueError("Target and probability matrices must have the same shape.")
+    top_indices = np.argsort(probabilities, axis=1)[:, -k:]
+    hits = np.take_along_axis(y_true, top_indices, axis=1).sum(axis=1)
+    true_counts = y_true.sum(axis=1)
+    return {
+        "top_k_hit_rate": float(np.mean(hits > 0)),
+        "top_k_recall": float(np.mean(hits / np.maximum(true_counts, 1))),
+    }
 
 def safe_model_filename(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")
 
 
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split, StratifiedKFold, RandomizedSearchCV
-from sklearn.metrics import balanced_accuracy_score, f1_score, matthews_corrcoef, log_loss
+from sklearn.model_selection import (
+    GroupKFold,
+    GroupShuffleSplit,
+    RandomizedSearchCV,
+)
+from sklearn.multiclass import OneVsRestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
@@ -202,8 +492,8 @@ def optional_models():
         from xgboost import XGBClassifier
         models["XGBoost"] = (
             XGBClassifier(
-                objective="multi:softprob",
-                eval_metric="mlogloss",
+                objective="binary:logistic",
+                eval_metric="logloss",
                 tree_method="hist",
                 random_state=SEED,
                 n_jobs=-1,
@@ -225,6 +515,7 @@ def optional_models():
             CatBoostClassifier(
                 verbose=False,
                 random_seed=SEED,
+                loss_function="Logloss",
                 auto_class_weights="Balanced",
             ),
             {
@@ -238,7 +529,8 @@ def optional_models():
         print("CatBoost unavailable:", exc)
     return models
 
-def benchmark_models(X_train, y_train, X_test, y_test, le):
+def benchmark_models(X_train, y_train, groups_train):
+    """Select multi-label estimators using grouped CV only, never the final holdout."""
     models = {
         "LogisticRegression": (
             Pipeline([
@@ -330,15 +622,20 @@ def benchmark_models(X_train, y_train, X_test, y_test, le):
     }
     models.update(optional_models())
 
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED)
+    cv = grouped_cv_splits(y_train, groups_train)
     rows, fitted = [], {}
 
     for name, (estimator, params) in models.items():
         print(f"\n=== {name} ===")
         n_iter = min(10, max(1, sum(len(v) for v in params.values())))
+        multi_label_estimator = OneVsRestClassifier(estimator)
+        multi_label_params = {
+            f"estimator__{parameter}": values
+            for parameter, values in params.items()
+        }
         search = RandomizedSearchCV(
-            estimator=estimator,
-            param_distributions=params,
+            estimator=multi_label_estimator,
+            param_distributions=multi_label_params,
             n_iter=n_iter,
             scoring="f1_macro",
             cv=cv,
@@ -349,24 +646,17 @@ def benchmark_models(X_train, y_train, X_test, y_test, le):
         )
         search.fit(X_train, y_train)
         fitted[name] = search.best_estimator_
-        proba = search.best_estimator_.predict_proba(X_test)
-        pred = np.argmax(proba, axis=1)
-
         rows.append({
             "Model": name,
             "CV_MacroF1": search.best_score_,
-            "Test_BalancedAccuracy": balanced_accuracy_score(y_test, pred),
-            "Test_MacroF1": f1_score(y_test, pred, average="macro"),
-            "Test_WeightedF1": f1_score(y_test, pred, average="weighted"),
-            "Test_MCC": matthews_corrcoef(y_test, pred),
-            "Test_LogLoss": log_loss(y_test, proba, labels=np.arange(len(le.classes_))),
-            "Test_Top3": top_k_accuracy(y_test, proba, min(3, proba.shape[1])),
+            "CV_Folds": len(cv),
+            "Best_Params": json.dumps(search.best_params_, sort_keys=True, default=str),
         })
 
     return (
         pd.DataFrame(rows).sort_values(
-            ["Test_MacroF1", "Test_Top3", "CV_MacroF1"],
-            ascending=[False, False, False],
+            ["CV_MacroF1"],
+            ascending=[False],
         ).reset_index(drop=True),
         fitted,
     )

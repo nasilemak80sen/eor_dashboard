@@ -130,6 +130,45 @@ def status_grid(items: Iterable[tuple[str, bool]]) -> None:
         )
 
 
+def workflow_steps(steps: Iterable[str], current_step: int = 0) -> None:
+    materialized = list(steps)
+    if not materialized:
+        return
+
+    html = ['<div class="atlas-workflow">']
+    for index, step in enumerate(materialized):
+        state = "complete" if index < current_step else "active" if index == current_step else "pending"
+        html.append(
+            f'<div class="atlas-workflow-step {state}"><span class="atlas-workflow-index">{index + 1}</span><span>{escape(step)}</span></div>'
+        )
+    html.append('</div>')
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def render_decision_summary(title: str, subtitle: str, status: str, details: Iterable[tuple[str, Any]]) -> None:
+    items = list(details)
+    body = "".join(
+        f'<div class="decision-detail"><span>{escape(str(label))}</span><strong>{escape(_display(value))}</strong></div>'
+        for label, value in items
+    )
+    st.markdown(
+        f'''
+        <div class="decision-summary-card">
+            <div class="decision-summary-header">
+                <div>
+                    <div class="decision-summary-kicker">Decision summary</div>
+                    <div class="decision-summary-title">{escape(title)}</div>
+                </div>
+                <span class="decision-summary-status {escape(status.lower())}">{escape(status)}</span>
+            </div>
+            <div class="decision-summary-subtitle">{escape(subtitle)}</div>
+            <div class="decision-detail-grid">{body}</div>
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+
 def insight_cards(items: Iterable[tuple[str, str, str]]) -> None:
     materialized = _materialize(items)
     if not materialized:

@@ -56,9 +56,18 @@ def render_top_nav() -> str:
     return selected
 
 
+def _status_state(*, workbook: bool, model: bool) -> list[tuple[str, str, str]]:
+    if workbook and model:
+        return [("Excel Gate", "READY", "status-ok"), ("CatBoost", "READY", "status-ok"), ("Decision Fusion", "READY", "status-ok")]
+    if workbook or model:
+        return [("Excel Gate", "READY" if workbook else "CHECK", "status-ok" if workbook else "status-check"), ("CatBoost", "READY" if model else "CHECK", "status-ok" if model else "status-check"), ("Decision Fusion", "CHECK", "status-check")]
+    return [("Excel Gate", "CHECK", "status-check"), ("CatBoost", "CHECK", "status-check"), ("Decision Fusion", "MISSING", "status-warning")]
+
+
 def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
     """Keep the sidebar as a secondary system/status panel only."""
     state = system_state or {}
+    status_rows = _status_state(workbook=bool(state.get("workbook")), model=bool(state.get("model")))
 
     st.sidebar.markdown(
         """
@@ -74,13 +83,7 @@ def render_sidebar(*, system_state: dict[str, bool] | None = None) -> None:
         unsafe_allow_html=True,
     )
 
-    for label, ready in (
-        ("Excel Gate", bool(state.get("workbook"))),
-        ("CatBoost", bool(state.get("model"))),
-        ("Decision Fusion", True),
-    ):
-        status_class = "status-ok" if ready else "status-check"
-        status_text = "READY" if ready else "CHECK"
+    for label, status_text, status_class in status_rows:
         st.sidebar.markdown(
             f'<div class="sidebar-status-row"><span>{label}</span><span class="{status_class}">{status_text}</span></div>',
             unsafe_allow_html=True,

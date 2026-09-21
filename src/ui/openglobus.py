@@ -233,14 +233,14 @@ function renderLayer(){
     const entityOptions = {
       name: record.name,
       lonlat: [record.longitude,record.latitude],
-      billboard: {src: markerSvg(record.value,selected),size:[46,46],offset:[0,20]},
+      billboard: {src: markerSvg(record.value,selected),size:[36,36],offset:[0,16]},
       properties: record
     };
     if(showLabels || selected){
       entityOptions.label = {
         text: record.name + valueText,
         size: selected ? 15 : 11,
-        offset: [0,30,0],
+        offset: [0,24,0],
         color: selected ? "rgba(32,65,154,.98)" : "rgba(24,50,56,.94)",
         outlineColor: "rgba(255,255,255,.96)",
         outline: 2
@@ -270,7 +270,10 @@ document.getElementById("flyTo").addEventListener("click",()=>{if(selectedRecord
 document.getElementById("resetView").addEventListener("click",()=>{
   clearDetails();
   if(globe && globe.planet && globe.planet.camera){
-    globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
+    globe.planet.camera.flyLonLat(
+      new LonLat(center.lon,center.lat,center.height),
+      {duration:700}
+    );
   }
 });
 
@@ -323,10 +326,6 @@ try{
     globe.renderer.addControl(new control.KeyboardNavigation());
   }
 
-  if(globe.planet && globe.planet.camera){
-    globe.planet.camera.setLonLat(new LonLat(center.lon,center.lat,center.height));
-  }
-
   globe.renderer.events.on("lclick",event=>{
     const picked = event.pickingObject;
     if(!picked || !picked.properties || !picked.properties.name) return;
@@ -343,8 +342,23 @@ try{
     );
   }
 
-  status.classList.add("hidden");
-  window.setTimeout(()=>window.dispatchEvent(new Event("resize")),250);
+  // OpenGlobus 0.28.7 does not activate the renderer by default.
+  // Starting it explicitly is required for the planet and vector layer to draw.
+  globe.start();
+  const resizeRenderer = () => {
+    if(globe && globe.renderer && globe.renderer.isInitialized()){
+      globe.renderer.resize();
+    }
+  };
+  window.addEventListener("resize",resizeRenderer);
+  window.requestAnimationFrame(()=>{
+    resizeRenderer();
+    globe.planet.camera.flyLonLat(
+      new LonLat(center.lon,center.lat,center.height),
+      {duration:700}
+    );
+    window.requestAnimationFrame(()=>status.classList.add("hidden"));
+  });
 }catch(error){
   console.error("OpenGlobus initialization failed:",error);
   status.innerHTML =

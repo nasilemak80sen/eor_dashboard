@@ -74,6 +74,30 @@ def inject_theme() -> None:
         .insight-tag {{ display:inline-block;font-size:.63rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--petronas-purple);margin-bottom:.25rem; }} .insight-title {{ color:#162F38;font-weight:700;font-size:.88rem; }} .insight-body {{ color:var(--atlas-muted);font-size:.76rem;margin-top:.2rem;line-height:1.45; }}
         .context-bar {{ display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 1rem;background:#fff;border:1px solid var(--atlas-border);border-radius:14px;box-shadow:0 4px 14px rgba(16,24,40,.03);margin-bottom:1rem; }}
         .context-label {{ color:#98A2B3;font-size:.64rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em; }} .context-value {{ color:#152D36;font-size:.92rem;font-weight:700;margin-top:.15rem; }}
+        .atlas-workflow {{ display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;margin:0 0 1rem; }}
+        .atlas-workflow-step {{ display:flex;align-items:center;gap:.75rem;padding:.7rem .8rem;border:1px solid var(--atlas-border);border-radius:12px;background:#fff;min-height:56px;color:#475467; }}
+        .atlas-workflow-step.active {{ border-color:rgba(0,161,156,.6);background:rgba(0,161,156,.05);color:#0F4B4A; }}
+        .atlas-workflow-step.complete {{ border-color:rgba(0,161,156,.5);background:rgba(52,211,153,.08);color:#0F4B4A; }}
+        .atlas-workflow-step.pending {{ opacity:.8; }}
+        .atlas-workflow-index {{ display:inline-flex;align-items:center;justify-content:center;width:1.7rem;height:1.7rem;border-radius:999px;background:#EAF7F6;color:#0F4B4A;font-size:.72rem;font-weight:800; }}
+        .decision-summary-card {{ background:linear-gradient(135deg,#ffffff 0%,#f6fbfa 100%);border:1px solid rgba(0,161,156,.23);border-radius:16px;padding:1rem 1rem 0.75rem;box-shadow:0 8px 22px rgba(15,57,65,.05);margin:1rem 0; }}
+        .decision-summary-header {{ display:flex;align-items:flex-start;justify-content:space-between;gap:1rem; }}
+        .decision-summary-kicker {{ font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#00A19C; }}
+        .decision-summary-title {{ font-size:1.15rem;font-weight:700;color:#162A32;margin-top:.2rem; }}
+        .decision-summary-subtitle {{ color:var(--atlas-muted);font-size:.82rem;margin:.35rem 0 .85rem; }}
+        .decision-summary-status {{ display:inline-flex;align-items:center;justify-content:center;padding:.3rem .6rem;border-radius:999px;font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase; }}
+        .decision-summary-status.ready {{ background:rgba(16,185,129,.12);color:#047857; }}
+        .decision-summary-status.warning {{ background:rgba(251,191,36,.12);color:#B45309; }}
+        .decision-summary-status.missing {{ background:rgba(148,163,184,.12);color:#475467; }}
+        .decision-detail-grid {{ display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.7rem; }}
+        .decision-detail {{ display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.68rem .8rem;border:1px solid var(--atlas-border);border-radius:10px;background:#fff; }}
+        .decision-detail span {{ color:#667085;font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase; }}
+        .decision-detail strong {{ color:#111827;font-size:.9rem;font-weight:700; }}
+        .sidebar-status-row {{ display:flex;align-items:center;justify-content:space-between;padding:.48rem .15rem;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:.3rem; }}
+        .sidebar-status-row span:first-child {{ color:rgba(234,247,246,.8);font-size:.76rem;letter-spacing:.02em; }}
+        .status-ok {{ color:#C4F1D8 !important; font-weight:700; font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; }}
+        .status-check {{ color:#F5D387 !important; font-weight:700; font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; }}
+        .status-warning {{ color:#F7C1C1 !important; font-weight:700; font-size:.66rem; text-transform:uppercase; letter-spacing:.08em; }}
 
         /* Main-content controls: high contrast and deliberately quiet. */
         div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {{ border-radius:10px;min-height:2.5rem;font-weight:600;border:1px solid #D0D5DD;background:#fff;color:#182230; }}

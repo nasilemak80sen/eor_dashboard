@@ -67,7 +67,7 @@ def render_eor_intelligence_research_panel(
     st.dataframe(ml_df, hide_index=True, use_container_width=True)
 
     st.caption(
-        "These are learned ranking probabilities from the research model. "
+        "These are independent per-technique research scores; they do not need to sum to 100%. "
         "They are not engineering feasibility gates and do not override deterministic screening."
     )
 

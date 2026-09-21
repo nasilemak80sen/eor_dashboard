@@ -78,6 +78,7 @@ class ResearchModelService:
             "feature_count": len(self.bundle["feature_names"]),
             "training_rows": self.bundle.get("training_rows"),
             "input_schema_version": self.bundle.get("input_schema_version"),
+            "target_type": self.bundle.get("target_type", "single_label"),
         }
 
     def predict_top3_from_ranges(self, **kwargs) -> List[Tuple[str, float]]:
@@ -86,6 +87,8 @@ class ResearchModelService:
         X = build_feature_row(**kwargs)
         X = X.reindex(columns=self.bundle["feature_names"], fill_value=0.0)
         proba = np.asarray(self.bundle["model"].predict_proba(X)[0], dtype=float)
-        labels = self.bundle["label_encoder"].inverse_transform(np.arange(len(proba)))
+        labels = self.bundle["label_encoder"].classes_
+        if len(labels) != len(proba):
+            raise ValueError("Model output count does not match the saved technique labels.")
         order = np.argsort(proba)[::-1][:min(3, len(proba))]
         return [(str(labels[i]), float(proba[i])) for i in order]
