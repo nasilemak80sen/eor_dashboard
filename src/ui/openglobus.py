@@ -283,7 +283,7 @@ function renderLayer(){
   const entities = records.map(record => {
     const selected = selectedRecord && selectedRecord.name === record.name && selectedRecord.latitude === record.latitude && selectedRecord.longitude === record.longitude;
     const valueText = record.value === null ? "" : " · " + formatValue(record.value);
-    return new OGEntity({
+    const entityOptions = {
       name: record.name,
       lonlat: [record.longitude, record.latitude],
       billboard: {
@@ -291,16 +291,21 @@ function renderLayer(){
         size: [46,46],
         offset: [0,20]
       },
-      label: showLabels || selected ? {
+      properties: record
+    };
+
+    if (showLabels || selected) {
+      entityOptions.label = {
         text: record.name + valueText,
         size: selected ? 15 : 11,
         offset: [0,30,0],
         color: selected ? "rgba(32,65,154,.98)" : "rgba(24,50,56,.94)",
         outlineColor: "rgba(255,255,255,.96)",
         outline: 2
-      } : {text:""},
-      properties: record
-    });
+      };
+    }
+
+    return new OGEntity(entityOptions);
   });
   markerLayer.setEntities(entities);
 }
@@ -393,12 +398,26 @@ try {
     autoActivate: false
   });
 
+  startupStage = "initializing WebGL renderer";
+  globe.renderer.initialize();
+  const handler = globe.renderer && globe.renderer.handler;
+  if (!globe.renderer.isInitialized() || !handler || !handler.isInitialized() || !handler.gl) {
+    throw new Error(
+      "WebGL could not be initialized in the Streamlit iframe. " +
+      "Check browser WebGL/GPU availability."
+    );
+  }
+
+  startupStage = "setting initial camera";
+  globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
+
   startupStage = "creating marker layer";
   markerLayer = new Vector("EOR Atlas Records", {
     entities: [],
     pickingEnabled: true,
     async: false
   });
+
   startupStage = "adding marker layer to globe";
   markerLayer.addTo(globe.planet);
 
@@ -412,24 +431,28 @@ try {
     });
   }
 
-  startupStage = "setting initial camera";
-  globe.planet.camera.setLonLat(new OGLonLat(center.lon,center.lat,center.height));
   startupStage = "rendering map entities";
   renderLayer();
+
   startupStage = "starting renderer";
   if(globe.renderer && globe.renderer.events){
     const markRendererReady = () => {
       rendererReady = true;
-      status.classList.add("hidden");
       globe.renderer.events.off("postdraw", markRendererReady);
     };
     globe.renderer.events.on("postdraw", markRendererReady);
   }
+
   globe.start();
-  status.textContent = "Rendering 3D Earth…";
+  rendererReady = true;
+  status.classList.add("hidden");
+
   window.setTimeout(() => {
-    if (!rendererReady) {
-      status.textContent = "Rendering 3D Earth · waiting for the first frame…";
+    if (!globe || !globe.renderer || !globe.renderer.handler || !globe.renderer.handler.isInitialized()) {
+      showRuntimeFailure(
+        new Error("OpenGlobus renderer stopped before producing a frame."),
+        "renderer startup"
+      );
     }
   }, 5000);
 } catch(error){
