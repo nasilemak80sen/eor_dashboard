@@ -59,10 +59,11 @@ def test_openglobus_matches_proven_competency_dashboard_bootstrap():
     assert "new GlobusRgbTerrain()" in html
     assert "resourcesSrc:" in html
     assert "fontsSrc:" in html
-    assert 'msaa:0' in html
-    assert 'deferredDisabled:true' in html
-    assert 'atmosphereEnabled:false' in html
+    assert 'msaa:4' in html
+    assert 'atmosphereEnabled:true' in html
     assert 'idleMode:false' in html
+    assert "rendercompleted" in html
+    assert "terraincompleted" in html
     assert 'navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}' in html
 
     # The old EOR implementation added cold-start work before OpenGlobus even
