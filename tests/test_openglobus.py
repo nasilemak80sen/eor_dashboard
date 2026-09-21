@@ -50,10 +50,14 @@ def test_openglobus_html_uses_requested_earth_configuration():
     assert "new GlobusRgbTerrain()" in html
     assert "layers: [new Bing()]" in html
     assert 'scene.SkyBox.createDefault(resourceRoot + "/")' in html
+    assert "skybox/px.webp" not in html
     assert "autoActivate: false" in html
     assert "globe.renderer.initialize();" in html
     assert "handler.isInitialized()" in html
     assert "globe.start();" in html
+    assert "let loadingOverlayHidden = false;" in html
+    assert 'hideLoadingOverlay("WebGL renderer initialized")' in html
+    assert 'hideLoadingOverlay("first rendered frame")' in html
     assert "startupStage = \"rendering map entities\"" in html
     assert "const markerMaxValue = records.reduce" in html
     assert "Math.max(...magnitudes" not in html
