@@ -51,6 +51,8 @@ def test_openglobus_html_uses_requested_earth_configuration():
     assert "layers: [new Bing()]" in html
     assert 'scene.SkyBox.createDefault(resourceRoot + "/")' in html
     assert "autoActivate: false" in html
+    assert "globe.renderer.initialize();" in html
+    assert "handler.isInitialized()" in html
     assert "globe.start();" in html
     assert "startupStage = \"rendering map entities\"" in html
     assert "const markerMaxValue = records.reduce" in html
@@ -117,6 +119,7 @@ def test_openglobus_dynamic_import_constructors_are_available_to_helpers():
     assert "let OGLonLat = null;" in html
     assert "OGEntity = Entity;" in html
     assert "OGLonLat = LonLat;" in html
-    assert "new OGEntity({" in html
+    assert "new OGEntity(entityOptions)" in html
+    assert "if (showLabels || selected)" in html
     assert "new OGLonLat(record.longitude" in html
     assert "new OGLonLat(center.lon" in html
