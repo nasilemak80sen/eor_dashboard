@@ -39,6 +39,39 @@ def test_decision_pages_use_submit_driven_forms():
     assert "st.form_submit_button(" in intelligence
 
 
+def test_legacy_app_is_import_safe():
+    source = (ROOT / "src" / "app_2.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    top_level_streamlit_calls = []
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom)):
+            continue
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call) and isinstance(child.func, ast.Attribute):
+                if isinstance(child.func.value, ast.Name) and child.func.value.id == "st":
+                    top_level_streamlit_calls.append(child.func.attr)
+
+    assert "set_page_config" not in top_level_streamlit_calls
+    assert "markdown" not in top_level_streamlit_calls
+    assert "def configure_legacy_page()" in source
+    assert "configure_legacy_page()" in source
+
+
+def test_production_entrypoint_configures_streamlit_before_rendering():
+    source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    main = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "main")
+
+    first_stmt = main.body[0]
+    assert isinstance(first_stmt, ast.Expr)
+    assert isinstance(first_stmt.value, ast.Call)
+    assert isinstance(first_stmt.value.func, ast.Attribute)
+    assert isinstance(first_stmt.value.func.value, ast.Name)
+    assert first_stmt.value.func.value.id == "st"
+    assert first_stmt.value.func.attr == "set_page_config"
+
+
 def test_application_services_are_cached_across_reruns():
     source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
     assert "@st.cache_resource(show_spinner=False)" in source
