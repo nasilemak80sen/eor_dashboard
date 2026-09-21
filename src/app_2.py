@@ -71,14 +71,20 @@ SCREENING_INPUT_DEFAULTS = {
 
 
 # =============================================================================
-# PAGE CONFIG / STYLE
+# LEGACY PAGE CONFIG / STYLE
 # =============================================================================
 
-st.set_page_config(
-    page_title=settings.ui_config["page_title"],
-    page_icon=settings.ui_config["page_icon"],
-    layout=settings.ui_config["layout"],
-)
+def configure_legacy_page() -> None:
+    """Configure the legacy Streamlit UI only when app_2 is run directly.
+
+    app_2 is also imported by the production engine, so page configuration
+    must never execute at module import time.
+    """
+    st.set_page_config(
+        page_title=settings.ui_config["page_title"],
+        page_icon=settings.ui_config["page_icon"],
+        layout=settings.ui_config["layout"],
+    )
 
 st.markdown(
     """
@@ -174,6 +180,9 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+
+
 
 
 # =============================================================================
@@ -1134,6 +1143,7 @@ def render_sidebar_status(services: Dict[str, Any]):
 # =============================================================================
 
 def main():
+    configure_legacy_page()
     st.title("EOR Atlas – Decision Support Platform with Machine Learning Classifications")
     st.caption("Engineering-first EOR dashboard with deterministic screening, independent fuzzy suitability, and CatBoost intelligence.")
 
