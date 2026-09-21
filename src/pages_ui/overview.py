@@ -151,13 +151,18 @@ def render() -> None:
     ])
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    portfolio_tab, signals_tab, journey_tab = st.tabs(["Portfolio Snapshot", "Opportunity Signals", "Decision Journey"])
 
-    with portfolio_tab:
-        if isinstance(map_df, pd.DataFrame) and not map_df.empty:
-            _render_spatial_snapshot(map_df)
-        else:
-            st.info("The workbook map sheet is unavailable in this session.")
+    # Keep the WebGL component outside st.tabs. Streamlit 1.39 has a
+    # confirmed iframe/custom-component sizing issue in tab containers, which
+    # can initialize a WebGL canvas at an invalid size. The proven competency
+    # dashboard also renders its globe in a normal visible page container.
+    if isinstance(map_df, pd.DataFrame) and not map_df.empty:
+        _render_spatial_snapshot(map_df)
+    else:
+        st.info("The workbook map sheet is unavailable in this session.")
+
+    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    signals_tab, journey_tab = st.tabs(["Opportunity Signals", "Decision Journey"])
 
     with signals_tab:
         left, right = st.columns([1.4, 1])
