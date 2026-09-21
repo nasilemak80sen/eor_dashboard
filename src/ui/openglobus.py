@@ -22,6 +22,14 @@ OPEN_GLOBUS_VERSION = "0.28.7"
 # designed to serve ES modules cross-origin instead.
 OPEN_GLOBUS_CANDIDATES = [
     {
+        "name": "esm.sh (bundled)",
+        "js": f"https://esm.sh/@openglobus/og@{OPEN_GLOBUS_VERSION}?bundle",
+        "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
+        "resources": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res",
+        "fonts": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/fonts",
+        "skybox": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/res/skybox/",
+    },
+    {
         "name": "jsDelivr",
         "js": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.es.js",
         "css": f"https://cdn.jsdelivr.net/npm/@openglobus/og@{OPEN_GLOBUS_VERSION}/lib/og.css",
@@ -49,11 +57,11 @@ OPEN_GLOBUS_CANDIDATES = [
 
 # Retained for compatibility with callers/tests that referenced the original
 # single-endpoint constants.
-OPEN_GLOBUS_JS = OPEN_GLOBUS_CANDIDATES[0]["js"]
-OPEN_GLOBUS_CSS = OPEN_GLOBUS_CANDIDATES[0]["css"]
-OPEN_GLOBUS_RESOURCES = OPEN_GLOBUS_CANDIDATES[0]["resources"]
-OPEN_GLOBUS_FONTS = OPEN_GLOBUS_CANDIDATES[0]["fonts"]
-OPEN_GLOBUS_SKYBOX = OPEN_GLOBUS_CANDIDATES[0]["skybox"]
+OPEN_GLOBUS_JS = next(candidate["js"] for candidate in OPEN_GLOBUS_CANDIDATES if candidate["name"] == "jsDelivr")
+OPEN_GLOBUS_CSS = next(candidate["css"] for candidate in OPEN_GLOBUS_CANDIDATES if candidate["name"] == "jsDelivr")
+OPEN_GLOBUS_RESOURCES = next(candidate["resources"] for candidate in OPEN_GLOBUS_CANDIDATES if candidate["name"] == "jsDelivr")
+OPEN_GLOBUS_FONTS = next(candidate["fonts"] for candidate in OPEN_GLOBUS_CANDIDATES if candidate["name"] == "jsDelivr")
+OPEN_GLOBUS_SKYBOX = next(candidate["skybox"] for candidate in OPEN_GLOBUS_CANDIDATES if candidate["name"] == "jsDelivr")
 
 
 def _safe_float(value: Any) -> float | None:
@@ -189,10 +197,12 @@ html,body{width:100%;height:100%;margin:0;padding:0;overflow:hidden;background:t
   <div id="attribution">OpenGlobus · Bing Maps imagery · EOR Atlas</div>
 </div>
 
-<script type="module">
+<script>
+window.__EOR_GLOBUS_BOOT_STARTED__ = true;
 const records = __PAYLOAD__;
 const assetCandidates = __ASSET_CANDIDATES__;
 const status = document.getElementById("status");
+status.textContent = "Starting 3D Earth…";
 const details = document.getElementById("details");
 const detailName = document.getElementById("detailName");
 const detailValue = document.getElementById("detailValue");
@@ -340,7 +350,7 @@ document.getElementById("resetView").addEventListener("click",()=>{
   }
 });
 
-const OPEN_GLOBUS_IMPORT_TIMEOUT_MS = 8000;
+const OPEN_GLOBUS_IMPORT_TIMEOUT_MS = 12000;
 
 function importWithTimeout(url){
   return Promise.race([
@@ -475,6 +485,18 @@ try {
 }
 
 boot();
+
+window.setTimeout(() => {
+  if (!rendererReady && status && !status.classList.contains("hidden")) {
+    const text = status.textContent || "";
+    if (text === "Starting 3D Earth…" || text === "Loading 3D Earth…") {
+      showRuntimeFailure(
+        new Error("The OpenGlobus bootstrap did not reach the asset loader."),
+        "browser script bootstrap"
+      );
+    }
+  }
+}, 3000);
 </script>
 </body>
 </html>"""
