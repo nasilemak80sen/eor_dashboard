@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ui.components import insight_cards, kpi_cards, metric_cards, section_title
+from ui.portfolio_globe import build_portfolio_globe, portfolio_globe_config
 
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
@@ -58,8 +59,6 @@ def _map_summary(map_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
-    from ui.openglobus import render_openglobus_map
-
     section_title(
         "Portfolio Snapshot",
         "Start with geography and concentration, then drill into field-level EOR evidence.",
@@ -90,7 +89,7 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
 
     section_title(
         "Portfolio Geography",
-        "Use the full-width map to explore field distribution and inspect EOR-method coverage at field level.",
+        "Explore the EOR field footprint first with a lightweight interactive globe; enable the advanced 3D renderer only when needed.",
     )
     focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
     focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
@@ -98,28 +97,66 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
 
     if visible.empty:
         st.info("No mapped fields are available for the selected focus.")
+        return
+
+    if focus == "All fields":
+        globe_lat, globe_lon = 4.2, 102.0
     else:
-        render_openglobus_map(
-            visible,
-            latitude="Latitude",
-            longitude="Longitude",
-            name="Field",
-            value="Methods",
-            value_label="Distinct EOR methods",
-            detail_columns=[
-                ("Distinct EOR methods", "Methods"),
-                ("EOR methods", "EOR Methods"),
-            ],
-            title="EOR Atlas · Portfolio Geography",
-            subtitle="OpenGlobus 3D view of mapped fields and their EOR-method coverage.",
-            height=620,
-            camera_height=12000000 if focus == "All fields" else 5000000,
-            show_labels=False,
-        )
+        globe_lat = float(visible.iloc[0]["Latitude"])
+        globe_lon = float(visible.iloc[0]["Longitude"])
+
+    globe = build_portfolio_globe(
+        visible,
+        latitude="Latitude",
+        longitude="Longitude",
+        name="Field",
+        value="Methods",
+        value_label="Distinct EOR methods",
+        height=620,
+        center_lat=globe_lat,
+        center_lon=globe_lon,
+    )
+    st.plotly_chart(
+        globe,
+        use_container_width=True,
+        key="overview_portfolio_globe",
+        config=portfolio_globe_config(),
+    )
+    st.caption(
+        "Fast portfolio globe: each marker represents a mapped field, with marker size and color showing "
+        "the number of distinct EOR methods. Hover a marker for field-level details."
+    )
+
+    with st.expander("Advanced 3D Earth — OpenGlobus", expanded=False):
         st.caption(
-            "Each marker represents a mapped field. Marker size follows the number of distinct EOR methods; "
-            "click a marker to inspect its EOR-method coverage."
+            "Use this mode when you specifically need the interactive 3D Earth/terrain experience. "
+            "It is intentionally opt-in so the Overview does not block on WebGL and remote module startup."
         )
+        enable_3d = st.checkbox(
+            "Enable OpenGlobus 3D renderer",
+            value=False,
+            key="overview_enable_openglobus",
+        )
+        if enable_3d:
+            from ui.openglobus import render_openglobus_map
+
+            render_openglobus_map(
+                visible,
+                latitude="Latitude",
+                longitude="Longitude",
+                name="Field",
+                value="Methods",
+                value_label="Distinct EOR methods",
+                detail_columns=[
+                    ("Distinct EOR methods", "Methods"),
+                    ("EOR methods", "EOR Methods"),
+                ],
+                title="EOR Atlas · Portfolio Geography · OpenGlobus",
+                subtitle="Advanced 3D view of mapped fields and their EOR-method coverage.",
+                height=620,
+                camera_height=12000000 if focus == "All fields" else 5000000,
+                show_labels=False,
+            )
 
 
 def render() -> None:
