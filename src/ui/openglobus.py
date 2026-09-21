@@ -202,7 +202,15 @@ let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
 let rendererReady = false;
+let loadingOverlayHidden = false;
 let startupStage = "initializing";
+
+function hideLoadingOverlay(reason){
+  if (loadingOverlayHidden) return;
+  loadingOverlayHidden = true;
+  status.classList.add("hidden");
+  console.info("OpenGlobus loading overlay hidden:", reason);
+}
 
 function showRuntimeFailure(error, stage){
   const message = error && error.message ? error.message : String(error);
@@ -213,6 +221,7 @@ function showRuntimeFailure(error, stage){
       "</span><br><span style='font-size:10px;color:#63767a'>Stage: " +
       escapeHtml(stage || startupStage) +
       "</span>";
+    status.classList.remove("hidden");
   }
 }
 
@@ -438,21 +447,25 @@ try {
   if(globe.renderer && globe.renderer.events){
     const markRendererReady = () => {
       rendererReady = true;
+      hideLoadingOverlay("first rendered frame");
       globe.renderer.events.off("postdraw", markRendererReady);
     };
     globe.renderer.events.on("postdraw", markRendererReady);
   }
 
   globe.start();
-  rendererReady = true;
-  status.classList.add("hidden");
+  hideLoadingOverlay("WebGL renderer initialized");
 
   window.setTimeout(() => {
-    if (!globe || !globe.renderer || !globe.renderer.handler || !globe.renderer.handler.isInitialized()) {
-      showRuntimeFailure(
-        new Error("OpenGlobus renderer stopped before producing a frame."),
-        "renderer startup"
-      );
+    if (!rendererReady) {
+      if (!globe || !globe.renderer || !globe.renderer.handler || !globe.renderer.handler.isInitialized()) {
+        showRuntimeFailure(
+          new Error("OpenGlobus renderer stopped before producing a frame."),
+          "renderer startup"
+        );
+      } else {
+        console.warn("OpenGlobus renderer is initialized but has not emitted its first postdraw frame.");
+      }
     }
   }, 5000);
 } catch(error){
