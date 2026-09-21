@@ -11,6 +11,13 @@ def test_hybrid_app_direct_entrypoint_delegates_to_eor_atlas():
     assert "tabs = st.tabs(" not in source
 
 
+def test_eor_atlas_does_not_depend_on_private_hybrid_app_internals():
+    source = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    assert "engine._app" not in source
+    assert 'logging.getLogger("eor_atlas")' in source
+    assert "st.exception(exc)" in source
+
+
 def test_new_ui_entrypoint_exists():
     assert (ROOT / "src" / "eor_atlas.py").exists()
 
