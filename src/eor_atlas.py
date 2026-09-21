@@ -12,6 +12,7 @@ import logging
 import streamlit as st
 
 import hybrid_app as engine
+from config.settings import settings
 from pages_ui import challenges, ceor, candidates, historical, insights, intelligence, overview, screening, system
 from ui.app_shell import initialize_ui, render_page_intro, render_shell_header, select_page
 
@@ -75,6 +76,13 @@ def _render_page(page: str, services: dict) -> None:
 
 
 def main() -> None:
+    # This must be the first Streamlit command in the production entrypoint.
+    st.set_page_config(
+        page_title=settings.ui_config["page_title"],
+        page_icon=settings.ui_config["page_icon"],
+        layout=settings.ui_config["layout"],
+        initial_sidebar_state=settings.ui_config.get("initial_sidebar_state", "collapsed"),
+    )
     initialize_ui()
     services = _safe_services()
     page = select_page(_system_state(services))
