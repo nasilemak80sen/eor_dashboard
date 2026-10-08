@@ -19,12 +19,9 @@ jobs:
           python-version: "3.12"
       - run: pip install openpyxl pandas
       - run: python scripts/inspect_ogj2014.py
-      - name: Commit inspection
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add work/ogj2014_inspection.json
-          git diff --cached --quiet || git commit -m "chore: inspect OGJ2014 workbook provenance sources"
-          git push
-
-# inspection workflow v2
+      - name: Upload inspection artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ogj2014-inspection
+          path: work/ogj2014_inspection.json
+          if-no-files-found: error
