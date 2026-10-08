@@ -152,10 +152,10 @@ def render() -> None:
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    # Keep the WebGL component outside st.tabs. Streamlit 1.39 has a
-    # confirmed iframe/custom-component sizing issue in tab containers, which
-    # can initialize a WebGL canvas at an invalid size. The proven competency
-    # dashboard also renders its globe in a normal visible page container.
+    # Keep the WebGL component outside st.tabs. A visible, normal page
+    # container gives the WebGL iframe a stable size during initialization.
+    # The proven competency dashboard also renders its globe in a normal
+    # visible page container.
     if isinstance(map_df, pd.DataFrame) and not map_df.empty:
         _render_spatial_snapshot(map_df)
     else:
