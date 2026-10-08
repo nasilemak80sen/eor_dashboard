@@ -39,11 +39,14 @@ def inspect(path):
     ws = wb["OGJ2014_Extracted_Rows"]
     headers = [c.value for c in ws[1]]
     out["extracted_headers"] = headers
+    out["extracted_rows_all"] = [[clean(c.value) for c in row] for row in ws.iter_rows()]
     source_idx = headers.index("source_report") if "source_report" in headers else None
     if source_idx is not None:
         vals = [ws.cell(r, source_idx+1).value for r in range(2, ws.max_row+1)]
         out["source_report_values"] = vals
         out["source_report_distinct_exact"] = sorted({str(v) for v in vals if v is not None})
+    else:
+        out["source_report_missing"] = True
     # Search all text cells for provenance/citation vocabulary.
     terms = re.compile(r"doi|journal|author|publication|paper|report|field|reservoir|project|case|table|ogj|oil|gas", re.I)
     hits = []
