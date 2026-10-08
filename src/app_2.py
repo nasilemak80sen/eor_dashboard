@@ -71,109 +71,118 @@ SCREENING_INPUT_DEFAULTS = {
 
 
 # =============================================================================
-# PAGE CONFIG / STYLE
+# LEGACY PAGE CONFIG / STYLE
 # =============================================================================
 
-st.set_page_config(
-    page_title=settings.ui_config["page_title"],
-    page_icon=settings.ui_config["page_icon"],
-    layout=settings.ui_config["layout"],
-)
+def configure_legacy_page() -> None:
+    """Configure the legacy Streamlit UI only when app_2 is run directly.
 
-st.markdown(
+    app_2 is also imported by the production engine, so page configuration
+    must never execute at module import time.
     """
-    <style>
-    .block-container {
-        padding-top: 1.2rem;
-        padding-bottom: 2rem;
-    }
+    st.set_page_config(
+        page_title=settings.ui_config["page_title"],
+        page_icon=settings.ui_config["page_icon"],
+        layout=settings.ui_config["layout"],
+    )
 
-    .stTabs [role="tablist"] {
-        background: rgba(15, 23, 42, 0.05);
-        border-radius: 10px;
-    }
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            padding-top: 1.2rem;
+            padding-bottom: 2rem;
+        }
 
-    .stTabs [role="tab"] {
-        padding: 0.7rem 1rem;
-    }
+        .stTabs [role="tablist"] {
+            background: rgba(15, 23, 42, 0.05);
+            border-radius: 10px;
+        }
 
-    div[data-testid="stMetricValue"] {
-        font-size: 1.4rem;
-    }
+        .stTabs [role="tab"] {
+            padding: 0.7rem 1rem;
+        }
 
-    .exec-kpi-card {
-        background: linear-gradient(135deg, #00a19c 0%, #bfd730 100%);
-        border-radius: 14px;
-        padding: 1rem 1.1rem;
-        min-height: 110px;
-        margin-bottom: 0.8rem;
-    }
+        div[data-testid="stMetricValue"] {
+            font-size: 1.4rem;
+        }
 
-    .exec-kpi-label {
-        color: rgba(255,255,255,0.75);
-        font-size: 0.77rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        margin-bottom: 0.5rem;
-    }
+        .exec-kpi-card {
+            background: linear-gradient(135deg, #00a19c 0%, #bfd730 100%);
+            border-radius: 14px;
+            padding: 1rem 1.1rem;
+            min-height: 110px;
+            margin-bottom: 0.8rem;
+        }
 
-    .exec-kpi-value {
-        color: white;
-        font-size: 1.8rem;
-        font-weight: 700;
-    }
+        .exec-kpi-label {
+            color: rgba(255,255,255,0.75);
+            font-size: 0.77rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
 
-    .top3-card,
-    .model-status-card {
-        border: 1px solid rgba(15, 23, 42, 0.10);
-        border-radius: 14px;
-        padding: 1rem;
-        background: rgba(248, 250, 252, 0.85);
-        margin-bottom: 0.8rem;
-    }
+        .exec-kpi-value {
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
 
-    .intelligence-note {
-        border-left: 4px solid #2563eb;
-        background: rgba(37, 99, 235, 0.06);
-        padding: 0.8rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 1rem;
-    }
+        .top3-card,
+        .model-status-card {
+            border: 1px solid rgba(15, 23, 42, 0.10);
+            border-radius: 14px;
+            padding: 1rem;
+            background: rgba(248, 250, 252, 0.85);
+            margin-bottom: 0.8rem;
+        }
 
-    .status-box {
-        background: rgba(15, 23, 42, 0.04);
-        border: 1px solid rgba(15, 23, 42, 0.08);
-        border-radius: 12px;
-        padding: 0.75rem;
-    }
+        .intelligence-note {
+            border-left: 4px solid #2563eb;
+            background: rgba(37, 99, 235, 0.06);
+            padding: 0.8rem 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
 
-    .status-row {
-        display: flex;
-        justify-content: space-between;
-        margin: 0.35rem 0;
-        font-size: 0.88rem;
-    }
+        .status-box {
+            background: rgba(15, 23, 42, 0.04);
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 12px;
+            padding: 0.75rem;
+        }
 
-    .status-pill {
-        padding: 0.18rem 0.5rem;
-        border-radius: 999px;
-        font-size: 0.72rem;
-        font-weight: 600;
-    }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 0.35rem 0;
+            font-size: 0.88rem;
+        }
 
-    .ready {
-        background: rgba(22, 163, 74, 0.12);
-        color: #166534;
-    }
+        .status-pill {
+            padding: 0.18rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
 
-    .warn {
-        background: rgba(245, 158, 11, 0.12);
-        color: #b45309;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+        .ready {
+            background: rgba(22, 163, 74, 0.12);
+            color: #166534;
+        }
+
+        .warn {
+            background: rgba(245, 158, 11, 0.12);
+            color: #b45309;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+
 
 
 # =============================================================================
@@ -1134,6 +1143,7 @@ def render_sidebar_status(services: Dict[str, Any]):
 # =============================================================================
 
 def main():
+    configure_legacy_page()
     st.title("EOR Atlas – Decision Support Platform with Machine Learning Classifications")
     st.caption("Engineering-first EOR dashboard with deterministic screening, independent fuzzy suitability, and CatBoost intelligence.")
 

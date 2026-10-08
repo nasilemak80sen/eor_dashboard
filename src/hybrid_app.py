@@ -14,12 +14,15 @@ running the retired legacy top-tab renderer.
 from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
+import logging
 
 import pandas as pd
 import streamlit as st
 
 import app_2 as _app
 from ml.hybrid_intelligence import HybridDecisionService, build_opportunity_context
+
+logger = logging.getLogger("hybrid_app")
 
 
 # -----------------------------------------------------------------------------
@@ -508,7 +511,7 @@ def main() -> None:
     try:
         from eor_atlas import main as atlas_main
     except Exception as exc:
-        _app.logger.exception("Unable to load the redesigned EOR Atlas UI shell.")
+        logger.exception("Unable to load the redesigned EOR Atlas UI shell.")
         st.error(f"EOR Atlas UI shell could not be loaded: {exc}")
         return
 
