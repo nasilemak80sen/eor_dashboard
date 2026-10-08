@@ -26,3 +26,5 @@ jobs:
           git add work/ogj2014_inspection.json
           git diff --cached --quiet || git commit -m "chore: inspect OGJ2014 workbook provenance sources"
           git push
+
+# inspection workflow v2
