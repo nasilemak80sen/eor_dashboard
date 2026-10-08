@@ -7,18 +7,39 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install openpyxl
+
       - run: python scripts/build_ogj2014_provenance.py
+
+      - name: Push enriched Excel workbooks into repository
+        run: |
+          cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
+          cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
+          if git diff --cached --quiet; then
+            echo "No workbook changes to commit."
+            exit 0
+          fi
+
+          git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks [skip ci]"
+          git push origin HEAD:data/ogj2014-provenance
+
       - name: Upload final deliverables
         uses: actions/upload-artifact@v4
         with:
