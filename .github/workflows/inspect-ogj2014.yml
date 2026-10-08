@@ -1,4 +1,4 @@
-name: Inspect OGJ2014 workbook
+name: Build OGJ2014 provenance dataset
 
 on:
   push:
@@ -7,21 +7,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  inspect:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install openpyxl pandas
-      - run: python scripts/inspect_ogj2014.py
-      - name: Upload inspection artifact
+      - run: pip install openpyxl
+      - run: python scripts/build_ogj2014_provenance.py
+      - name: Upload final deliverables
         uses: actions/upload-artifact@v4
         with:
-          name: ogj2014-inspection
-          path: work/ogj2014_inspection.json
+          name: ogj2014-provenance-deliverables
+          path: work/ogj2014_provenance/
           if-no-files-found: error
