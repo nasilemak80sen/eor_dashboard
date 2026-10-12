@@ -82,3 +82,31 @@ def test_label_semantic_conflicts_are_flagged_without_auto_relabel():
         ["Steam"], ["CO2 miscible"], ["Microbial"], ["Miscible (unspecified subtype)"]
     ]
     assert frame["technique"].tolist() == ["Polymer", "Polymer", "Steam", "Polymer", "Polymer"]
+
+
+def test_source_section_conflicts_are_quarantined_without_relabeling():
+    co2_raw = "TECHNOLOGYHess Seminole Unit-ROZ Stage 1 Tex. Gaines 10/07 2,320 44 29"
+    peace_river = "Shell Canada Peace River Alta. 1979 4,900 97 109 Bluesky S 26.5"
+    north_burbank = "Chaparral Energy North Burbank Okla. Osage 12/07 480 19 9"
+    midland = "Occidental Midland Farms Unit Tex. Andrews 3/10 40 6 1"
+    frame = pd.DataFrame({
+        "record_id": [f"REC-{i}" for i in range(6)],
+        "technique": [
+            "Miscible CO2", "Miscible HC", "Nitrogen immiscible",
+            "Polymer", "Nitrogen immiscible", "Nitrogen immiscible",
+        ],
+        "raw_line": [
+            co2_raw, co2_raw, peace_river, peace_river, north_burbank, midland,
+        ],
+    })
+
+    mask, details = benchmark.source_section_label_conflict_audit(frame)
+
+    assert mask.tolist() == [False, True, True, True, True, True]
+    assert len(details) == 5
+    assert details[0]["source_section_technique_or_context"] == "Miscible CO2"
+    assert all("quarantined" in item["action"] for item in details)
+    assert frame["technique"].tolist() == [
+        "Miscible CO2", "Miscible HC", "Nitrogen immiscible",
+        "Polymer", "Nitrogen immiscible", "Nitrogen immiscible",
+    ]
