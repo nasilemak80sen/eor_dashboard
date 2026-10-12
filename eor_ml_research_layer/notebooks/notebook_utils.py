@@ -41,10 +41,10 @@ COLUMN_ALIASES = {
     "so_min": ["So at start min (%)", "so_start_min_pct", "so_min"],
     "so_max": ["So at start max (%)", "so_start_max_pct", "so_max"],
     # IDs are metadata used for splitting/audit only, never predictive features.
-    # Prefer exact case groups; the OGJ2014 workbook has blank field IDs on a
-    # small number of unresolved rows, while case_id is complete.
+    # Field-level grouping is the target for generalization. Incomplete field
+    # IDs must be resolved or explicitly filtered; do not silently use case IDs.
     "source_group": [
-        "case_id", "field_id", "Field Name", "Field",
+        "field_id", "Field Name", "Field", "case_id",
         "source_report_group_id", "publication_id", "project_id",
         "source_id", "source_group", "report_id",
     ],
