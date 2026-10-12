@@ -535,9 +535,9 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "policy": "Rows whose explicit source text or original table-section context conflicts with the structured label are excluded pending review. Technique labels are never automatically rewritten.",
         },
         "field_identity_verification_warning": (
-            "Field IDs are currently provisional parser-derived grouping candidates. "
-            "Zero groups are marked verified/confirmed, so these scores are provisional field-isolation estimates, "
-            "not confirmed real-world unseen-field generalization."
+            "Only field IDs with explicit source-document evidence are marked confirmed; remaining parser-derived IDs "
+            "stay provisional. Scores are research-only field-isolation estimates, not validated EOR recommendations "
+            "or evidence of EOR success, recovery uplift, or economic value."
         ),
         "minimum_independent_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
         "minimum_holdout_fields_per_class": MINIMUM_HOLDOUT_FIELDS_PER_CLASS,
