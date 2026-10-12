@@ -76,6 +76,33 @@ def audit(dataset: Path = DATASET) -> dict:
             "rows_with_unresolved_field_id": int((mask & ~field_valid).sum()),
         })
 
+    support_by_label = {item["technique"]: item for item in field_support}
+    remediation_priority = [
+        "Miscible acid gas", "HC immiscible", "Hot water", "Nitrogen immiscible"
+    ]
+    remediation_rows = []
+    for label, support in support_by_label.items():
+        provisional_count = support["distinct_provisional_or_unverified_fields"]
+        verified_count = support["distinct_verified_fields"]
+        remediation_rows.append({
+            "priority": remediation_priority.index(label) + 1 if label in remediation_priority else 5,
+            "technique": label,
+            "source_rows": support["source_rows"],
+            "rows_with_usable_field_id": support["rows_with_usable_field_id"],
+            "provisional_or_unverified_field_groups": provisional_count,
+            "verified_independent_fields": verified_count,
+            "unresolved_field_rows": support["rows_with_unresolved_field_id"],
+            "minimum_verified_fields_for_pilot": 6,
+            "provisional_group_gap_to_six": max(0, 6 - provisional_count),
+            "verified_field_gap_to_six": max(0, 6 - verified_count),
+            "recommended_action": (
+                "Prioritise source-backed field identity and additional independent cases; keep class out of pilot"
+                if label in remediation_priority else
+                "Verify provisional field identities before treating support as independent"
+            ),
+        })
+    remediation_rows.sort(key=lambda row: (row["priority"], row["technique"]))
+
     unresolved = df.loc[~field_valid].copy()
     raw_col = "raw_line" if "raw_line" in df.columns else ("source_report" if "source_report" in df.columns else None)
     unresolved_rows = []
@@ -228,6 +255,7 @@ def audit(dataset: Path = DATASET) -> dict:
         "ogj2014_field_alias_review.csv": alias_candidates,
         "ogj2014_feature_range_issues.csv": feature_issues,
         "ogj2014_technique_label_audit.csv": label_rows,
+        "ogj2014_class_support_remediation.csv": remediation_rows,
     }
     for filename, rows in outputs.items():
         path = OUT / filename
@@ -262,6 +290,7 @@ def audit(dataset: Path = DATASET) -> dict:
             str(k): int(v) for k, v in field_status.value_counts(dropna=False).sort_index().items()
         },
         "support_by_technique": field_support,
+        "class_support_remediation": remediation_rows,
         "provisional_identity_warning": "Current parser-generated field IDs are provisional, not independently verified; verified-field support is reported separately and must not be inferred from ID existence.",
         "potential_field_alias_or_split_candidates": len(alias_candidates),
         "alias_candidates": alias_candidates,
