@@ -37,9 +37,9 @@ def _raw_table() -> pd.DataFrame:
     })
 
 
-def test_case_id_is_used_for_grouping_before_empty_project_metadata():
+def test_field_id_is_used_for_grouping_before_case_and_empty_metadata():
     standardized = nu.standardize_training_table(_raw_table())
-    assert standardized["source_group"].tolist() == ["CASE-001", "CASE-002"]
+    assert standardized["source_group"].tolist() == ["FIELD-001", "FIELD-002"]
 
 
 def test_provenance_identifiers_do_not_enter_feature_matrix():
