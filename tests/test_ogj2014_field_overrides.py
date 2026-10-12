@@ -41,6 +41,16 @@ def test_source_document_resolves_previously_ambiguous_field_names():
         "MFB-23) US 28.6 5,000 3,050 9.2 351 136": "Bare (F.O.)",
         "MM-407) S 30 1,500 3,820 11 270 159": "Melones",
         "MM-412) S 28 792 3,515 14.5 260 154": "Melones",
+        "Apache Canada Zama-Keg River Alta. 6/04 3,840 12 12": "Zama-Keg River",
+        "BP Prudhoe Bay Alas. 1977 50,000 330 32": "Prudhoe Bay",
+        "BP Alaska Milne Point Alas. 3/95 20,000 84 52": "Alaska Milne Point",
+        "Chevron San Ardo Calif. Monterey 7/87 700 7 3": "San Ardo",
+        "Chevron West Coalinga Calif. Fresno 5/73 780 194 180": "West Coalinga",
+        "ExxonMobil Hawkins Tex. Wood 8/87 2,800 27 6": "Hawkins",
+        "Occidental Elk Hills Calif. Kern 2005 10,000 800 60": "Elk Hills",
+        "Chaparral Energy North Burbank Okla. Osage 12/07 480 19 9": "North Burbank",
+        "Occidental Midland Farms Unit Tex. Andrews 3/10 40 6 1": "Midland Farms Unit",
+        "Shell Canada Peace River Alta. 1979 4,900 97 109": "Peace River",
     }
     for raw_line, expected in examples.items():
         field, reason, _ = provenance.parse_field(raw_line)
