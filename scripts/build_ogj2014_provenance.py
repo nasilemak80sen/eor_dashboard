@@ -162,7 +162,7 @@ def main():
                     ):
                         mismatch_rows.append({
                             "scope": f"{TARGET}!O1",
-                            "detail": "known semantic header difference; columns will be tagged independently",
+                            "detail": "known header difference; source_report semantics unresolved, so source_report_group_id will be withheld",
                             "canonical_header": lv,
                             "mirror_header": rv,
                         })
@@ -186,7 +186,7 @@ def main():
     )
     unexpected = [
         item for item in mismatch_rows
-        if item.get("detail") != "known semantic header difference; columns will be tagged independently"
+        if item.get("detail") != "known header difference; source_report semantics unresolved, so source_report_group_id will be withheld"
     ]
     comparison = {
         "canonical_workbook": str(CANONICAL.relative_to(ROOT)),
@@ -196,7 +196,7 @@ def main():
         "known_header_difference": allowed_header_diff,
         "unexpected_differences": unexpected,
         "handling": (
-            "Each workbook is tagged using its own original column names; source_report is never treated as raw_line."
+            "Each workbook preserves its own original column names. Because mirror O1 says source_report while its values match canonical raw_line values, the mirror's source_report semantics are unconfirmed and no source_report_group_id is assigned."
         ),
     }
     (OUT / "ogj2014_source_copy_comparison.json").write_text(
@@ -208,7 +208,14 @@ def main():
             + json.dumps(unexpected[:10], ensure_ascii=False)
         )
 
-    def build_tags(path: Path, source_sheets: dict, workbook_label: str) -> list[dict]:
+    source_report_semantics_confirmed = allowed_header_diff is None
+    def build_tags(
+        path: Path,
+        source_sheets: dict,
+        workbook_label: str,
+        *,
+        source_report_semantics_confirmed: bool,
+    ) -> list[dict]:
         sheet_rows = source_sheets[TARGET]
         headers = sheet_rows[0]
         expected = [
@@ -244,7 +251,10 @@ def main():
             source_report = values[sr_i] if sr_i is not None else ""
             source_report_group_id = (
                 hid("SRG", source_norm(source_report))
-                if sr_i is not None and source_norm(source_report) else ""
+                if sr_i is not None
+                and source_report_semantics_confirmed
+                and source_norm(source_report)
+                else ""
             )
 
             if raw_i is not None:
@@ -290,7 +300,11 @@ def main():
             rationale = " ".join([
                 "No explicit publication citation/title is present; publication identity was not invented.",
                 (
-                    "source_report_group_id is based only on the original source_report column."
+                    (
+                        "source_report_group_id is based only on the original source_report column."
+                        if source_report_semantics_confirmed else
+                        "source_report_group_id was withheld because the mirror's source_report header conflicts with the canonical raw_line header and the values are identical; confirm the column semantics before grouping."
+                    )
                     if sr_i is not None else
                     "No source_report column exists; source_report_group_id was not derived from raw_line."
                 ),
@@ -319,7 +333,14 @@ def main():
         return tags
 
     all_tags = {
-        label: build_tags(path, source_matrices[label], label)
+        label: build_tags(
+            path,
+            source_matrices[label],
+            label,
+            source_report_semantics_confirmed=(
+                source_report_semantics_confirmed if label == "mirror" else False
+            ),
+        )
         for label, path, _ in workbooks
     }
 
@@ -460,7 +481,7 @@ def main():
         "notes": [
             "The two workbook copies retain their own original column names and values.",
             "raw_line is used for field/case candidate extraction only when that column exists.",
-            "source_report is never treated as raw_line; on the mirror copy it contributes only to source_report_group_id.",
+            "source_report is never treated as raw_line; the mirror's source_report_group_id is withheld because its header conflicts with the canonical raw_line header while values match.",
             "All provenance IDs are grouping/audit metadata, not model features.",
             "Publication and project identities were not invented from the workbook name or raw text.",
         ],
