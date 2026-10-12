@@ -1,0 +1,40 @@
+name: OGJ2014 Grouped Split Audit
+
+on:
+  push:
+    branches:
+      - fix/openglobus-restore-after-revert
+    paths:
+      - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "scripts/audit_ogj2014_grouped_splits.py"
+      - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
+
+permissions:
+  contents: read
+
+jobs:
+  grouped-split-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install audit dependencies
+        run: python -m pip install pandas scikit-learn openpyxl
+
+      - name: Audit case-group isolation and class support
+        run: python scripts/audit_ogj2014_grouped_splits.py
+
+      - name: Upload grouped-split audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ogj2014-grouped-split-audit
+          path: outputs/ml_research/ogj2014_grouped_split_audit.json
+          if-no-files-found: error
