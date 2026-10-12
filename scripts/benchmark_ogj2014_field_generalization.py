@@ -153,7 +153,7 @@ def source_section_label_conflict_audit(
     if raw_col is None:
         return mask, details
 
-    normalized = frame[raw_col].fillna("").astype(str).str.replace(r"\\s+", " ", regex=True).str.strip()
+    normalized = frame[raw_col].fillna("").astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
     labels = frame["technique"].astype(str).str.strip()
     grouped_labels: dict[str, set[str]] = {}
     for raw_text, label in zip(normalized, labels):
