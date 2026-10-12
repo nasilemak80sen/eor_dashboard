@@ -85,8 +85,29 @@ def grouped_stratified_splits(
 
     class_counts = np.unique(y, return_counts=True)[1]
     min_class = int(class_counts.min()) if len(class_counts) else 0
-    actual_folds = min(int(folds), len(unique_groups), min_class)
+    class_group_counts = {
+        str(label): int(np.unique(groups[y == label]).size)
+        for label in np.unique(y)
+    }
+    min_groups_per_class = min(class_group_counts.values(), default=0)
+    actual_folds = min(
+        int(folds), len(unique_groups), min_class, min_groups_per_class
+    )
     if actual_folds < 2:
+        sparse = {
+            label: count for label, count in class_group_counts.items() if count < 2
+        }
+        if sparse:
+            details = ", ".join(
+                f"{label}: {count} independent group(s)"
+                for label, count in sorted(sparse.items())
+            )
+            raise ValueError(
+                "Group-isolated multiclass CV is unavailable because at least one "
+                "technique occurs in fewer than two independent groups. "
+                f"Unsupported class groups: {details}. Do not split a group or "
+                "silently remove a technique label."
+            )
         raise ValueError(
             "Insufficient class support or distinct groups for stratified group CV; "
             "collect more labelled groups or report evaluation as unavailable."
