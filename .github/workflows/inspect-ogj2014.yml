@@ -9,6 +9,10 @@ on:
       - ".github/workflows/inspect-ogj2014.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ogj2014-provenance-build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -70,4 +74,5 @@ jobs:
             outputs/ml_research/ogj2014_technique_label_audit.csv
             outputs/ml_research/ogj2014_class_support_remediation.csv
             outputs/ml_research/ogj2014_technique_label_semantic_review.csv
+            outputs/ml_research/ogj2014_source_section_label_conflicts.csv
           if-no-files-found: warn
