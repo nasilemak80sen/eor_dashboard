@@ -52,7 +52,7 @@ NUMERIC_RANGES = [
     ("so", "so_start_min_pct", "so_start_max_pct", "pct"),
 ]
 REQUIRED_SOURCE_COLUMNS = {
-    "record_id", "technique", "formation_category", "field_id",
+    "record_id", "technique", "formation_category", "field_id", "field_id_status",
     *(column for _, lo, hi, _ in NUMERIC_RANGES for column in (lo, hi)),
 }
 
@@ -229,8 +229,14 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         raise ValueError("Technique labels must be present; do not infer or relabel them.")
 
     valid_field = _valid_ids(df["field_id"])
+    identity_status = df["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
+    verified_field = valid_field & identity_status.isin({"verified", "confirmed"})
     known = df.loc[valid_field].copy()
     field_support = known.groupby("technique")["field_id"].nunique().sort_values()
+    verified_field_support = {
+        str(label): int(df.loc[verified_field & df["technique"].astype(str).eq(str(label)), "field_id"].nunique())
+        for label in sorted(df["technique"].astype(str).unique())
+    }
     eligible_classes = sorted(
         field_support[field_support >= MINIMUM_FIELDS_PER_CLASS].index.astype(str).tolist()
     )
@@ -367,6 +373,15 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "source_rows_merged": False,
         },
         "field_support_all_classes": {str(k): int(v) for k, v in field_support.sort_index().items()},
+        "field_identity_status_counts": {
+            str(k): int(v) for k, v in identity_status.value_counts(dropna=False).sort_index().items()
+        },
+        "verified_independent_field_support_all_classes": verified_field_support,
+        "field_identity_verification_warning": (
+            "Field IDs are currently provisional parser-derived grouping candidates. "
+            "Zero groups are marked verified/confirmed, so these scores are provisional field-isolation estimates, "
+            "not confirmed real-world unseen-field generalization."
+        ),
         "minimum_independent_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
         "minimum_holdout_fields_per_class": MINIMUM_HOLDOUT_FIELDS_PER_CLASS,
         "minimum_training_fields_per_class": MINIMUM_TRAIN_FIELDS_PER_CLASS,
@@ -434,7 +449,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         },
         "promotion_status": "research_baseline_only_requires_engineering_review",
         "limitations": [
-            "Field identifiers remain provisional and require domain review.",
+            "Field identifiers are provisional parser-derived candidates; no field groups are marked verified/confirmed, so true unseen-field generalization is not yet established.",
             "The source table records observed techniques, not comparable outcomes or success labels.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
             "Four low-support classes are excluded from this restricted pilot and require more independent fields before full multiclass evaluation.",
