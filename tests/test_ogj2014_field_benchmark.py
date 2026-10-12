@@ -60,3 +60,23 @@ def test_field_holdout_and_cv_keep_fields_disjoint():
     assert folds >= 2
     for train_idx, test_idx in splits:
         assert set(groups[train][train_idx]).isdisjoint(set(groups[train][test_idx]))
+
+
+
+def test_label_semantic_conflicts_are_flagged_without_auto_relabel():
+    frame = pd.DataFrame({
+        "record_id": ["REC-1", "REC-2", "REC-3"],
+        "technique": ["Polymer", "Polymer", "Steam"],
+        "raw_line": [
+            "Brazil Petrobras Steam Estreito 12/09",
+            "Bahia Petrobras CO2 miscible Miranga 12/09",
+            "Steam field example",
+        ],
+    })
+    mask, details = benchmark.label_semantic_conflict_audit(frame)
+
+    assert mask.tolist() == [True, True, False]
+    assert [item["potentially_conflicting_mentions"] for item in details] == [
+        ["Steam"], ["CO2 miscible"]
+    ]
+    assert frame["technique"].tolist() == ["Polymer", "Polymer", "Steam"]
