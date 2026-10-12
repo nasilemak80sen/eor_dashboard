@@ -54,9 +54,13 @@ def striptech(s):
 # variants are unified only when the operator, field wording, formation and
 # surrounding source context agree. Same-name fields in different geography
 # are not merged.
-REVIEWED_FIELD_CANONICAL_ALIASES = {
+REVIEWED_FIELD_CANONICAL_ALIASES = {}
+
+REVIEWED_PROJECT_CANONICAL_ALIASES = {
     "arecuna (f.o)": "Arecuna (F.O.)",
     "arecuna (f.o.)": "Arecuna (F.O.)",
+    "bare (f.o)": "Bare (F.O.)",
+    "bare (f.o).": "Bare (F.O.)",
 }
 REVIEWED_FIELD_GEOGRAPHY = {
     "swan hills": "Alta.",
@@ -108,6 +112,8 @@ TABLE_E_PROJECT_OVERRIDES = [
      "OGJ 2014 worldwide EOR survey, p. 9: project 9 North; Field cell blank."),
     ("miscible Magnus 10/02", "Magnus", "Shetlands Islands BP",
      "OGJ 2014 worldwide EOR survey, p. 10: project Magnus; Field cell blank."),
+    ("water Furrial 8/98", "Furrial", "Maturin, Campo Furrial PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: project Furrial; raw fragment retains technique and project, Field cell blank."),
     ("2 immiscible Area 2102", "Area 2102", "Forest Reserve Petrotrin",
      "OGJ 2014 worldwide EOR survey, p. 9: project Area 2102; Forest Reserve is the area, Field cell blank."),
     ("(S ORS 01) US", "Orocual", "Maturin, Campo Orocual PDVSA E&P",
@@ -193,6 +199,7 @@ TABLE_E_SOURCE_PREFIXES = (
     "Zulia PDVSA E&P", "11/14 12/11", "2 immiscible Area 2102", "(S ORS 01)",
     "MFB-53)", "MFB-23)", "MM-407)", "MM-412)", "Superior S 23", "miscible Magnus",
     "Carmopolis S/Congl.", "L’Enfer S", "L'Enfer S", "Forest Sands S", "Valanginian ",
+    "water Furrial ",
     "Naricual S", "Acu S ", "Urucutuca S", "Bluesky S", "Cretaceous-Bullhead",
     "Cruse E", "Cruse E & F", "L.L. S ", "Morichal-Memb.", "Jobo Member",
     "Rindu ", "Pertama-Kedua", "Garzan LS",
@@ -210,6 +217,7 @@ def parse_project(raw):
     raw = ns(raw)
     for prefix, project_name, project_context, evidence in TABLE_E_PROJECT_OVERRIDES:
         if raw.casefold().startswith(prefix.casefold()):
+            project_name = REVIEWED_PROJECT_CANONICAL_ALIASES.get(project_name.casefold(), project_name)
             return project_name, project_context, "source_verified: " + evidence
 
     company, pos = find_company(raw)
@@ -225,6 +233,7 @@ def parse_project(raw):
     project_name = ns(rest[:date_match.start()]).strip(" ,")
     if not project_name or len(project_name) > 100:
         return None, project_context, "ambiguous_project_span"
+    project_name = REVIEWED_PROJECT_CANONICAL_ALIASES.get(project_name.casefold(), project_name)
     return project_name, project_context, "source_project_span"
 
 
