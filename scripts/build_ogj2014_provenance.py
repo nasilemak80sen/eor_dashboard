@@ -9,10 +9,9 @@ OUT=ROOT/"work"/"ogj2014_provenance"; OUT.mkdir(parents=True,exist_ok=True)
 CANONICAL=ROOT/"src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
 MIRROR=ROOT/"data/OGJ2014_extracted_vs_Table1.xlsx"
 TARGET="OGJ2014_Extracted_Rows"
-TABLE_E_START_EXCEL_ROW = 480
 NEW_COLS=["record_id","source_report_group_id","publication_id","publication_title","publication_id_status","field_id","field_name_normalized","field_id_status","project_id","case_id","case_id_status","tagging_confidence","tagging_rationale","needs_review"]
 COMPANIES=sorted(set([
-"Zulia PDVSA E&P","Anzoategui PDVSA E&P","Campo Jobo PDVSA E&P","Campo Pilon PDVSA E&P","Campo Cerro Negro PDVSA E&P","Maturin, Campo Mulata PDVSA E&P","Maturin, Campo Furrial PDVSA E&P","Lower Saxony, Grafschaft Bentheim Wintershall Holding AG","Lower Saxony, Diepholz Wintershall Holding AG","Rio Grande do Norte (RN) Petrobras","Bentheim Wintershall Holding AG","Point Fortin Petrotrin","Forest Reserve Petrotrin","Oropouche Petrotrin","Guapo Petrotrin","Pekanbaru PT Caltex","Espirito Santo Petrobras","Brazil Petrobras","Bahia Petrobras","Apache Canada","ExxonMobil Oil Canada","Shell Canada","Penn West Energy Trust","Pengrowth Corporation","Derek Oil & Gas Corp.","Derek Oil","MegaWest Energy Corp.","Encore Acquisition","Continental Resources","Chaparral Energy","Core Energy","Denbury Resources","Devon Canada","Devon","Energen Resources","ExxonMobil","Fasken","Hess","Kinder Morgan","Merit Energy","Occidental","ConocoPhillips","Husky Oil","Imperial Oil","CNRL","Cenovus","Penn West Energy","Seneca Resources","Tidelands","Great Western Drilling","Stanberry Oil","XTO Energy Inc.","XTO Energy","BP","Aera Energy","Berry","Carrizo","Chevron","Anadarko","Breitburn Energy","Apache","Orla Petco","Naftex","Bayou State","Whiting Petroleum","Trinity","Stockdale","Petrobras","Petrotrin","Wintershall Holding AG","PT Caltex","Scimitar"]),key=len,reverse=True)
+"Zulia PDVSA E&P","Anzoategui PDVSA E&P","Campo Jobo PDVSA E&P","Campo Pilon PDVSA E&P","Campo Cerro Negro PDVSA E&P","Maturin, Campo Mulata PDVSA E&P","Maturin, Campo Furrial PDVSA E&P","Lower Saxony, Grafschaft Bentheim Wintershall Holding AG","Lower Saxony, Diepholz Wintershall Holding AG","Rio Grande do Norte (RN) Petrobras","Bentheim Wintershall Holding AG","Point Fortin Petrotrin","Forest Reserve Petrotrin","Oropouche Petrotrin","Guapo Petrotrin","Pekanbaru PT Caltex","Espirito Santo Petrobras","Brazil Petrobras","Bahia Petrobras","Apache Canada","ExxonMobil Oil Canada","Shell Canada","Penn West Energy Trust","Pengrowth Corporation","Derek Oil & Gas Corp.","Derek Oil","MegaWest Energy Corp.","Encore Acquisition","Continental Resources","Chaparral Energy","Core Energy","Denbury Resources","Devon Canada","Devon","Energen Resources","ExxonMobil","Fasken","Hess","Kinder Morgan","Merit Energy","Occidental","ConocoPhillips","Husky Oil","Imperial Oil","CNRL","Cenovus","Penn West Energy","Seneca Resources","Tidelands","Great Western Drilling","Stanberry Oil","XTO Energy Inc.","XTO Energy","BP","Aera Energy","Berry","Carrizo","Chevron","Anadarko","Breitburn Energy","Apache","Orla Petco","Naftex","Bayou State","Whiting Petroleum","Trinity","Stockdale","Petrobras","Petrotrin","Wintershall Holding AG","PT Caltex","Scimitar","Nederlandse Aardolie Maatschappij (NAM)"]),key=len,reverse=True)
 GEO=set("Calif. Calif Tex. Tex Wyo. Wyo Mo. Mo Mont. Mont Miss. Miss Alta. Alta Sask. Sask La. La Okla. Okla Alas. Alas Mich. Mich NM N.Mex. N.M. ND N.Dak. SD S.Dak. MT TX OCS Fla. Pa. Colo. Kan. Neb. Utah Ariz. Nev. Ark. Ala. Tenn. Ga. Ill. Ind. Ohio Va. N.Y. N.J. Alberta Saskatchewan".split())
 DATE_RE=re.compile(r"(?<!\d)(?:\d{1,2}/\d{1,2}(?:/\d{1,2})?(?:-\d{1,2}/\d{1,2})?|19\d{2}|20\d{2})(?!\d)")
 TECH=["Water (Steam Scavenging)","Hydrocarbon miscible","HC miscible/water","Cyclic steam","Steam–SAGD","Steam-SAGD","Miscible acid gas","Miscible CO2","Miscible HC","HC miscible","CO2 immiscible","CO2 miscible","Hot water","Enhanced cyclic steam","Technology","Surfactants","Surfactant","Nitrates","Microbial","Combustion","AGA","Polymer","Steam"]
@@ -101,6 +100,14 @@ REVIEWED_SOURCE_FIELD_OVERRIDES = [
 TABLE_E_PROJECT_OVERRIDES = [
     ("11/14 12/11", "Emlichheim, Block 11/14", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
      "OGJ 2014 worldwide EOR survey, p. 9: project Emlichheim, Block 11/14; Field cell blank, 12/11 is start date."),
+    ("Northeast 2/02", "Northeast", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+     "OGJ 2014 worldwide EOR survey, p. 9: project Northeast; Field cell blank."),
+    ("7 North 2/99", "7 North", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+     "OGJ 2014 worldwide EOR survey, p. 9: project 7 North; Field cell blank."),
+    ("9 North 7/08", "9 North", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+     "OGJ 2014 worldwide EOR survey, p. 9: project 9 North; Field cell blank."),
+    ("miscible Magnus 10/02", "Magnus", "Shetlands Islands BP",
+     "OGJ 2014 worldwide EOR survey, p. 10: project Magnus; Field cell blank."),
     ("2 immiscible Area 2102", "Area 2102", "Forest Reserve Petrotrin",
      "OGJ 2014 worldwide EOR survey, p. 9: project Area 2102; Forest Reserve is the area, Field cell blank."),
     ("(S ORS 01) US", "Orocual", "Maturin, Campo Orocual PDVSA E&P",
@@ -173,6 +180,31 @@ def parse_field(raw):
             return pre,"standalone_field", ""
     return None,"unresolved",""
 
+TABLE_E_SOURCE_PREFIXES = (
+    "Bahia Petrobras", "Brazil Petrobras", "Espirito Santo Petrobras",
+    "Rio Grande do Norte (RN) Petrobras", "Sergipe Petrobras",
+    "Bentheim Wintershall Holding AG", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+    "Lower Saxony, Diepholz Wintershall Holding AG", "Northeast ", "7 North ", "9 North ",
+    "Pekanbaru PT Caltex", "Drenthe Nederlandse Aardolie Maatschappij", "North Sea, Rogaland BP",
+    "Shetlands Islands BP", "Parrylands New Horizon", "Forest Reserve Petrotrin",
+    "Oropouche Petrotrin", "Guapo Petrotrin", "Point Fortin Petrotrin", "Palo Seco Petrotrin",
+    "Quarry Petrotrin", "North Palo Seco Petrotrin", "Maturin, Campo", "Anzoategui PDVSA E&P",
+    "Cairo Scimitar", "Batman TPAO", "Campo Cerro Negro", "Campo Jobo", "Campo Pilon",
+    "Zulia PDVSA E&P", "11/14 12/11", "2 immiscible Area 2102", "(S ORS 01)",
+    "MFB-53)", "MFB-23)", "MM-407)", "MM-412)", "Superior S 23", "miscible Magnus",
+    "Carmopolis S/Congl.", "L’Enfer S", "L'Enfer S", "Forest Sands S", "Valanginian ",
+    "Naricual S", "Acu S ", "Urucutuca S", "Bluesky S", "Cretaceous-Bullhead",
+    "Cruse E", "Cruse E & F", "L.L. S ", "Morichal-Memb.", "Jobo Member",
+    "Rindu ", "Pertama-Kedua", "Garzan LS",
+)
+
+
+def is_table_e_source_row(raw: str) -> bool:
+    """Identify international Table E rows/fragments by source-text evidence, not row position."""
+    text = ns(raw)
+    return any(text.casefold().startswith(prefix.casefold()) for prefix in TABLE_E_SOURCE_PREFIXES)
+
+
 def parse_project(raw):
     """Parse the project column for OGJ Table E only; never treat it as a field."""
     raw = ns(raw)
@@ -184,6 +216,8 @@ def parse_project(raw):
     if not company:
         return None, "", "unresolved"
     project_context = ns(raw[:pos + len(company)])
+    if project_context.casefold() == "bentheim wintershall holding ag":
+        project_context = "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG"
     rest = striptech(raw[pos + len(company):].strip())
     date_match = DATE_RE.search(rest)
     if not date_match:
@@ -223,16 +257,6 @@ def main():
 
     canonical_sheets = source_matrices["canonical"]
     mirror_sheets = source_matrices["mirror"]
-    canonical_target_rows = canonical_sheets[TARGET]
-    if len(canonical_target_rows) < TABLE_E_START_EXCEL_ROW:
-        raise SystemExit("OGJ2014 source table is shorter than the expected Table E boundary.")
-    table_e_marker = ns(canonical_target_rows[TABLE_E_START_EXCEL_ROW - 1][14])
-    if not table_e_marker.startswith("Bahia Petrobras CO2 miscible Miranga"):
-        raise SystemExit(
-            "OGJ2014 Table E boundary changed; refusing to interpret project names as fields. "
-            f"Expected Excel row {TABLE_E_START_EXCEL_ROW} to begin with Bahia Petrobras CO2 miscible Miranga; "
-            f"found {table_e_marker[:100]!r}"
-        )
     mismatch_rows = []
     if list(canonical_sheets) != list(mirror_sheets):
         mismatch_rows.append({
