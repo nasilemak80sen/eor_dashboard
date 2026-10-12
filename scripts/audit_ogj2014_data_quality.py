@@ -334,6 +334,24 @@ def audit(dataset: Path = DATASET) -> dict:
                     "action": "manual source-table review; do not relabel from text scan alone",
                 })
 
+    label_conflict_indices = {item["excel_row"] - 2 for item in label_semantic_candidates}
+    label_conflict_index_mask = pd.Series(df.index.isin(label_conflict_indices), index=df.index)
+    for remediation in remediation_rows:
+        label = remediation["technique"]
+        class_mask = labels.eq(label)
+        class_conflict_mask = class_mask & label_conflict_index_mask
+        class_remaining_mask = class_mask & ~label_conflict_index_mask
+        remaining_fields_mask = class_remaining_mask & field_valid
+        remaining_verified_mask = class_remaining_mask & verified_mask
+        remediation["rows_flagged_for_label_semantic_review"] = int(class_conflict_mask.sum())
+        remediation["source_rows_after_label_review"] = int(class_remaining_mask.sum())
+        remediation["provisional_field_groups_after_label_review"] = int(
+            df.loc[remaining_fields_mask, "field_id"].nunique()
+        )
+        remediation["verified_independent_fields_after_label_review"] = int(
+            df.loc[remaining_verified_mask, "field_id"].nunique()
+        )
+
     OUT.mkdir(parents=True, exist_ok=True)
     outputs = {
         "ogj2014_unresolved_field_review.csv": unresolved_rows,
@@ -377,6 +395,7 @@ def audit(dataset: Path = DATASET) -> dict:
         },
         "support_by_technique": field_support,
         "class_support_remediation": remediation_rows,
+        "rows_quarantined_for_label_semantic_review": len(label_semantic_candidates),
         "provisional_identity_warning": "Current parser-generated field IDs are provisional, not independently verified; verified-field support is reported separately and must not be inferred from ID existence.",
         "potential_field_alias_or_split_candidates": len(alias_candidates),
         "alias_candidates": alias_candidates,
