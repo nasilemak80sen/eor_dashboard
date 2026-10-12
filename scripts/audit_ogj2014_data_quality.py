@@ -44,6 +44,10 @@ TECHNIQUE_FAMILY = {
     "Combustion": "combustion",
     "Steam": "steam",
     "Enhanced cyclic steam": "steam",
+    "Microbial": "microbial",
+    "Nitrates": "nitrates",
+    "Surfactants": "surfactants",
+    "Miscible (unspecified subtype)": "miscible_unspecified",
 }
 TECHNIQUE_PATTERNS = [
     ("Miscible acid gas", re.compile(r"\bmiscible\s+acid\s+gas\b", re.I)),
@@ -58,6 +62,9 @@ TECHNIQUE_PATTERNS = [
     ("Polymer", re.compile(r"\bpolymer\b", re.I)),
     ("Combustion", re.compile(r"\bcombustion\b", re.I)),
     ("Steam", re.compile(r"\bsteam\b", re.I)),
+    ("Microbial", re.compile(r"\bmicrobial\b", re.I)),
+    ("Nitrates", re.compile(r"\bnitrates?\b", re.I)),
+    ("Surfactants", re.compile(r"\bsurfactants?\b", re.I)),
 ]
 
 
@@ -314,6 +321,15 @@ def audit(dataset: Path = DATASET) -> dict:
             for term, pattern in TECHNIQUE_PATTERNS:
                 if pattern.search(raw_text):
                     detected.append({"term": term, "family": TECHNIQUE_FAMILY[term]})
+            explicit_miscible = any(
+                item["term"] in {"Miscible acid gas", "Miscible CO2", "CO2 miscible", "Miscible HC"}
+                for item in detected
+            )
+            if re.search(r"\bmiscible\b", raw_text, re.I) and not explicit_miscible:
+                detected.append({
+                    "term": "Miscible (unspecified subtype)",
+                    "family": TECHNIQUE_FAMILY["Miscible (unspecified subtype)"],
+                })
             conflicting = [
                 item for item in detected
                 if structured_family is not None and item["family"] != structured_family
