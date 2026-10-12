@@ -381,6 +381,29 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     # Preserve every eligible non-conflicting source row; no feature-profile deduplication or label aggregation.
     scope = known.loc[known["technique"].astype(str).isin(eligible_classes)].copy().reset_index(drop=True)
 
+    scope_feature_completeness = {}
+    scope_feature_completeness_by_class = {}
+    for feature_name, low_col, high_col, _unit in NUMERIC_RANGES:
+        low = pd.to_numeric(scope[low_col], errors="coerce")
+        high = pd.to_numeric(scope[high_col], errors="coerce")
+        missing_low = low.isna()
+        missing_high = high.isna()
+        scope_feature_completeness[feature_name] = {
+            "rows": int(len(scope)),
+            "missing_low": int(missing_low.sum()),
+            "missing_high": int(missing_high.sum()),
+            "both_endpoints_missing": int((missing_low & missing_high).sum()),
+            "one_endpoint_missing": int((missing_low ^ missing_high).sum()),
+        }
+        scope_feature_completeness_by_class[feature_name] = {
+            str(label): {
+                "rows": int((scope["technique"] == label).sum()),
+                "missing_low": int((scope.loc[scope["technique"] == label, low_col].pipe(pd.to_numeric, errors="coerce").isna()).sum()),
+                "missing_high": int((scope.loc[scope["technique"] == label, high_col].pipe(pd.to_numeric, errors="coerce").isna()).sum()),
+            }
+            for label in eligible_classes
+        }
+
     X = build_features(scope)
     y = scope["technique"].astype(str).to_numpy()
     groups = scope["field_id"].astype(str).to_numpy()
@@ -543,6 +566,12 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "minimum_holdout_fields_per_class": MINIMUM_HOLDOUT_FIELDS_PER_CLASS,
         "minimum_training_fields_per_class": MINIMUM_TRAIN_FIELDS_PER_CLASS,
         "eligible_classes": eligible_classes,
+        "feature_completeness_in_eligible_scope": scope_feature_completeness,
+        "feature_completeness_in_eligible_scope_by_class": scope_feature_completeness_by_class,
+        "missing_value_handling": (
+            "Numeric midpoint/span features are imputed inside each model pipeline using training-fold medians; "
+            "tree pipelines also add missingness indicators. No imputer is fit on validation/test rows."
+        ),
         "unsupported_classes_excluded_from_this_restricted_pilot": unsupported_classes,
         "restricted_scope_warning": (
             "The pilot excludes unsupported technique classes without renaming or merging them. "
