@@ -44,6 +44,7 @@ def test_quality_audit_flags_unresolved_rows_aliases_ranges_and_labels(tmp_path,
 
     assert summary["source_rows"] == 4
     assert summary["unresolved_field_rows"] == 1
+    assert summary["unresolved_distinct_source_texts"][0]["source_evidence_assessment"]
     assert summary["support_by_technique"][0]["distinct_verified_fields"] == 0
     assert summary["potential_field_alias_or_split_candidates"] >= 1
     assert summary["feature_completeness_and_range_audit"]["oil_saturation"]["both_missing"] == 1
