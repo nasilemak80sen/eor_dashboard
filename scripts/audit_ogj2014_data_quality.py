@@ -51,6 +51,28 @@ def alias_key(value: object) -> str:
     return re.sub(r"[^a-z0-9]+", "", value)
 
 
+def unresolved_evidence_assessment(raw_source_text: object) -> str:
+    """Human-reviewed rationale for why the current source phrase is not enough."""
+    raw = norm_text(raw_source_text).casefold()
+    assessments = [
+        ("creek 1 member", "Creek/member/SS wording may identify a stratigraphic member or interval; no unambiguous field identity."),
+        ("creek 2 member", "Creek/member/SS wording may identify a stratigraphic member or interval; no unambiguous field identity."),
+        ("residual oil zone", "Explicit reservoir-zone and dolomite wording is not sufficient to identify a field."),
+        ("(enhanced cyclic steam) alta.", "Technique, province/year, and Clearwater wording do not establish whether Clearwater is a field or formation."),
+        ("11/14 12/11", "Date-like values and Valanginian stratigraphic wording provide no explicit field name."),
+        ("2 immiscible area", "Leading technique/area tokens and Forest Sands wording do not establish a field identity."),
+        ("(s ors 01)", "S ORS 01 is identifier-like and could be a project/well code; no field name is explicit."),
+        ("mfb-53)", "MFB-53 is identifier-like and could be a well/project code; no field name is explicit."),
+        ("mfb-23)", "MFB-23 is identifier-like and could be a well/project code; no field name is explicit."),
+        ("mm-407)", "MM-407 is identifier-like and could be a well/project code; no field name is explicit."),
+        ("mm-412)", "MM-412 is identifier-like and could be a well/project code; no field name is explicit."),
+    ]
+    for prefix, assessment in assessments:
+        if raw.startswith(prefix):
+            return assessment
+    return "No explicit, defensible field name identified in the available source text; keep unresolved pending source-document review."
+
+
 def audit(dataset: Path = DATASET) -> dict:
     if not dataset.is_file():
         raise FileNotFoundError(f"Dataset not found: {dataset}")
@@ -120,6 +142,7 @@ def audit(dataset: Path = DATASET) -> dict:
         group["record_ids"].append(norm_text(row.get("record_id", "")))
         group["techniques"].add(norm_text(row.get("technique", "")))
         group["formation_categories"].add(norm_text(row.get("formation_category", "")))
+        assessment = unresolved_evidence_assessment(source_text)
         unresolved_rows.append({
             "excel_row": int(idx + 2),
             "record_id": norm_text(row.get("record_id", "")),
@@ -128,7 +151,8 @@ def audit(dataset: Path = DATASET) -> dict:
             "raw_source_text": source_text,
             "field_id_status": norm_text(row.get("field_id_status", "")),
             "tagging_rationale": norm_text(row.get("tagging_rationale", "")),
-            "action": "manual source review; do not infer from formation, zone, well code, or row similarity",
+            "source_evidence_assessment": assessment,
+            "action": "keep unresolved unless the original source document explicitly establishes field identity",
         })
 
     # Potential split aliases are flags for human review only; never auto-merge groups.
