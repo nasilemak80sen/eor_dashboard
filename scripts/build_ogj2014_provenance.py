@@ -38,8 +38,43 @@ def striptech(s):
             if s.casefold().startswith(t.casefold()+" "):
                 s=s[len(t):].strip();changed=True;break
     return s
+# Manually reviewed field-name prefixes for rows the general parser could not
+# resolve. Each candidate is taken from an explicit field-like name in raw_line;
+# formations, reservoir zones, well IDs, and ambiguous codes remain unresolved.
+REVIEWED_FIELD_PREFIXES = [
+    ("Kinder Morgan Goldsmith-Landreth TX", "Goldsmith-Landreth",
+     "Operator prefix followed by explicit Goldsmith-Landreth field name."),
+    ("Crockett 7/97", "Crockett",
+     "Standalone field name immediately precedes the date token."),
+    ("Resources Aneth Unit Utah San Juan", "Aneth Unit",
+     "Explicit Aneth Unit name appears before Utah/San Juan geographic context."),
+    ("Swan Hills LS", "Swan Hills",
+     "Swan Hills is the explicit field name; LS is a following lithology abbreviation."),
+    ("Carmopolis S/Congl.", "Carmopolis",
+     "Carmopolis is the explicit field name preceding the sand/conglomerate abbreviation."),
+    ("miscible Magnus", "Magnus",
+     "Magnus is the named field following the technique qualifier."),
+    ("Parrylands New Horizon Steam Block E", "Parrylands",
+     "Parrylands is the explicit named field preceding operator/steam-block context."),
+    ("Forest Reserve Petrotrin CO2 immiscible EOR", "Forest Reserve",
+     "Explicit field name precedes operator and EOR descriptor."),
+    ("L’Enfer S", "L’Enfer",
+     "L’Enfer is the explicit named field; S is a following location/formation token."),
+    ("L'Enfer S", "L'Enfer",
+     "L'Enfer is the explicit named field; S is a following location/formation token."),
+    ("Batman TPAO CO2 immiscible Bati Raman", "Bati Raman",
+     "Bati Raman is the explicit named field following operator/technique context."),
+    ("Superior S 23", "Superior",
+     "Standalone named field token precedes the following location/measurement tokens."),
+]
+
+
 def parse_field(raw):
-    raw=ns(raw); company,pos=find_company(raw)
+    raw=ns(raw)
+    for prefix, field_name, evidence in REVIEWED_FIELD_PREFIXES:
+        if raw.casefold().startswith(prefix.casefold()):
+            return field_name, "reviewed_prefix: " + evidence, ""
+    company,pos=find_company(raw)
     if company:
         rest=raw[pos+len(company):].strip(); m=DATE_RE.search(rest)
         if not m:return None,"no_date",""
@@ -222,16 +257,25 @@ def main():
                 field, parse_reason, geography = parse_field(raw or "")
                 case_id = hid("CASE", raw_normalized) if raw_normalized else ""
                 case_status = "provisional" if case_id else "needs_review"
+                # Repeated raw_line supports case grouping, not field-name certainty.
                 confidence = (
                     "Low" if not field
-                    else ("High" if raw_counts[raw_normalized] > 1 else "Medium")
+                    else ("Medium" if parse_reason.startswith("reviewed_prefix:") else "Medium")
                 )
                 field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
                 field_status = "provisional" if field else "needs_review"
-                field_rationale = (
-                    f"Field candidate '{field}' extracted conservatively from raw_line."
-                    if field else "Field identity unresolved from raw_line evidence."
-                )
+                if field and parse_reason.startswith("reviewed_prefix:"):
+                    field_rationale = (
+                        f"Field candidate '{field}' assigned using a manually reviewed raw_line rule: "
+                        + parse_reason.removeprefix("reviewed_prefix: ").strip()
+                    )
+                elif field:
+                    field_rationale = (
+                        f"Field candidate '{field}' extracted by the conservative organization/date parser; "
+                        "identity remains provisional."
+                    )
+                else:
+                    field_rationale = "Field identity unresolved from raw_line evidence; no candidate was guessed."
                 case_rationale = (
                     "case_id is a deterministic hash of exact normalized raw_line; exact repeats share a group."
                     if case_id else "No reliable raw_line evidence for a case identifier."
