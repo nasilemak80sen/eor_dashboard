@@ -299,8 +299,8 @@ def audit(dataset: Path = DATASET) -> dict:
         class_mask = labels.eq(label)
         per_feature = {}
         for feature_name, low_col, high_col, _, _ in RANGE_PAIRS:
-            low = pd.to_numeric(df[low_col], errors="coerce") if low_col in df.columns else pd.Series(np.nan, index=df.index)
-            high = pd.to_numeric(df[high_col], errors="coerce") if high_col in df.columns else pd.Series(np.nan, index=df.index)
+            low = pd.to_numeric(df[low_col], errors="coerce") if low_col in df.columns else pd.Series(float('nan'), index=df.index)
+            high = pd.to_numeric(df[high_col], errors="coerce") if high_col in df.columns else pd.Series(float('nan'), index=df.index)
             missing_low = class_mask & low.isna()
             missing_high = class_mask & high.isna()
             per_feature[feature_name] = {
