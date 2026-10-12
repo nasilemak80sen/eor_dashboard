@@ -34,7 +34,7 @@ def _record(technique="Polymer", source_group="source-1", **overrides):
         "visc_max_cp": 5,
         "so_start_min_pct": 40,
         "so_start_max_pct": 70,
-        "source_id": source_group,
+        "field_id": source_group,
     }
     row.update(overrides)
     return row
@@ -79,6 +79,17 @@ def test_identical_profiles_with_different_labels_remain_separate_records():
     assert label_sets == [("Polymer",), ("Steam",)]
     assert groups.tolist() == ["source-1", "source-2"]
 
+
+def test_legacy_case_or_project_ids_cannot_substitute_for_field_ids():
+    # source_id is intentionally not a supported field-level grouping column.
+    raw = pd.DataFrame([
+        {**_record("Polymer"), "field_id": None, "source_id": "case-a"},
+        {**_record("Steam"), "field_id": None, "source_id": "case-b"},
+    ])
+    standardized = standardize_training_table(raw)
+    assert standardized["source_group"].isna().all()
+    with pytest.raises(ValueError, match="unresolved field IDs"):
+        validate_grouped_dataset(["Polymer", "Steam"], standardized["source_group"])
 
 def test_grouped_validation_requires_source_ids_and_enough_independent_support():
     with pytest.raises(ValueError, match="no source_group identifier"):
