@@ -46,6 +46,9 @@ jobs:
       - name: Audit field-level grouping and class support
         run: python scripts/audit_ogj2014_grouped_splits.py
 
+      - name: Audit unresolved fields, aliases, features, labels, and class support
+        run: python scripts/audit_ogj2014_data_quality.py
+
       - name: Run row-preserving field-level baseline benchmark
         run: python scripts/benchmark_ogj2014_field_generalization.py
 
@@ -59,4 +62,11 @@ jobs:
             outputs/ml_research/ogj2014_grouped_split_audit.json
             outputs/ml_research/ogj2014_field_generalization_benchmark.json
             outputs/ml_research/ogj2014_field_generalization_model_comparison.csv
+            outputs/ml_research/ogj2014_repeated_holdout_model_comparison.csv
+            outputs/ml_research/ogj2014_data_quality_audit.json
+            outputs/ml_research/ogj2014_unresolved_field_review.csv
+            outputs/ml_research/ogj2014_field_alias_review.csv
+            outputs/ml_research/ogj2014_feature_range_issues.csv
+            outputs/ml_research/ogj2014_technique_label_audit.csv
+            outputs/ml_research/ogj2014_class_support_remediation.csv
           if-no-files-found: warn
