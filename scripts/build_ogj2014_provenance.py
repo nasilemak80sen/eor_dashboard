@@ -9,12 +9,13 @@ OUT=ROOT/"work"/"ogj2014_provenance"; OUT.mkdir(parents=True,exist_ok=True)
 CANONICAL=ROOT/"src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
 MIRROR=ROOT/"data/OGJ2014_extracted_vs_Table1.xlsx"
 TARGET="OGJ2014_Extracted_Rows"
+TABLE_E_START_EXCEL_ROW = 480
 NEW_COLS=["record_id","source_report_group_id","publication_id","publication_title","publication_id_status","field_id","field_name_normalized","field_id_status","project_id","case_id","case_id_status","tagging_confidence","tagging_rationale","needs_review"]
 COMPANIES=sorted(set([
-"Zulia PDVSA E&P","Anzoategui PDVSA E&P","Campo Jobo PDVSA E&P","Campo Pilon PDVSA E&P","Campo Cerro Negro PDVSA E&P","Maturin, Campo Mulata PDVSA E&P","Maturin, Campo Furrial PDVSA E&P","Lower Saxony, Grafschaft Bentheim Wintershall Holding AG","Lower Saxony, Diepholz Wintershall Holding AG","Rio Grande do Norte (RN) Petrobras","Bentheim Wintershall Holding AG","Point Fortin Petrotrin","Forest Reserve Petrotrin","Oropouche Petrotrin","Guapo Petrotrin","Pekanbaru PT Caltex","Espirito Santo Petrobras","Brazil Petrobras","Bahia Petrobras","Apache Canada","ExxonMobil Oil Canada","Shell Canada","Penn West Energy Trust","Pengrowth Corporation","Derek Oil & Gas Corp.","Derek Oil","MegaWest Energy Corp.","Encore Acquisition","Continental Resources","Chaparral Energy","Core Energy","Denbury Resources","Devon Canada","Devon","Energen Resources","ExxonMobil","Fasken","Hess","Kinder Morgan","Merit Energy","Occidental","ConocoPhillips","Husky Oil","Imperial Oil","CNRL","Cenovus","Penn West Energy","Seneca Resources","Tidelands","Great Western Drilling","Stanberry Oil","XTO Energy Inc.","XTO Energy","BP","Aera Energy","Berry","Carrizo","Chevron","Anadarko","Breitburn Energy","Apache","Orla Petco","Naftex","Bayou State","Whiting Petroleum","Trinity","Stockdale","Petrobras","Petrotrin","Wintershall Holding AG","PT Caltex"]),key=len,reverse=True)
+"Zulia PDVSA E&P","Anzoategui PDVSA E&P","Campo Jobo PDVSA E&P","Campo Pilon PDVSA E&P","Campo Cerro Negro PDVSA E&P","Maturin, Campo Mulata PDVSA E&P","Maturin, Campo Furrial PDVSA E&P","Lower Saxony, Grafschaft Bentheim Wintershall Holding AG","Lower Saxony, Diepholz Wintershall Holding AG","Rio Grande do Norte (RN) Petrobras","Bentheim Wintershall Holding AG","Point Fortin Petrotrin","Forest Reserve Petrotrin","Oropouche Petrotrin","Guapo Petrotrin","Pekanbaru PT Caltex","Espirito Santo Petrobras","Brazil Petrobras","Bahia Petrobras","Apache Canada","ExxonMobil Oil Canada","Shell Canada","Penn West Energy Trust","Pengrowth Corporation","Derek Oil & Gas Corp.","Derek Oil","MegaWest Energy Corp.","Encore Acquisition","Continental Resources","Chaparral Energy","Core Energy","Denbury Resources","Devon Canada","Devon","Energen Resources","ExxonMobil","Fasken","Hess","Kinder Morgan","Merit Energy","Occidental","ConocoPhillips","Husky Oil","Imperial Oil","CNRL","Cenovus","Penn West Energy","Seneca Resources","Tidelands","Great Western Drilling","Stanberry Oil","XTO Energy Inc.","XTO Energy","BP","Aera Energy","Berry","Carrizo","Chevron","Anadarko","Breitburn Energy","Apache","Orla Petco","Naftex","Bayou State","Whiting Petroleum","Trinity","Stockdale","Petrobras","Petrotrin","Wintershall Holding AG","PT Caltex","Scimitar"]),key=len,reverse=True)
 GEO=set("Calif. Calif Tex. Tex Wyo. Wyo Mo. Mo Mont. Mont Miss. Miss Alta. Alta Sask. Sask La. La Okla. Okla Alas. Alas Mich. Mich NM N.Mex. N.M. ND N.Dak. SD S.Dak. MT TX OCS Fla. Pa. Colo. Kan. Neb. Utah Ariz. Nev. Ark. Ala. Tenn. Ga. Ill. Ind. Ohio Va. N.Y. N.J. Alberta Saskatchewan".split())
 DATE_RE=re.compile(r"(?<!\d)(?:\d{1,2}/\d{1,2}(?:/\d{1,2})?(?:-\d{1,2}/\d{1,2})?|19\d{2}|20\d{2})(?!\d)")
-TECH=["Miscible acid gas","Miscible CO2","Miscible HC","CO2 immiscible","CO2 miscible","Hot water","Enhanced cyclic steam","Technology","Surfactants","Nitrates","Microbial","Polymer","Combustion","Steam"]
+TECH=["Water (Steam Scavenging)","Hydrocarbon miscible","HC miscible/water","Cyclic steam","Steam–SAGD","Steam-SAGD","Miscible acid gas","Miscible CO2","Miscible HC","CO2 immiscible","CO2 miscible","Hot water","Enhanced cyclic steam","Technology","Surfactants","Surfactant","Nitrates","Microbial","Combustion","AGA","Polymer","Steam"]
 
 def ns(v):
     if v is None:return ""
@@ -75,20 +76,6 @@ REVIEWED_SOURCE_FIELD_OVERRIDES = [
      "OGJ 2014 worldwide EOR survey, p. 3: Fasken Hanford (San Andres), Texas; Residual Oil Zone is reservoir/pay-zone context."),
     ("(Enhanced cyclic steam) Alta. 2002", "Cold Lake", "Alta.",
      "OGJ 2014 worldwide EOR survey, p. 7: Imperial Oil Cold Lake (Enhanced cyclic steam), Alberta; Clearwater is the pay zone, not the field."),
-    ("11/14 12/11", "Emlichheim, Block 11/14", "",
-     "OGJ 2014 worldwide EOR survey, p. 9: Wintershall Holding AG Emlichheim, Block 11/14; 12/11 is the start date."),
-    ("2 immiscible Area 2102", "Area 2102", "",
-     "OGJ 2014 worldwide EOR survey, p. 9: Forest Reserve, Petrotrin, CO2 immiscible, field Area 2102; Forest Reserve is the location."),
-    ("(S ORS 01) US", "Orocual", "",
-     "OGJ 2014 worldwide EOR survey, p. 11: Maturin, Campo Orocual, PDVSA E&P, Steam, field Orocual; S ORS 01 is pay-zone text."),
-    ("MFB-53)", "Bare (F.O.)", "",
-     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Bare (F.O.); MFB-53 is part of the pay-zone identifier."),
-    ("MFB-23)", "Bare (F.O.)", "",
-     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Bare (F.O.); MFB-23 is part of the pay-zone identifier."),
-    ("MM-407)", "Melones", "",
-     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Melones; MM-407 is part of the pay-zone identifier."),
-    ("MM-412)", "Melones", "",
-     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Melones; MM-412 is part of the pay-zone identifier."),
     ("Apache Canada Zama-Keg River Alta.", "Zama-Keg River", "Alta.",
      "OGJ 2014 worldwide EOR survey, p. 7: Acid gas miscible, Apache Canada, field Zama-Keg River, Alberta."),
     ("BP Prudhoe Bay Alas.", "Prudhoe Bay", "Alas.",
@@ -111,6 +98,33 @@ REVIEWED_SOURCE_FIELD_OVERRIDES = [
      "OGJ 2014 worldwide EOR survey, p. 9: Canadian EOR table lists Peace River rows before the next Nitrogen heading; field identity confirmed, technique label not inferred from this field rule."),
 ]
 
+# Table E has separate Project and Field columns; its Field cells are blank
+# in the source rows represented here. Do not turn project/pay-zone text into field IDs.
+TABLE_E_PROJECT_OVERRIDES = [
+    ("11/14 12/11", "Emlichheim, Block 11/14", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+     "OGJ 2014 worldwide EOR survey, p. 9: project Emlichheim, Block 11/14; Field cell blank, 12/11 is start date."),
+    ("2 immiscible Area 2102", "Area 2102", "Forest Reserve Petrotrin",
+     "OGJ 2014 worldwide EOR survey, p. 9: project Area 2102; Forest Reserve is the area, Field cell blank."),
+    ("(S ORS 01) US", "Orocual", "Maturin, Campo Orocual PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: project Orocual; S ORS 01 is pay-zone text and Field cell blank."),
+    ("MFB-53)", "Bare (F.O.)", "Anzoategui PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: pay-zone identifier MFB-53 maps to project Bare (F.O.); Field cell blank."),
+    ("MFB-23)", "Bare (F.O.)", "Anzoategui PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: pay-zone identifier MFB-23 maps to project Bare (F.O.); Field cell blank."),
+    ("MM-407)", "Melones", "Anzoategui PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: pay-zone identifier MM-407 maps to project Melones; Field cell blank."),
+    ("MM-412)", "Melones", "Anzoategui PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: pay-zone identifier MM-412 maps to project Melones; Field cell blank."),
+    ("Superior S 23", "Bachaquero Lago", "Zulia PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: pay-zone suffix Superior S 23 uniquely matches project Bachaquero Lago; Field cell blank."),
+    ("Parrylands New Horizon Steam Block E", "Block E", "Parrylands New Horizon",
+     "OGJ 2014 worldwide EOR survey, p. 9: Parrylands is the area; project Block E; Field cell blank."),
+    ("Batman TPAO CO2 immiscible Bati Raman", "Bati Raman", "Batman TPAO",
+     "OGJ 2014 worldwide EOR survey, p. 11: project Bati Raman; Field cell blank."),
+    ("Maturin, Campo Orocual PDVSA E&P Steam Orocual", "Orocual", "Maturin, Campo Orocual PDVSA E&P",
+     "OGJ 2014 worldwide EOR survey, p. 11: project Orocual; Field cell blank."),
+]
+
 REVIEWED_FIELD_PREFIXES = [
     ("Kinder Morgan Goldsmith-Landreth TX", "Goldsmith-Landreth",
      "Operator prefix followed by explicit Goldsmith-Landreth field name."),
@@ -124,18 +138,6 @@ REVIEWED_FIELD_PREFIXES = [
      "Carmopolis is the explicit field name preceding the sand/conglomerate abbreviation."),
     ("miscible Magnus", "Magnus",
      "Magnus is the named field following the technique qualifier."),
-    ("Parrylands New Horizon Steam Block E", "Parrylands",
-     "Parrylands is the explicit named field preceding operator/steam-block context."),
-    ("Forest Reserve Petrotrin CO2 immiscible EOR", "Forest Reserve",
-     "Explicit field name precedes operator and EOR descriptor."),
-    ("L’Enfer S", "L’Enfer",
-     "L’Enfer is the explicit named field; S is a following location/formation token."),
-    ("L'Enfer S", "L'Enfer",
-     "L'Enfer is the explicit named field; S is a following location/formation token."),
-    ("Batman TPAO CO2 immiscible Bati Raman", "Bati Raman",
-     "Bati Raman is the explicit named field following operator/technique context."),
-    ("Superior S 23", "Superior",
-     "Standalone named field token precedes the following location/measurement tokens."),
 ]
 
 
