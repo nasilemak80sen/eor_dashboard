@@ -22,11 +22,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install workbook dependency
-        run: python -m pip install openpyxl
+      - name: Install workbook and research dependencies
+        run: python -m pip install openpyxl pandas numpy scikit-learn
 
       - name: Verify source copies and build provenance metadata
         run: python scripts/build_ogj2014_provenance.py
+
+      - name: Audit field-level grouping and class support
+        run: python scripts/audit_ogj2014_grouped_splits.py
+
+      - name: Run row-preserving field-level baseline benchmark
+        run: python scripts/benchmark_ogj2014_field_generalization.py
 
       - name: Publish both validated workbook copies
         run: |
@@ -43,10 +49,14 @@ jobs:
           git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
           git push origin HEAD:fix/openglobus-restore-after-revert
 
-      - name: Upload audit and mapping deliverables
+      - name: Upload provenance, grouped-audit and ML benchmark reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ogj2014-provenance-build
-          path: work/ogj2014_provenance/
+          name: ogj2014-provenance-and-ml-reports
+          path: |
+            work/ogj2014_provenance/
+            outputs/ml_research/ogj2014_grouped_split_audit.json
+            outputs/ml_research/ogj2014_field_generalization_benchmark.json
+            outputs/ml_research/ogj2014_field_generalization_model_comparison.csv
           if-no-files-found: warn
