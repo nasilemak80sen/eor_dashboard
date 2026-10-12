@@ -708,8 +708,12 @@ def main():
             "project_id_status_counts": dict(Counter(tag["project_id_status_internal"] for tag in tags)),
             "table_e_rows": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW for tag in tags),
             "table_e_rows_with_project_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and bool(tag["project_id"]) for tag in tags),
+            "table_e_rows_without_project_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and not tag["project_id"] for tag in tags),
             "table_e_rows_without_field_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and not tag["field_id"] for tag in tags),
+            "field_id_status_counts": dict(Counter(tag["field_id_status"] for tag in tags)),
+            "field_rows_unknown": sum(tag["field_id_status"] == "unknown" for tag in tags),
             "field_rows_needing_review": sum(tag["field_id_status"] == "needs_review" for tag in tags),
+            "field_rows_missing_outside_table_e": sum(tag["excel_row"] < TABLE_E_START_EXCEL_ROW and not tag["field_id"] for tag in tags),
             "case_rows_needing_review": sum(tag["case_id_status"] == "needs_review" for tag in tags),
         }
 
@@ -730,7 +734,7 @@ def main():
             "Only narrow source-supported field aliases are canonicalized; same-name fields with different geography remain separate.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
             "Any field candidate not established by source evidence remains blank and needs review.",
-            "Project identities are not inferred from field names, pay zones, or the publication itself.",
+            "Project IDs are assigned only from the source Table E Project column or unique source-backed fragments; no project is inferred from numeric features or publication identity alone.",
         ],
     }
     (OUT / "ogj2014_provenance_summary.json").write_text(
