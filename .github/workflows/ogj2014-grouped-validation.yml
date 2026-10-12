@@ -6,6 +6,7 @@ on:
       - fix/openglobus-restore-after-revert
     paths:
       - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
+      - "scripts/audit_ogj2014_grouped_splits.py"
       - ".github/workflows/ogj2014-grouped-validation.yml"
   pull_request:
     branches:
