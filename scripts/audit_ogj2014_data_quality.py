@@ -118,6 +118,7 @@ def audit(dataset: Path = DATASET) -> dict:
         raise ValueError(f"Missing provenance columns required for audit: {missing}")
 
     field_valid = valid_id(df["field_id"])
+    project_valid = valid_id(df["project_id"]) if "project_id" in df.columns else pd.Series(False, index=df.index)
     field_status = df["field_id_status"].map(norm_text).str.casefold()
     verified_mask = field_valid & field_status.isin({"verified", "confirmed"})
     field_support = []
@@ -437,6 +438,12 @@ def audit(dataset: Path = DATASET) -> dict:
         remediation["verified_independent_fields_after_label_review"] = int(
             df.loc[remaining_verified_mask, "field_id"].nunique()
         )
+        remediation["rows_without_field_id_after_label_review"] = int(
+            (class_remaining_mask & ~field_valid).sum()
+        )
+        remediation["rows_with_project_id_but_no_field_id_after_label_review"] = int(
+            (class_remaining_mask & project_valid & ~field_valid).sum()
+        )
 
     OUT.mkdir(parents=True, exist_ok=True)
     outputs = {
@@ -470,8 +477,7 @@ def audit(dataset: Path = DATASET) -> dict:
         for item in unresolved_text_groups.values()
     ]
     table_e_mask = df.get("tagging_rationale", pd.Series("", index=df.index)).fillna("").astype(str).str.contains("OGJ Table E", case=False)
-    project_valid = _valid_group(df["project_id"]) if "project_id" in df.columns else pd.Series(False, index=df.index)
-    case_valid = _valid_group(df["case_id"]) if "case_id" in df.columns else pd.Series(False, index=df.index)
+    case_valid = valid_id(df["case_id"]) if "case_id" in df.columns else pd.Series(False, index=df.index)
     needs_review_mask = df.get("needs_review", pd.Series("No", index=df.index)).astype(str).str.casefold().eq("yes")
     summary = {
         "dataset": str(dataset.relative_to(ROOT)) if dataset.is_relative_to(ROOT) else str(dataset),
