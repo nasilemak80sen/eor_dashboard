@@ -1,0 +1,50 @@
+name: OGJ2014 Field-Level ML Benchmark
+
+on:
+  push:
+    branches:
+      - fix/openglobus-restore-after-revert
+    paths:
+      - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
+      - "scripts/audit_ogj2014_grouped_splits.py"
+      - "scripts/benchmark_ogj2014_field_generalization.py"
+      - ".github/workflows/ogj2014-field-benchmark.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
+      - "scripts/audit_ogj2014_grouped_splits.py"
+      - "scripts/benchmark_ogj2014_field_generalization.py"
+
+permissions:
+  contents: read
+
+jobs:
+  field-level-benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install research dependencies
+        run: python -m pip install pandas numpy scikit-learn openpyxl
+
+      - name: Audit provenance and class support
+        run: python scripts/audit_ogj2014_grouped_splits.py
+
+      - name: Run row-preserving field-level baseline benchmark
+        run: python scripts/benchmark_ogj2014_field_generalization.py
+
+      - name: Upload audit and benchmark reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ogj2014-field-level-ml-reports
+          path: |
+            outputs/ml_research/ogj2014_grouped_split_audit.json
+            outputs/ml_research/ogj2014_field_generalization_benchmark.json
+            outputs/ml_research/ogj2014_field_generalization_model_comparison.csv
+          if-no-files-found: error
