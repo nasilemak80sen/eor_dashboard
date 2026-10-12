@@ -142,6 +142,7 @@ def audit(dataset: Path = DATASET) -> dict:
         group["record_ids"].append(norm_text(row.get("record_id", "")))
         group["techniques"].add(norm_text(row.get("technique", "")))
         group["formation_categories"].add(norm_text(row.get("formation_category", "")))
+        group["source_evidence_assessment"] = unresolved_evidence_assessment(source_text)
         assessment = unresolved_evidence_assessment(source_text)
         unresolved_rows.append({
             "excel_row": int(idx + 2),
