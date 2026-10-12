@@ -65,18 +65,20 @@ def test_field_holdout_and_cv_keep_fields_disjoint():
 
 def test_label_semantic_conflicts_are_flagged_without_auto_relabel():
     frame = pd.DataFrame({
-        "record_id": ["REC-1", "REC-2", "REC-3"],
-        "technique": ["Polymer", "Polymer", "Steam"],
+        "record_id": ["REC-1", "REC-2", "REC-3", "REC-4", "REC-5"],
+        "technique": ["Polymer", "Polymer", "Steam", "Polymer", "Polymer"],
         "raw_line": [
             "Brazil Petrobras Steam Estreito 12/09",
             "Bahia Petrobras CO2 miscible Miranga 12/09",
             "Steam field example",
+            "Brazil Petrobras Microbial Carmopolis 6/02",
+            "miscible Magnus 10/02",
         ],
     })
     mask, details = benchmark.label_semantic_conflict_audit(frame)
 
-    assert mask.tolist() == [True, True, False]
+    assert mask.tolist() == [True, True, False, True, True]
     assert [item["potentially_conflicting_mentions"] for item in details] == [
-        ["Steam"], ["CO2 miscible"]
+        ["Steam"], ["CO2 miscible"], ["Microbial"], ["Miscible (unspecified subtype)"]
     ]
-    assert frame["technique"].tolist() == ["Polymer", "Polymer", "Steam"]
+    assert frame["technique"].tolist() == ["Polymer", "Polymer", "Steam", "Polymer", "Polymer"]
