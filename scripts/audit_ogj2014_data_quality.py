@@ -31,6 +31,34 @@ LABEL_EXPECTED = {
     "Combustion", "HC immiscible", "Hot water", "Miscible CO2", "Miscible HC",
     "Miscible acid gas", "Nitrogen immiscible", "Polymer", "Steam",
 }
+TECHNIQUE_FAMILY = {
+    "Miscible acid gas": "miscible_acid_gas",
+    "Miscible CO2": "miscible_co2",
+    "CO2 miscible": "miscible_co2",
+    "Miscible HC": "miscible_hc",
+    "CO2 immiscible": "co2_immiscible",
+    "HC immiscible": "hc_immiscible",
+    "Nitrogen immiscible": "nitrogen_immiscible",
+    "Hot water": "hot_water",
+    "Polymer": "polymer",
+    "Combustion": "combustion",
+    "Steam": "steam",
+    "Enhanced cyclic steam": "steam",
+}
+TECHNIQUE_PATTERNS = [
+    ("Miscible acid gas", re.compile(r"\bmiscible\s+acid\s+gas\b", re.I)),
+    ("Miscible CO2", re.compile(r"\bmiscible\s+CO2\b", re.I)),
+    ("CO2 miscible", re.compile(r"\bCO2\s+miscible\b", re.I)),
+    ("Miscible HC", re.compile(r"\bmiscible\s+HC\b", re.I)),
+    ("CO2 immiscible", re.compile(r"\bCO2\s+immiscible\b", re.I)),
+    ("HC immiscible", re.compile(r"\bHC\s+immiscible\b", re.I)),
+    ("Nitrogen immiscible", re.compile(r"\bnitrogen\s+immiscible\b", re.I)),
+    ("Hot water", re.compile(r"\bhot\s+water\b", re.I)),
+    ("Enhanced cyclic steam", re.compile(r"\benhanced\s+cyclic\s+steam\b", re.I)),
+    ("Polymer", re.compile(r"\bpolymer\b", re.I)),
+    ("Combustion", re.compile(r"\bcombustion\b", re.I)),
+    ("Steam", re.compile(r"\bsteam\b", re.I)),
+]
 
 
 def norm_text(value: object) -> str:
@@ -274,6 +302,38 @@ def audit(dataset: Path = DATASET) -> dict:
         label_normalized_groups[item["casefolded_whitespace_key"]].append(item["raw_label"])
     label_variants = {k: sorted(set(v)) for k, v in label_normalized_groups.items() if len(set(v)) > 1}
 
+    # Raw-line technique mentions are only review signals. A source row may
+    # contain contextual terms, so the structured label is never auto-rewritten.
+    label_semantic_candidates = []
+    if raw_col:
+        for idx, row in df.iterrows():
+            raw_text = norm_text(row.get(raw_col, ""))
+            structured_label = norm_text(row.get("technique", ""))
+            structured_family = TECHNIQUE_FAMILY.get(structured_label)
+            detected = []
+            for term, pattern in TECHNIQUE_PATTERNS:
+                if pattern.search(raw_text):
+                    detected.append({"term": term, "family": TECHNIQUE_FAMILY[term]})
+            conflicting = [
+                item for item in detected
+                if structured_family is not None and item["family"] != structured_family
+            ]
+            if conflicting:
+                label_semantic_candidates.append({
+                    "excel_row": int(idx + 2),
+                    "record_id": norm_text(row.get("record_id", "")),
+                    "structured_technique_label": structured_label,
+                    "structured_label_family": structured_family,
+                    "source_text_technique_mentions": sorted(
+                        {item["term"] for item in detected}
+                    ),
+                    "potentially_conflicting_mentions": sorted(
+                        {item["term"] for item in conflicting}
+                    ),
+                    "raw_source_text": raw_text,
+                    "action": "manual source-table review; do not relabel from text scan alone",
+                })
+
     OUT.mkdir(parents=True, exist_ok=True)
     outputs = {
         "ogj2014_unresolved_field_review.csv": unresolved_rows,
@@ -281,6 +341,7 @@ def audit(dataset: Path = DATASET) -> dict:
         "ogj2014_feature_range_issues.csv": feature_issues,
         "ogj2014_technique_label_audit.csv": label_rows,
         "ogj2014_class_support_remediation.csv": remediation_rows,
+        "ogj2014_technique_label_semantic_review.csv": label_semantic_candidates,
     }
     for filename, rows in outputs.items():
         path = OUT / filename
@@ -323,6 +384,8 @@ def audit(dataset: Path = DATASET) -> dict:
         "feature_range_issue_rows": len(feature_issues),
         "technique_label_counts": label_rows,
         "technique_label_keys_with_multiple_raw_variants": label_variants,
+        "potential_label_semantic_conflict_rows": len(label_semantic_candidates),
+        "potential_label_semantic_conflict_candidates": label_semantic_candidates,
         "unrecognized_or_unreviewed_labels": [row for row in label_rows if not row["in_expected_label_vocabulary"]],
         "policy": "This audit only flags candidates. It never auto-assigns missing fields, merges field IDs, clips values, or remaps technique labels.",
     }
