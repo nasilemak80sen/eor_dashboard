@@ -507,6 +507,9 @@ def main():
             "raw_line is used for field/case candidate extraction only when that column exists.",
             "source_report is never treated as raw_line; the mirror's source_report_group_id is withheld because its header conflicts with the canonical raw_line header while values match.",
             "All provenance IDs are grouping/audit metadata, not model features.",
+            "Only narrow source-supported alias rules are canonicalized: Arecuna (F.O)/(F.O.) punctuation and Swan Hills geography corroborated by explicit Alta. source rows.",
+            "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
+            "Unresolved field candidates remain blank when source text names only formations, reservoir zones, dates, or identifier-like codes.",
             "Publication and project identities were not invented from the workbook name or raw text.",
         ],
     }
