@@ -43,6 +43,17 @@ def test_grouped_splits_never_split_a_group_across_train_and_test():
         assert set(groups[train_idx]).isdisjoint(set(groups[test_idx]))
 
 
+def test_grouped_cv_rejects_class_with_only_one_independent_group():
+    X = pd.DataFrame({"porosity": np.arange(8, dtype=float)})
+    y = np.array([0, 0, 1, 1, 2, 2, 2, 2])
+    groups = np.array([
+        "field-a", "field-a", "field-b", "field-c",
+        "field-d", "field-e", "field-f", "field-g",
+    ])
+    with pytest.raises(ValueError, match="fewer than two independent groups"):
+        grouped_stratified_splits(X, y, groups, folds=3)
+
+
 def test_provenance_columns_cannot_be_model_features():
     with pytest.raises(ValueError, match="cannot be model features"):
         assert_no_provenance_features(pd.DataFrame({
