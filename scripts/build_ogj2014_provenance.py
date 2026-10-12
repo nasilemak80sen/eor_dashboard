@@ -236,10 +236,6 @@ def main():
             for excel_row, row in enumerate(sheet_rows[1:], start=2)
         ]
         occurrences = Counter()
-        raw_counts = Counter(
-            source_norm(values[raw_i]) for _, values in rows
-            if raw_i is not None and source_norm(values[raw_i])
-        )
         tags = []
         for excel_row, values in rows:
             content = "\\x1f".join("" if value is None else str(value) for value in values)
@@ -258,10 +254,7 @@ def main():
                 case_id = hid("CASE", raw_normalized) if raw_normalized else ""
                 case_status = "provisional" if case_id else "needs_review"
                 # Repeated raw_line supports case grouping, not field-name certainty.
-                confidence = (
-                    "Low" if not field
-                    else ("Medium" if parse_reason.startswith("reviewed_prefix:") else "Medium")
-                )
+                confidence = "Medium" if field else "Low"
                 field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
                 field_status = "provisional" if field else "needs_review"
                 if field and parse_reason.startswith("reviewed_prefix:"):
