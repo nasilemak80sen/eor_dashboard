@@ -21,8 +21,13 @@ import numpy as np
 import pandas as pd
 from catboost import CatBoostClassifier
 from sklearn.metrics import accuracy_score, f1_score
-from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import LabelEncoder
+
+from ml.grouped_validation import (
+    assert_no_provenance_features,
+    choose_group_column,
+    grouped_stratified_splits,
+)
 
 from ml.hybrid_feature_builder import FEATURE_NAMES, build_hybrid_features
 from ml.hybrid_model_assessment import (
@@ -85,6 +90,7 @@ def build_training_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, L
         )
 
     features = pd.DataFrame(rows, columns=FEATURE_NAMES)
+    assert_no_provenance_features(features)
     if features.isnull().any().any():
         raise ValueError("Hybrid feature matrix contains missing values.")
     return features, labels, encoder
@@ -109,51 +115,20 @@ def cross_validate(
     groups: np.ndarray | None = None,
     folds: int = 5,
 ) -> dict[str, float | str]:
-    """Run stratified validation and report performance plus calibration."""
-    class_counts = np.bincount(y)
-    nonzero = class_counts[class_counts > 0]
-    if len(nonzero) == 0:
-        raise ValueError("No training classes were found.")
-
-    min_class = int(nonzero.min())
-    actual_folds = min(folds, min_class)
-    if actual_folds < 2:
-        raise ValueError("At least two samples per class are required for stratified validation.")
-
-    # Group-aware splitting is preferred when Field identifiers are available.
-    if groups is not None and len(np.unique(groups)) >= actual_folds:
-        try:
-            from sklearn.model_selection import StratifiedGroupKFold
-
-            splitter = StratifiedGroupKFold(
-                n_splits=actual_folds,
-                shuffle=True,
-                random_state=56,
-            )
-            split_iterator = splitter.split(X, y, groups)
-            split_method = "StratifiedGroupKFold"
-        except ImportError:
-            splitter = StratifiedKFold(
-                n_splits=actual_folds,
-                shuffle=True,
-                random_state=56,
-            )
-            split_iterator = splitter.split(X, y)
-            split_method = "StratifiedKFold"
-    else:
-        splitter = StratifiedKFold(
-            n_splits=actual_folds,
-            shuffle=True,
-            random_state=56,
+    """Evaluate with group-isolated folds; fail closed if groups are not reliable."""
+    assert_no_provenance_features(X)
+    if groups is None:
+        raise ValueError(
+            "Leakage-safe validation requires explicit groups. Supply case_id, "
+            "field_id, source_report_group_id, publication_id, or legacy Field."
         )
-        split_iterator = splitter.split(X, y)
-        split_method = "StratifiedKFold"
 
+    splits, actual_folds = grouped_stratified_splits(X, y, groups, folds=folds)
     accuracies = []
-    balanced_f1s = []
+    macro_f1s = []
     calibration_errors = []
 
-    for train_idx, test_idx in split_iterator:
+    for train_idx, test_idx in splits:
         model_params = dict(params)
         model_params["class_weights"] = _class_weights(y[train_idx])
         model = CatBoostClassifier(**model_params)
@@ -161,22 +136,25 @@ def cross_validate(
 
         pred = model.predict(X.iloc[test_idx]).reshape(-1).astype(int)
         probabilities = model.predict_proba(X.iloc[test_idx])
-
         accuracies.append(float(accuracy_score(y[test_idx], pred)))
-        balanced_f1s.append(float(f1_score(y[test_idx], pred, average="macro", zero_division=0)))
-        calibration_errors.append(float(expected_calibration_error(y[test_idx], probabilities)))
+        macro_f1s.append(
+            float(f1_score(y[test_idx], pred, average="macro", zero_division=0))
+        )
+        calibration_errors.append(
+            float(expected_calibration_error(y[test_idx], probabilities))
+        )
 
     return {
         "folds": float(actual_folds),
-        "split_method": split_method,
+        "split_method": "StratifiedGroupKFold",
+        "group_count": float(len(np.unique(groups))),
         "accuracy_mean": float(np.mean(accuracies)),
         "accuracy_std": float(np.std(accuracies)),
-        "macro_f1_mean": float(np.mean(balanced_f1s)),
-        "macro_f1_std": float(np.std(balanced_f1s)),
+        "macro_f1_mean": float(np.mean(macro_f1s)),
+        "macro_f1_std": float(np.std(macro_f1s)),
         "ece_mean": float(np.mean(calibration_errors)),
         "ece_std": float(np.std(calibration_errors)),
     }
-
 
 def train_and_save(
     dataset_path: Path,
@@ -196,7 +174,8 @@ def train_and_save(
             f"{readiness['sparse_classes']}"
         )
 
-    groups = df[GROUP_COLUMN].astype(str).to_numpy() if GROUP_COLUMN in df.columns else None
+    group_column = choose_group_column(df)
+    groups = df[group_column].astype(str).to_numpy()
 
     params = dict(DEFAULT_PARAMS)
     validation = cross_validate(X, y, params, groups=groups)
@@ -224,7 +203,9 @@ def train_and_save(
         "training_rows": int(len(df)),
         "target_column": TARGET_COLUMN,
         "formation_column": FORMATION_COLUMN,
-        "group_column": GROUP_COLUMN if GROUP_COLUMN in df.columns else None,
+        "group_column": group_column,
+        "grouping_policy": "case_id > field_id > source_report_group_id > publication_id > Field",
+        "provenance_columns_used_as_features": False,
         "screening_gate_separate": True,
         "fuzzy_used_as_model_feature": False,
         "v3_features": [
