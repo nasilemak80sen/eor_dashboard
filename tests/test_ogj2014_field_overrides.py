@@ -83,7 +83,8 @@ def test_table_e_source_detection_uses_source_context_not_row_position():
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
     )
     assert provenance.is_table_e_source_row("MFB-53) US 31.9 6,600 2,650")
-    assert provenance.is_table_e_source_row("Carmopolis S/Congl. 22 200 2,460")
+    assert provenance.is_ambiguous_source_fragment("Carmopolis S/Congl. 22 200 2,460")
+    assert provenance.is_ambiguous_source_fragment("L’Enfer S 33 250 1,000")
     assert not provenance.is_table_e_source_row(
         "Shell Canada Peace River Alta. 1979 4,900 97 109 Bluesky S"
     )
