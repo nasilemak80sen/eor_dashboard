@@ -5,7 +5,24 @@ from __future__ import annotations
 import streamlit as st
 
 from data.screening_history import persist_hybrid_run
-from ui.components import insight_cards, reset_button, section_title, kpi_cards
+from ui.components import insight_cards, reset_button, section_title, kpi_cards, workflow_steps, render_decision_summary
+
+
+def _hybrid_summary(result: dict | None) -> tuple[str, str, list[tuple[str, object]]]:
+    if not result:
+        return "Awaiting run", "Complete the form to generate an engineering-plus-ML recommendation.", [("Current status", "No result yet")]
+
+    hybrid = (result or {}).get("hybrid", {}) or {}
+    recommendation = hybrid.get("recommendation") or {}
+    ranking = hybrid.get("ranking", []) or []
+    top_name = recommendation.get("EOR Technique", "N/A")
+    top_score = recommendation.get("Hybrid Score", 0.0)
+    status = "Ready" if top_name != "N/A" else "Warning"
+    return (
+        "Decision ready",
+        f"Recommended technique: {top_name} with a hybrid score of {float(top_score):.1%}.",
+        [("Top candidate", top_name), ("Hybrid score", f"{float(top_score):.1%}"), ("Leads", len(ranking)), ("Model", "Active" if result.get("ml_available") else "Review required")],
+    )
 
 
 def render(services: dict) -> None:
@@ -29,6 +46,7 @@ def render(services: dict) -> None:
 
     input_tab, decision_tab = st.tabs(["Reservoir Inputs", "Hybrid Decision"])
     with input_tab:
+        workflow_steps(["Reservoir basics", "Recovery context", "Hybrid review"], current_step=0)
         action_col, _ = st.columns([1, 4])
         with action_col:
             reset_button(
@@ -67,6 +85,13 @@ def render(services: dict) -> None:
         if not result:
             st.info("No hybrid result yet. Complete Reservoir Inputs and submit Hybrid Intelligence.")
             return
+        summary_title, summary_body, summary_rows = _hybrid_summary(result)
+        render_decision_summary(
+            summary_title,
+            summary_body,
+            "Ready" if summary_rows else "Warning",
+            summary_rows,
+        )
         section_title(
             "Decision Result",
             "Read the recommendation together with the gate status and model context — not as a standalone ML prediction.",

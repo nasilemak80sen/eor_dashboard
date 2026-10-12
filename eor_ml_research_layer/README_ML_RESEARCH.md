@@ -26,6 +26,33 @@ The primary benchmark therefore excludes:
 
 Fuzzy scores are evaluated as a separate evidence layer in EOR Intelligence.
 
+## Validation and promotion guardrails
+
+The benchmark removes exact duplicate training records and aggregates
+identical reservoir-feature rows into a multi-label target containing every
+associated technique. One-vs-rest models are selected using source-grouped
+cross-validation only; a separate source-grouped holdout is reported once for
+the selected candidate and is never used to rank models.
+
+The benchmark requires a field, project, report, or publication identifier
+standardized as `source_group`, with at least six independent groups per
+technique. The current extracted OGJ table has no such identifier and very
+limited independent support for multiple classes, so it must not produce a
+generalization claim or a deployable model. Add traceable source-group IDs and
+more independently labelled cases before attempting a fresh benchmark.
+
+The current extracted table contains 51 identical feature signatures linked
+to multiple techniques (108 raw rows; 102 remain after exact duplicate
+removal). These are treated as multi-label associations, not as conflicting
+single-label records. The training objective is therefore technique
+association/suitability, not a single best-method classification.
+
+`05_export_artifact.ipynb` writes only a separately named
+`eor_research_candidate.joblib` after the grouped evaluation has completed. It
+does not overwrite the active production CatBoost v1 artifact. The candidate's
+labels remain literature-associated technique labels, not proven project
+success outcomes, and require engineering review before any production use.
+
 ## Notebook order
 
 1. `01_data_audit.ipynb`

@@ -54,11 +54,14 @@ def test_openglobus_matches_proven_competency_dashboard_bootstrap():
     assert "import {Globe, GlobusRgbTerrain, OpenStreetMap, control, Vector, Entity, LonLat}" in html
     assert "https://cdn.jsdelivr.net/npm/@openglobus/og@0.28.7/lib/og.es.js" in html
     assert "new OpenStreetMap(" in html
+    assert '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@openglobus/og@0.28.7/lib/og.css">' in html
     assert "© OpenStreetMap contributors" in html
     assert "new GlobusRgbTerrain()" in html
     assert "resourcesSrc:" in html
     assert "fontsSrc:" in html
-    assert 'msaa:4' in html
+    assert 'msaa:0' in html
+    assert 'deferredDisabled:true' in html
+    assert 'atmosphereEnabled:false' in html
     assert 'idleMode:false' in html
     assert 'navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}' in html
 
@@ -81,6 +84,7 @@ def test_openglobus_renders_markers_and_details():
     assert "const markerMaxValue = records.reduce" in html
     assert "Math.max(...magnitudes" not in html
     assert "new Entity(entityOptions)" in html
+    assert "size:[36,36]" in html
     assert "markerLayer.setEntities(entities)" in html
     assert 'renderer.events.on("lclick"' in html
     assert "renderDetails(picked.properties)" in html
@@ -88,10 +92,47 @@ def test_openglobus_renders_markers_and_details():
     assert "showLabels || selected" in html
 
 
+def test_openglobus_supports_quiet_initial_markers_with_selected_labels():
+    html = _build_openglobus_html(
+        [
+            {
+                "name": "Angsi",
+                "latitude": 4.3,
+                "longitude": 103.1,
+                "value": 1,
+                "value_label": "Records",
+                "details": {},
+            }
+        ],
+        title="OpenGlobus",
+        subtitle="Markers",
+        show_labels=False,
+    )
+
+    assert "const showLabels = false;" in html
+    assert "if(showLabels || selected)" in html
+
+
 def test_openglobus_vector_layer_uses_async_rendering_and_resize_kick():
     html = _sample_html()
     assert "async:true" in html
-    assert "window.dispatchEvent(new Event(\"resize\")),250" in html
+    assert "globe.start();" in html
+    assert "globe.renderer.resize();" in html
+    assert "window.requestAnimationFrame(()=>status.classList.add(\"hidden\"))" in html
+    assert "webglcontextlost" in html
+    assert "webglcontextrestored" in html
+
+
+def test_openglobus_starts_renderer_before_dismissing_loading_state():
+    html = _sample_html()
+    startup = html[html.index("globe.start();"):]
+    assert startup.index("globe.start();") < startup.index(
+        "window.requestAnimationFrame(()=>status.classList.add(\"hidden\"))"
+    )
+    assert startup.index("globe.start();") < startup.index(
+        "globe.planet.camera.flyLonLat("
+    )
+    assert "renderer.isInitialized()" in html
 
 
 def test_openglobus_has_runtime_error_surface():

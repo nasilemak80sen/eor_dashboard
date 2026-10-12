@@ -122,12 +122,12 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
         subtitle="Interactive 3D field map with EOR-method coverage and field-level details.",
         height=620,
         camera_height=globe_height,
-        show_labels=True,
+        show_labels=False,
     )
 
     st.caption(
         "Each marker represents a mapped field. Marker size reflects the number of distinct EOR methods. "
-        "Click a marker to inspect the field and fly to its location."
+        "Select a marker to inspect the field and fly to its location. Zoom in to separate nearby fields."
     )
 
 
@@ -150,12 +150,27 @@ def render() -> None:
         ("RF Gap", "—" if rf_gap_total is None else f"{rf_gap_total:,.1f}", "Workbook aggregate"),
     ])
 
+    readiness = [
+        ("Workbook", isinstance(workbook, dict), "Workbook is ready for portfolio review."),
+        ("Field map", isinstance(map_df, pd.DataFrame) and not map_df.empty, "Spatial view contains mapped coordinates."),
+        ("Decision flow", True, "Screening and hybrid intelligence remain available in the workflow."),
+    ]
+    cols = st.columns(3)
+    for col, (label, ready, note) in zip(cols, readiness):
+        with col:
+            state = "Ready" if ready else "Check"
+            tone = "ready" if ready else "warning"
+            st.markdown(
+                f'<div class="decision-summary-card"><div class="decision-summary-header"><div><div class="decision-summary-kicker">System</div><div class="decision-summary-title">{label}</div></div><span class="decision-summary-status {tone}">{state}</span></div><div class="decision-summary-subtitle">{note}</div></div>',
+                unsafe_allow_html=True,
+            )
+
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    # Keep the WebGL component outside st.tabs. Streamlit 1.39 has a
-    # confirmed iframe/custom-component sizing issue in tab containers, which
-    # can initialize a WebGL canvas at an invalid size. The proven competency
-    # dashboard also renders its globe in a normal visible page container.
+    # Keep the WebGL component outside st.tabs. A visible, normal page
+    # container gives the WebGL iframe a stable size during initialization.
+    # The proven competency dashboard also renders its globe in a normal
+    # visible page container.
     if isinstance(map_df, pd.DataFrame) and not map_df.empty:
         _render_spatial_snapshot(map_df)
     else:

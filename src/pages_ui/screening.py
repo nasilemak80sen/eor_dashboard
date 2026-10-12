@@ -5,7 +5,24 @@ from __future__ import annotations
 import streamlit as st
 
 from data.screening_history import persist_engineering_run
-from ui.components import insight_cards, reset_button, section_title, kpi_cards
+from ui.components import insight_cards, reset_button, section_title, kpi_cards, workflow_steps, render_decision_summary
+
+
+def _screening_summary(result: dict | None) -> tuple[str, str, list[tuple[str, object]]]:
+    if not result or not result.get("results"):
+        return "Awaiting input", "Complete the form to run the engineering gate.", [("Current status", "No result yet")]
+
+    rows = result.get("results", []) or []
+    pass_count = sum(1 for item in rows if str(item.get("Status", "")).upper() == "PASS")
+    conditional_count = sum(1 for item in rows if str(item.get("Status", "")).upper() == "CONDITIONAL")
+    fail_count = sum(1 for item in rows if str(item.get("Status", "")).upper() == "FAIL (CRITICAL)")
+    best = max(rows, key=lambda item: float(item.get("Score (%)", 0)), default={})
+    status_label = "Ready" if pass_count or conditional_count else "Warning"
+    return (
+        "Recommendation ready",
+        f"Best technique: {best.get('EOR Technique', 'N/A')} at {best.get('Score (%)', 0):.1f}% suitability.",
+        [("Pass", pass_count), ("Conditional", conditional_count), ("Fail", fail_count), ("Top technique", best.get("EOR Technique", "N/A"))],
+    )
 
 
 def render() -> None:
@@ -31,6 +48,7 @@ def render() -> None:
 
     inputs_tab, result_tab = st.tabs(["Reservoir Inputs", "Engineering Gate"])
     with inputs_tab:
+        workflow_steps(["Reservoir basics", "Recovery context", "Engineering review"], current_step=0)
         action_col, _ = st.columns([1, 4])
         with action_col:
             reset_button(
@@ -69,6 +87,13 @@ def render() -> None:
         if not result:
             st.info("No screening result yet. Complete the Reservoir Inputs tab and submit the Engineering Gate.")
             return
+        summary_title, summary_body, summary_rows = _screening_summary(result)
+        render_decision_summary(
+            summary_title,
+            summary_body,
+            "Ready" if summary_rows else "Warning",
+            summary_rows,
+        )
         section_title(
             "Engineering Gate Result",
             "This deterministic result is the engineering anchor for the downstream hybrid decision path and is now persisted for audit/history.",
