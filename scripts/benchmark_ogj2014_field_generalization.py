@@ -261,14 +261,25 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     if df["technique"].isna().any() or df["technique"].astype(str).str.strip().eq("").any():
         raise ValueError("Technique labels must be present; do not infer or relabel them.")
 
-    valid_field = _valid_ids(df["field_id"])
-    identity_status = df["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
-    verified_field = valid_field & identity_status.isin({"verified", "confirmed"})
-    known = df.loc[valid_field].copy()
-    field_support = known.groupby("technique")["field_id"].nunique().sort_values()
-    verified_field_support = {
-        str(label): int(df.loc[verified_field & df["technique"].astype(str).eq(str(label)), "field_id"].nunique())
+    label_conflict_mask, label_conflict_details = label_semantic_conflict_audit(df)
+    label_reviewed = df.loc[~label_conflict_mask].copy()
+    source_valid_field = _valid_ids(df["field_id"])
+    source_status = df["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
+    source_verified_field = source_valid_field & source_status.isin({"verified", "confirmed"})
+    source_field_support = df.loc[source_valid_field].groupby("technique")["field_id"].nunique().sort_values()
+    source_verified_field_support = {
+        str(label): int(df.loc[source_verified_field & df["technique"].astype(str).eq(str(label)), "field_id"].nunique())
         for label in sorted(df["technique"].astype(str).unique())
+    }
+
+    valid_field = _valid_ids(label_reviewed["field_id"])
+    identity_status = label_reviewed["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
+    verified_field = valid_field & identity_status.isin({"verified", "confirmed"})
+    known = label_reviewed.loc[valid_field].copy()
+    field_support = known.groupby("technique")["field_id"].nunique().sort_values()
+    verified_field_support_after_quarantine = {
+        str(label): int(label_reviewed.loc[verified_field & label_reviewed["technique"].astype(str).eq(str(label)), "field_id"].nunique())
+        for label in sorted(label_reviewed["technique"].astype(str).unique())
     }
     eligible_classes = sorted(
         field_support[field_support >= MINIMUM_FIELDS_PER_CLASS].index.astype(str).tolist()
@@ -279,10 +290,11 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         if count < MINIMUM_FIELDS_PER_CLASS
     }
     if len(eligible_classes) < 2:
-        raise ValueError("Fewer than two technique classes meet the field-support threshold.")
+        raise ValueError("Fewer than two technique classes meet the field-support threshold after label-conflict quarantine.")
 
-    # Preserve every eligible source row. No feature-profile deduplication or label aggregation.
+    # Preserve every eligible non-conflicting source row; no feature-profile deduplication or label aggregation.
     scope = known.loc[known["technique"].astype(str).isin(eligible_classes)].copy().reset_index(drop=True)
+
     X = build_features(scope)
     y = scope["technique"].astype(str).to_numpy()
     groups = scope["field_id"].astype(str).to_numpy()
