@@ -60,4 +60,5 @@ jobs:
             outputs/ml_research/ogj2014_feature_range_issues.csv
             outputs/ml_research/ogj2014_technique_label_audit.csv
             outputs/ml_research/ogj2014_class_support_remediation.csv
+            outputs/ml_research/ogj2014_technique_label_semantic_review.csv
           if-no-files-found: warn
