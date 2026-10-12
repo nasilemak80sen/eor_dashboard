@@ -469,11 +469,26 @@ def audit(dataset: Path = DATASET) -> dict:
         }
         for item in unresolved_text_groups.values()
     ]
+    table_e_mask = df.get("tagging_rationale", pd.Series("", index=df.index)).fillna("").astype(str).str.contains("OGJ Table E", case=False)
+    project_valid = _valid_group(df["project_id"]) if "project_id" in df.columns else pd.Series(False, index=df.index)
+    case_valid = _valid_group(df["case_id"]) if "case_id" in df.columns else pd.Series(False, index=df.index)
+    needs_review_mask = df.get("needs_review", pd.Series("No", index=df.index)).astype(str).str.casefold().eq("yes")
     summary = {
         "dataset": str(dataset.relative_to(ROOT)) if dataset.is_relative_to(ROOT) else str(dataset),
         "source_rows": int(len(df)),
         "source_rows_unique_record_id": bool(df["record_id"].is_unique),
         "unresolved_field_rows": len(unresolved_rows),
+        "field_rows_unknown_by_source_schema": int(field_status.astype(str).eq("unknown").sum()),
+        "field_rows_needing_review": int(field_status.astype(str).eq("needs_review").sum()),
+        "unresolved_field_rows_excluding_source_schema_unknown": int(field_status.astype(str).isin(["needs_review", "provisional"]).sum() if "field_id" not in df.columns else ( (~field_valid) & ~field_status.astype(str).eq("unknown") ).sum()),
+        "project_id_nonblank_rows": int(project_valid.sum()),
+        "distinct_project_ids": int(df.loc[project_valid, "project_id"].nunique()) if "project_id" in df.columns else 0,
+        "case_id_nonblank_rows": int(case_valid.sum()),
+        "case_id_blank_rows": int((~case_valid).sum()),
+        "rows_needing_review_flag": int(needs_review_mask.sum()),
+        "table_e_rows_detected_from_tagging_rationale": int(table_e_mask.sum()),
+        "table_e_rows_without_project_id": int((table_e_mask & ~project_valid).sum()),
+        "table_e_rows_without_field_id": int((table_e_mask & ~field_valid).sum()),
         "unresolved_distinct_source_text_count": len(unresolved_distinct),
         "unresolved_distinct_source_texts": unresolved_distinct,
         "unresolved_field_rows_detail": unresolved_rows,
