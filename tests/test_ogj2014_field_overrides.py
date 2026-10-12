@@ -39,3 +39,25 @@ def test_ambiguous_formation_and_well_identifiers_remain_unresolved():
     for raw_line in examples:
         field, reason, _ = provenance.parse_field(raw_line)
         assert field is None, (raw_line, field, reason)
+
+
+
+def test_evidence_backed_aliases_share_canonical_field_identity():
+    swan, swan_reason, swan_geo = provenance.parse_field(
+        "Swan Hills LS 8-18 3-270 9,150 41 0.3 230 WF"
+    )
+    swan_report, _, report_geo = provenance.parse_field(
+        "Devon Canada Swan Hills Alta. 10/04 5 1 Beaverhill Lake LS"
+    )
+    assert swan == swan_report == "Swan Hills"
+    assert swan_geo == report_geo == "Alta."
+    assert "corroborating source rows" in swan_reason
+
+    arecuna_dot, _, geo_dot = provenance.parse_field(
+        "Anzoategui PDVSA E&P Steam Arecuna (F.O.) 2/85 1,668 5 5 US"
+    )
+    arecuna_no_dot, _, geo_no_dot = provenance.parse_field(
+        "Anzoategui PDVSA E&P Steam Arecuna (F.O) 12/83 1,544 15 15 US"
+    )
+    assert arecuna_dot == arecuna_no_dot == "Arecuna (F.O.)"
+    assert geo_dot == geo_no_dot
