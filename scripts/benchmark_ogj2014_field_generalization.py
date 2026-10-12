@@ -411,17 +411,37 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "row_preservation": {
             "source_rows": int(len(df)),
             "unique_record_ids": int(df["record_id"].nunique()),
-            "rows_with_resolved_field_id": int(valid_field.sum()),
-            "rows_excluded_for_unresolved_field_id": int((~valid_field).sum()),
+            "rows_with_resolved_field_id_before_label_quarantine": int(source_valid_field.sum()),
+            "rows_excluded_for_unresolved_field_id": int((~source_valid_field).sum()),
+            "rows_quarantined_for_label_semantic_review": int(label_conflict_mask.sum()),
+            "label_conflict_rows_also_missing_field_id": int((label_conflict_mask & ~source_valid_field).sum()),
+            "rows_remaining_after_label_quarantine": int(len(label_reviewed)),
             "eligible_scope_rows": int(len(scope)),
             "feature_profile_deduplication": False,
             "source_rows_merged": False,
         },
-        "field_support_all_classes": {str(k): int(v) for k, v in field_support.sort_index().items()},
-        "field_identity_status_counts": {
+        "field_support_all_classes_before_label_quarantine": {
+            str(k): int(v) for k, v in source_field_support.sort_index().items()
+        },
+        "field_support_all_classes_after_label_quarantine": {
+            str(k): int(v) for k, v in field_support.sort_index().items()
+        },
+        "field_identity_status_counts_before_label_quarantine": {
+            str(k): int(v) for k, v in source_status.value_counts(dropna=False).sort_index().items()
+        },
+        "field_identity_status_counts_after_label_quarantine": {
             str(k): int(v) for k, v in identity_status.value_counts(dropna=False).sort_index().items()
         },
-        "verified_independent_field_support_all_classes": verified_field_support,
+        "verified_independent_field_support_all_classes_before_label_quarantine": source_verified_field_support,
+        "verified_independent_field_support_all_classes_after_label_quarantine": verified_field_support_after_quarantine,
+        "label_semantic_review": {
+            "quarantined_rows": int(label_conflict_mask.sum()),
+            "quarantined_by_structured_label": {
+                str(k): int(v) for k, v in df.loc[label_conflict_mask, "technique"].value_counts().sort_index().items()
+            },
+            "candidates": label_conflict_details,
+            "policy": "Rows whose explicit raw-source technique wording conflicts with the structured label are excluded pending manual review. No label is automatically rewritten.",
+        },
         "field_identity_verification_warning": (
             "Field IDs are currently provisional parser-derived grouping candidates. "
             "Zero groups are marked verified/confirmed, so these scores are provisional field-isolation estimates, "
@@ -496,6 +516,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "limitations": [
             "Field identifiers are provisional parser-derived candidates; no field groups are marked verified/confirmed, so true unseen-field generalization is not yet established.",
             "The source table records observed techniques, not comparable outcomes or success labels.",
+            "Rows with explicit raw-source technique wording that conflicts with the structured technique label are quarantined until manually adjudicated; no automatic relabelling is performed.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
             "Four low-support classes are excluded from this restricted pilot and require more independent fields before full multiclass evaluation.",
             "Repeated holdouts and grouped CV are preliminary internal estimates, not external validation.",
