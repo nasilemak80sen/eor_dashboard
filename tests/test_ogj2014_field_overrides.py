@@ -61,12 +61,33 @@ def test_table_e_projects_are_not_misclassified_as_fields():
         "Parrylands New Horizon Steam Block E 7/01 744 6 Forest Sands S": "Block E",
         "Batman TPAO CO2 immiscible Bati Raman 3/86 12,890 212 69": "Bati Raman",
         "Maturin, Campo Orocual PDVSA E&P Steam Orocual 5/00 22,776 35 12": "Orocual",
+        "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20": "Miranga",
+        "Bentheim Wintershall Holding AG Steam Emlichheim, Block 1 7/07 55 8 1 Valanginian": "Emlichheim, Block 1",
+        "Shetlands Islands BP Hydrocarbon miscible Magnus 10/02 10,700 16 4": "Magnus",
+        "Drenthe Nederlandse Aardolie Maatschappij (NAM) Steam Schoonebeek 1970 800": "Schoonebeek",
+        "water Furrial 8/98 36,769 102 43 Naricual S": "Furrial",
+        "Anzoategui PDVSA E&P Steam Arecuna (F.O) 12/83 1,544 15 15": "Arecuna (F.O.)",
+        "Anzoategui PDVSA E&P Steam Bare (F.O). 3/87 8,066 66 65": "Bare (F.O.)",
     }
     for raw_line, expected in examples.items():
         project, context, reason = provenance.parse_project(raw_line)
         assert project == expected, (raw_line, project, context, reason)
         assert context
         assert reason.startswith(("source_verified:", "source_project_span"))
+
+
+def test_table_e_source_detection_uses_source_context_not_row_position():
+    assert provenance.is_table_e_source_row(
+        "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
+    )
+    assert provenance.is_table_e_source_row("MFB-53) US 31.9 6,600 2,650")
+    assert provenance.is_table_e_source_row("Carmopolis S/Congl. 22 200 2,460")
+    assert not provenance.is_table_e_source_row(
+        "Shell Canada Peace River Alta. 1979 4,900 97 109 Bluesky S"
+    )
+    assert not provenance.is_table_e_source_row(
+        "CNRL Pelican Lake Alta. 2006 187,000 1,000 200 Wabiskaw S"
+    )
 
 
 def test_ambiguous_table_e_pay_zones_do_not_get_project_or_field_ids():
