@@ -76,12 +76,38 @@ def verify(before,after):
 
 def main():
     wb0,ma=matrix(CANONICAL); wb1,mb=matrix(MIRROR)
-    copy_diff=[] 
-    if list(ma)!=list(mb):copy_diff.append("sheet names/order differ")
+    copy_diff=[]
+    if list(ma)!=list(mb):
+        copy_diff.append(f"sheet names/order differ: canonical={list(ma)}, mirror={list(mb)}")
     else:
-        for s in ma:
-            if ma[s]!=mb[s]:copy_diff.append(f"sheet {s} differs")
-    if copy_diff:raise SystemExit("SOURCE COPIES DIFFER: "+"; ".join(copy_diff))
+        for sheet in ma:
+            left, right = ma[sheet], mb[sheet]
+            if left == right:
+                continue
+            if len(left) != len(right):
+                copy_diff.append(
+                    f"sheet {sheet}: row count differs (canonical={len(left)}, mirror={len(right)})"
+                )
+            differences = []
+            for row_index in range(max(len(left), len(right))):
+                left_row = left[row_index] if row_index < len(left) else []
+                right_row = right[row_index] if row_index < len(right) else []
+                for col_index in range(max(len(left_row), len(right_row))):
+                    lv = left_row[col_index] if col_index < len(left_row) else None
+                    rv = right_row[col_index] if col_index < len(right_row) else None
+                    if lv != rv:
+                        differences.append(
+                            f"R{row_index+1}C{col_index+1}: canonical={lv!r}, mirror={rv!r}"
+                        )
+                        if len(differences) >= 10:
+                            break
+                if len(differences) >= 10:
+                    break
+            copy_diff.append(
+                f"sheet {sheet} differs; first cell differences: " + "; ".join(differences)
+            )
+    if copy_diff:
+        raise SystemExit("SOURCE COPIES DIFFER; no workbook was modified: " + " | ".join(copy_diff))
     ws=wb0[TARGET]; headers=[c.value for c in ws[1]]
     expected=["technique","formation_category","porosity_min_pct","porosity_max_pct","perm_min_md","perm_max_md","depth_min_ft","depth_max_ft","api_min","api_max","visc_min_cp","visc_max_cp","so_start_min_pct","so_start_max_pct","raw_line"]
     already_enriched = (len(headers)==15+len(NEW_COLS) and headers[:15]==expected and headers[15:]==NEW_COLS)
