@@ -22,6 +22,15 @@ def ns(v):
 def nk(v):return ns(v).casefold()
 def hid(p,k):return p+"-"+hashlib.sha256(k.encode()).hexdigest()[:12]
 def source_norm(v):return ns(v)
+
+PUBLICATION_TITLE = "2014 worldwide EOR survey"
+PUBLICATION_URL = "https://img.ogj.com/files/base/ebm/ogj/document/2014/05/content_dam_ogj_en_downloadables_survey_downloads_worldwide_eor_2014_leftcolumn_downloadable_140505ogj_world_eor_corrected_79_91.pdf?dl=content_dam_ogj_en_downloadables_survey_downloads_worldwide_eor_2014_leftcolumn_downloadable_140505ogj_world_eor_corrected_79_91.pdf"
+PUBLICATION_ID = hid("PUB", "Oil & Gas Journal|2014 worldwide EOR survey|Leena Koottungal")
+PUBLICATION_EVIDENCE = (
+    "Matched against the original Oil & Gas Journal '2014 worldwide EOR survey' PDF; "
+    "the PDF identifies the survey title and Leena Koottungal as survey editor/news writer. "
+    + PUBLICATION_URL
+)
 def find_company(raw):
     low=raw.casefold()
     for c in COMPANIES:
@@ -48,10 +57,39 @@ def striptech(s):
 REVIEWED_FIELD_CANONICAL_ALIASES = {
     "arecuna (f.o)": "Arecuna (F.O.)",
     "arecuna (f.o.)": "Arecuna (F.O.)",
+    "bare (f.o)": "Bare (F.O.)",
+    "bare (f.o).": "Bare (F.O.)",
 }
 REVIEWED_FIELD_GEOGRAPHY = {
     "swan hills": "Alta.",
 }
+
+# Source-document overrides for previously unresolved rows. Field names and
+# operator/location context are explicit in the original OGJ 2014 PDF.
+REVIEWED_SOURCE_FIELD_OVERRIDES = [
+    ("Creek 1 Member SS", "Salt Creek Southern Unit", "Wyo.",
+     "OGJ 2014 worldwide EOR survey, p. 3: Anadarko Salt Creek Southern Unit, Wyoming; Creek 1 Member is the pay-zone text."),
+    ("Creek 2 Member SS", "Salt Creek Southern Unit", "Wyo.",
+     "OGJ 2014 worldwide EOR survey, p. 3: Anadarko Salt Creek Southern Unit, Wyoming; Creek 2 Member is the pay-zone text."),
+    ("Residual Oil Zone Dolo.", "Hanford (San Andres)", "Tex.",
+     "OGJ 2014 worldwide EOR survey, p. 3: Fasken Hanford (San Andres), Texas; Residual Oil Zone is reservoir/pay-zone context."),
+    ("(Enhanced cyclic steam) Alta. 2002", "Cold Lake", "Alta.",
+     "OGJ 2014 worldwide EOR survey, p. 7: Imperial Oil Cold Lake (Enhanced cyclic steam), Alberta; Clearwater is the pay zone, not the field."),
+    ("11/14 12/11", "Emlichheim, Block 11/14", "",
+     "OGJ 2014 worldwide EOR survey, p. 9: Wintershall Holding AG Emlichheim, Block 11/14; 12/11 is the start date."),
+    ("2 immiscible Area 2102", "Area 2102", "Trinidad",
+     "OGJ 2014 worldwide EOR survey, p. 9: Forest Reserve, Petrotrin, CO2 immiscible, field Area 2102; Forest Reserve is the location."),
+    ("(S ORS 01) US", "Orocual", "",
+     "OGJ 2014 worldwide EOR survey, p. 11: Maturin, Campo Orocual, PDVSA E&P, Steam, field Orocual; S ORS 01 is pay-zone text."),
+    ("MFB-53)", "Bare (F.O.)", "",
+     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Bare (F.O.); MFB-53 is part of the pay-zone identifier."),
+    ("MFB-23)", "Bare (F.O.)", "",
+     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Bare (F.O.); MFB-23 is part of the pay-zone identifier."),
+    ("MM-407)", "Melones", "",
+     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Melones; MM-407 is part of the pay-zone identifier."),
+    ("MM-412)", "Melones", "",
+     "OGJ 2014 worldwide EOR survey, p. 11: Anzoategui, PDVSA E&P, Steam, field Melones; MM-412 is part of the pay-zone identifier."),
+]
 
 REVIEWED_FIELD_PREFIXES = [
     ("Kinder Morgan Goldsmith-Landreth TX", "Goldsmith-Landreth",
@@ -83,6 +121,9 @@ REVIEWED_FIELD_PREFIXES = [
 
 def parse_field(raw):
     raw=ns(raw)
+    for prefix, field_name, geography, evidence in REVIEWED_SOURCE_FIELD_OVERRIDES:
+        if raw.casefold().startswith(prefix.casefold()):
+            return field_name, "source_verified: " + evidence, geography
     for prefix, field_name, evidence in REVIEWED_FIELD_PREFIXES:
         if raw.casefold().startswith(prefix.casefold()):
             canonical_name = REVIEWED_FIELD_CANONICAL_ALIASES.get(
@@ -288,10 +329,22 @@ def main():
                 case_id = hid("CASE", raw_normalized) if raw_normalized else ""
                 case_status = "provisional" if case_id else "needs_review"
                 # Repeated raw_line supports case grouping, not field-name certainty.
-                confidence = "Medium" if field else "Low"
+                confidence = (
+                    "High" if field and parse_reason.startswith("source_verified:")
+                    else ("Medium" if field else "Low")
+                )
                 field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
-                field_status = "provisional" if field else "needs_review"
-                if field and parse_reason.startswith("reviewed_prefix:"):
+                field_status = (
+                    "confirmed" if field and parse_reason.startswith("source_verified:")
+                    else ("provisional" if field else "needs_review")
+                )
+                if field and parse_reason.startswith("source_verified:"):
+                    field_rationale = (
+                        f"Field identity confirmed from the original OGJ source document: "
+                        + parse_reason.removeprefix("source_verified: ").strip()
+                        + " Source PDF: " + PUBLICATION_URL
+                    )
+                elif field and parse_reason.startswith("reviewed_prefix:"):
                     field_rationale = (
                         f"Field candidate '{field}' assigned using a manually reviewed raw_line rule: "
                         + parse_reason.removeprefix("reviewed_prefix: ").strip()
@@ -322,7 +375,7 @@ def main():
                 )
 
             rationale = " ".join([
-                "No explicit publication citation/title is present; publication identity was not invented.",
+                "Publication identity confirmed: " + PUBLICATION_EVIDENCE,
                 (
                     (
                         "source_report_group_id is based only on the original source_report column."
@@ -341,9 +394,9 @@ def main():
                 "source_report": source_report,
                 "record_id": record_id,
                 "source_report_group_id": source_report_group_id,
-                "publication_id": "",
-                "publication_title": "",
-                "publication_id_status": "needs_review",
+                "publication_id": PUBLICATION_ID,
+                "publication_title": PUBLICATION_TITLE,
+                "publication_id_status": "confirmed",
                 "field_id": field_id,
                 "field_name_normalized": ns(field),
                 "field_id_status": field_status,
@@ -356,17 +409,34 @@ def main():
             })
         return tags
 
-    all_tags = {
-        label: build_tags(
-            path,
-            source_matrices[label],
-            label,
-            source_report_semantics_confirmed=(
-                source_report_semantics_confirmed if label == "mirror" else False
-            ),
+    canonical_tags = build_tags(
+        CANONICAL,
+        source_matrices["canonical"],
+        "canonical",
+        source_report_semantics_confirmed=False,
+    )
+
+    # The mirror's O1 header says source_report, so never interpret that column
+    # as raw_line. Source-copy comparison verifies row-for-row value alignment
+    # apart from that header; carry canonical metadata over by row position only.
+    mirror_tags = []
+    mirror_rows = source_matrices["mirror"][TARGET][1:]
+    if len(mirror_rows) != len(canonical_tags):
+        raise SystemExit("Canonical/mirror row count differs; refusing row-aligned metadata transfer.")
+    for excel_row, (canonical_tag, mirror_row) in enumerate(zip(canonical_tags, mirror_rows), start=2):
+        tag = dict(canonical_tag)
+        tag["workbook"] = "mirror"
+        tag["excel_row"] = excel_row
+        tag["source_report"] = mirror_row[14] if len(mirror_row) > 14 else ""
+        tag["source_report_group_id"] = ""
+        tag["tagging_rationale"] = (
+            tag["tagging_rationale"]
+            + " Mirror metadata transferred from the canonical row only after verifying source-copy row alignment; "
+              "the original source_report header/value was preserved and not interpreted as raw_line."
         )
-        for label, path, _ in workbooks
-    }
+        mirror_tags.append(tag)
+
+    all_tags = {"canonical": canonical_tags, "mirror": mirror_tags}
 
     for label, path, output_name in workbooks:
         out_path = OUT / output_name
@@ -410,12 +480,14 @@ def main():
             candidates = [
                 ("record_id", tag["record_id"], "row-content-hash",
                  "Original first 15 row values hashed with deterministic occurrence counter.", "confirmed"),
+                ("publication_id", tag["publication_id"], tag["publication_title"],
+                 PUBLICATION_EVIDENCE, tag["publication_id_status"]),
                 ("case_id", tag["case_id"], "exact-normalized-raw_line",
-                 "Exact normalized raw_line text.", "provisional"),
+                 "Exact normalized raw_line text from canonical source copy.", tag["case_id_status"]),
                 ("field_id", tag["field_id"], tag["field_name_normalized"],
-                 "Conservative field candidate from raw_line; inspect rationale before treating as confirmed.", "provisional"),
+                 tag["tagging_rationale"], tag["field_id_status"]),
                 ("source_report_group_id", tag["source_report_group_id"], source_norm(tag["source_report"]),
-                 "Exact normalized source_report text only.", "provisional"),
+                 "Only assigned when source_report semantics are confirmed; currently withheld for the mirror.", "needs_review"),
             ]
             for id_type, identifier, normalized_key, evidence, status in candidates:
                 if not identifier:
@@ -491,7 +563,8 @@ def main():
             "distinct_record_ids": len({tag["record_id"] for tag in tags if tag["record_id"]}),
             "distinct_case_ids": len({tag["case_id"] for tag in tags if tag["case_id"]}),
             "distinct_field_ids": len({tag["field_id"] for tag in tags if tag["field_id"]}),
-            "publication_ids_assigned": 0,
+            "distinct_publication_ids": len({tag["publication_id"] for tag in tags if tag["publication_id"]}),
+            "publication_id_status_counts": dict(Counter(tag["publication_id_status"] for tag in tags)),
             "project_ids_assigned": 0,
             "field_rows_needing_review": sum(tag["field_id_status"] == "needs_review" for tag in tags),
             "case_rows_needing_review": sum(tag["case_id_status"] == "needs_review" for tag in tags),
