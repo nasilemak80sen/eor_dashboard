@@ -7,8 +7,6 @@ on:
     paths:
       - "scripts/build_ogj2014_provenance.py"
       - ".github/workflows/inspect-ogj2014.yml"
-      - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
-      - "data/OGJ2014_extracted_vs_Table1.xlsx"
   workflow_dispatch:
 
 permissions:
@@ -42,7 +40,7 @@ jobs:
             echo "Validated workbooks already match the generated provenance data."
             exit 0
           fi
-          git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks [skip ci]"
+          git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
           git push origin HEAD:fix/openglobus-restore-after-revert
 
       - name: Upload audit and mapping deliverables
