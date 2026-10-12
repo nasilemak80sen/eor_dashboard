@@ -20,7 +20,7 @@ def test_quality_audit_flags_unresolved_rows_aliases_ranges_and_labels(tmp_path,
         "field_name_normalized": ["L’Enfer", "L'Enfer", "", "Goldsmith-Landreth"],
         "field_id_status": ["provisional", "provisional", "needs_review", "provisional"],
         "tagging_rationale": ["source phrase", "source phrase", "unresolved", "source phrase"],
-        "raw_line": ["L’Enfer S 1998", "L'Enfer S 1999", "ambiguous zone code", "Goldsmith-Landreth TX 1997"],
+        "raw_line": ["L’Enfer S 1998", "L'Enfer S 1999", "ambiguous zone code", "Goldsmith-Landreth Steam TX 1997"],
         "formation_category": ["Sandstone"] * 4,
         "depth_min_ft": [100, 100, 100, 100],
         "depth_max_ft": [200, 200, 200, 200],
@@ -50,6 +50,8 @@ def test_quality_audit_flags_unresolved_rows_aliases_ranges_and_labels(tmp_path,
     assert summary["feature_completeness_and_range_audit"]["oil_saturation"]["both_missing"] == 1
     assert summary["feature_range_issue_rows"] >= 1
     assert summary["unrecognized_or_unreviewed_labels"][0]["raw_label"] == "Unreviewed technique"
+    assert summary["potential_label_semantic_conflict_rows"] == 1
+    assert summary["potential_label_semantic_conflict_candidates"][0]["structured_technique_label"] == "Polymer"
     remediation = {row["technique"]: row for row in summary["class_support_remediation"]}
     assert remediation["Steam"]["verified_independent_fields"] == 0
     assert remediation["Steam"]["verified_field_gap_to_six"] == 6
