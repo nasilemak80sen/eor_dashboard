@@ -63,6 +63,8 @@ def test_table_e_projects_are_not_misclassified_as_fields():
         "Maturin, Campo Orocual PDVSA E&P Steam Orocual 5/00 22,776 35 12": "Orocual",
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20": "Miranga",
         "Bentheim Wintershall Holding AG Steam Emlichheim, Block 1 7/07 55 8 1 Valanginian": "Emlichheim, Block 1",
+        "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG Steam Emlichheim, Block 11/14 12/11 150 12": "Emlichheim, Block 11/14",
+        "Forest Reserve Petrotrin CO2 immiscible EOR 34-Cyclic 84 NA 11": "EOR 34-Cyclic",
         "Shetlands Islands BP Hydrocarbon miscible Magnus 10/02 10,700 16 4": "Magnus",
         "Drenthe Nederlandse Aardolie Maatschappij (NAM) Steam Schoonebeek 1970 800": "Schoonebeek",
         "water Furrial 8/98 36,769 102 43 Naricual S": "Furrial",
