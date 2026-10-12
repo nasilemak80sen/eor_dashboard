@@ -40,17 +40,17 @@ def _record(technique="Polymer", source_group="source-1", **overrides):
     return row
 
 
-def test_standardization_removes_exact_duplicates_and_keeps_source_group():
+def test_standardization_preserves_duplicate_source_rows_and_keeps_source_group():
     df = standardize_training_table(
         pd.DataFrame([_record(), _record()])
     )
 
-    assert len(df) == 1
-    assert df.attrs["exact_duplicates_removed"] == 1
-    assert df.loc[0, "source_group"] == "source-1"
+    assert len(df) == 2
+    assert df.attrs["rows_merged_by_numeric_profile"] == 0
+    assert df["source_group"].tolist() == ["source-1", "source-1"]
 
 
-def test_identical_profiles_merge_source_groups_for_leakage_safe_splits():
+def test_identical_profiles_in_different_groups_remain_independent_rows():
     df = standardize_training_table(
         pd.DataFrame([
             _record("Polymer", source_group="source-1"),
@@ -60,13 +60,12 @@ def test_identical_profiles_merge_source_groups_for_leakage_safe_splits():
 
     profiles, label_sets, groups = build_multilabel_table(df)
 
-    assert len(profiles) == 1
-    assert label_sets == [("Polymer",)]
-    assert groups is not None
-    assert len(set(groups)) == 1
+    assert len(profiles) == 2
+    assert label_sets == [("Polymer",), ("Polymer",)]
+    assert groups.tolist() == ["source-1", "source-2"]
 
 
-def test_identical_profiles_aggregate_all_techniques_and_link_source_groups():
+def test_identical_profiles_with_different_labels_remain_separate_records():
     df = standardize_training_table(
         pd.DataFrame([
             _record("Polymer", source_group="source-1"),
@@ -76,10 +75,9 @@ def test_identical_profiles_aggregate_all_techniques_and_link_source_groups():
 
     profiles, label_sets, groups = build_multilabel_table(df)
 
-    assert len(profiles) == 1
-    assert label_sets == [("Polymer", "Steam")]
-    assert groups is not None
-    assert len(set(groups)) == 1
+    assert len(profiles) == 2
+    assert label_sets == [("Polymer",), ("Steam",)]
+    assert groups.tolist() == ["source-1", "source-2"]
 
 
 def test_grouped_validation_requires_source_ids_and_enough_independent_support():
