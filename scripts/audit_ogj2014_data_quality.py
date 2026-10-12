@@ -211,7 +211,7 @@ def audit(dataset: Path = DATASET) -> dict:
             writer.writerows(rows)
 
     summary = {
-        "dataset": str(dataset.relative_to(ROOT)),
+        "dataset": str(dataset.relative_to(ROOT)) if dataset.is_relative_to(ROOT) else str(dataset),
         "source_rows": int(len(df)),
         "source_rows_unique_record_id": bool(df["record_id"].is_unique),
         "unresolved_field_rows": len(unresolved_rows),
