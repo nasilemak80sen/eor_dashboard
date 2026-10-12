@@ -365,62 +365,120 @@ def main():
                 else ""
             )
 
+            project_id = ""
+            project_name = ""
+            project_context = ""
+            project_rationale = (
+                "No separate project column is provided in source Tables A-D; project_id intentionally left blank."
+            )
             if raw_i is not None:
                 raw = values[raw_i]
                 raw_normalized = source_norm(raw)
-                field, parse_reason, geography = parse_field(raw or "")
-                case_id = hid("CASE", raw_normalized) if raw_normalized else ""
-                case_status = "provisional" if case_id else "needs_review"
-                # A recognized operator -> explicit field span -> source geography/date
-                # is direct source evidence. Manually reviewed prefixes and explicit
-                # source-document overrides are also source-backed. Bare standalone
-                # candidates remain provisional unless corroborated elsewhere.
-                source_confirmed = bool(field) and (
-                    parse_reason.startswith("source_verified:")
-                    or parse_reason.startswith("reviewed_prefix:")
-                    or parse_reason.startswith("organization_field_span")
-                )
-                confidence = "High" if source_confirmed else ("Medium" if field else "Low")
-                field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
-                field_status = (
-                    "confirmed" if source_confirmed
-                    else ("provisional" if field else "needs_review")
-                )
-                if field and parse_reason.startswith("source_verified:"):
-                    field_rationale = (
-                        f"Field identity confirmed from the original OGJ source document: "
-                        + parse_reason.removeprefix("source_verified: ").strip()
-                        + " Source PDF: " + PUBLICATION_URL
+                if excel_row >= TABLE_E_START_EXCEL_ROW:
+                    # OGJ Table E has distinct Project and Field columns. In the
+                    # source rows represented here the Field cell is blank; do not
+                    # mislabel the project name or pay zone as a field.
+                    project_name, project_context, project_reason = parse_project(raw or "")
+                    project_id = (
+                        hid("PROJ", nk(project_context) + "|" + nk(project_name))
+                        if project_name else ""
                     )
-                elif field and parse_reason.startswith("reviewed_prefix:"):
+                    field = None
+                    geography = ""
+                    field_id = ""
+                    field_status = "unknown"
+                    confidence = "High" if project_id else "Low"
                     field_rationale = (
-                        f"Field identity confirmed by a manually reviewed explicit field-name rule: "
-                        + parse_reason.removeprefix("reviewed_prefix: ").strip()
-                        + " Source PDF: " + PUBLICATION_URL
+                        "OGJ Table E separates Project and Field. The source Field cell is blank for this row; "
+                        "field_id is intentionally blank rather than reusing the project name or pay-zone text."
                     )
-                elif field and parse_reason.startswith("organization_field_span"):
-                    field_rationale = (
-                        f"Field identity confirmed from the explicit operator-to-field span '{field}' "
-                        "bounded by source geography/date text in raw_line. Source PDF: "
-                        + PUBLICATION_URL
-                    )
-                elif field:
-                    field_rationale = (
-                        f"Field candidate '{field}' is a standalone pre-date span without sufficient operator/geography "
-                        "context; retained as provisional pending corroboration."
-                    )
+                    if project_id:
+                        if project_reason.startswith("source_verified:"):
+                            evidence = project_reason.removeprefix("source_verified: ").strip()
+                        else:
+                            evidence = (
+                                f"Project '{project_name}' is the explicit text between the source technique and start-date "
+                                f"columns in OGJ Table E; source context '{project_context}'."
+                            )
+                        project_rationale = (
+                            f"Project identity confirmed from the original OGJ source document: {evidence} "
+                            f"Source PDF: {PUBLICATION_URL}"
+                        )
+                        case_id = hid("CASE", raw_normalized) if raw_normalized else ""
+                        case_status = "provisional" if case_id else "needs_review"
+                        case_rationale = (
+                            "case_id is a deterministic hash of the exact normalized source fragment; repeated fragments share a group."
+                            if case_id else
+                            "No reliable source fragment for a case identifier."
+                        )
+                    else:
+                        case_id = ""
+                        case_status = "needs_review"
+                        project_rationale = (
+                            "Project identity unresolved because raw_line is a partial source fragment that does not uniquely "
+                            "identify a project; no project_id was guessed."
+                        )
+                        case_rationale = (
+                            "case_id withheld because the partial source fragment may represent multiple projects."
+                        )
                 else:
-                    field_rationale = "Field identity unresolved from raw_line evidence; no candidate was guessed."
-                case_rationale = (
-                    "case_id is a deterministic hash of exact normalized raw_line; exact repeats share a group."
-                    if case_id else "No reliable raw_line evidence for a case identifier."
-                )
+                    field, parse_reason, geography = parse_field(raw or "")
+                    case_id = hid("CASE", raw_normalized) if raw_normalized else ""
+                    case_status = "provisional" if case_id else "needs_review"
+                    # Explicit operator -> field span -> geography/date and
+                    # manually reviewed source rules support confirmed field IDs.
+                    source_confirmed = bool(field) and (
+                        parse_reason.startswith("source_verified:")
+                        or parse_reason.startswith("reviewed_prefix:")
+                        or parse_reason.startswith("organization_field_span")
+                    )
+                    confidence = "High" if source_confirmed else ("Medium" if field else "Low")
+                    field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
+                    field_status = (
+                        "confirmed" if source_confirmed
+                        else ("provisional" if field else "needs_review")
+                    )
+                    if field and parse_reason.startswith("source_verified:"):
+                        field_rationale = (
+                            f"Field identity confirmed from the original OGJ source document: "
+                            + parse_reason.removeprefix("source_verified: ").strip()
+                            + " Source PDF: " + PUBLICATION_URL
+                        )
+                    elif field and parse_reason.startswith("reviewed_prefix:"):
+                        field_rationale = (
+                            f"Field identity confirmed by a manually reviewed explicit field-name rule: "
+                            + parse_reason.removeprefix("reviewed_prefix: ").strip()
+                            + " Source PDF: " + PUBLICATION_URL
+                        )
+                    elif field and parse_reason.startswith("organization_field_span"):
+                        field_rationale = (
+                            f"Field identity confirmed from the explicit operator-to-field span '{field}' "
+                            "bounded by source geography/date text in raw_line. Source PDF: "
+                            + PUBLICATION_URL
+                        )
+                    elif field:
+                        field_rationale = (
+                            f"Field candidate '{field}' is a standalone pre-date span without sufficient operator/geography "
+                            "context; retained as provisional pending corroboration."
+                        )
+                    else:
+                        field_rationale = "Field identity unresolved from raw_line evidence; no candidate was guessed."
+                    case_rationale = (
+                        "case_id is a deterministic hash of exact normalized raw_line; exact repeats share a group."
+                        if case_id else "No reliable raw_line evidence for a case identifier."
+                    )
             else:
                 field = None
+                project_name = ""
+                project_context = ""
+                project_id = ""
+                project_rationale = (
+                    "This workbook has source_report but no raw_line column; project identity was not inferred from source_report."
+                )
                 case_id = ""
                 case_status = "needs_review"
                 field_id = ""
-                field_status = "needs_review"
+                field_status = "unknown"
                 confidence = "Low"
                 field_rationale = (
                     "This workbook has source_report but no raw_line column; field identity was not inferred from source_report."
