@@ -58,8 +58,6 @@ def striptech(s):
 REVIEWED_FIELD_CANONICAL_ALIASES = {
     "arecuna (f.o)": "Arecuna (F.O.)",
     "arecuna (f.o.)": "Arecuna (F.O.)",
-    "bare (f.o)": "Bare (F.O.)",
-    "bare (f.o).": "Bare (F.O.)",
 }
 REVIEWED_FIELD_GEOGRAPHY = {
     "swan hills": "Alta.",
@@ -134,10 +132,6 @@ REVIEWED_FIELD_PREFIXES = [
      "Explicit Aneth Unit name appears before Utah/San Juan geographic context."),
     ("Swan Hills LS", "Swan Hills",
      "Swan Hills is the explicit field name; LS is a following lithology abbreviation."),
-    ("Carmopolis S/Congl.", "Carmopolis",
-     "Carmopolis is the explicit field name preceding the sand/conglomerate abbreviation."),
-    ("miscible Magnus", "Magnus",
-     "Magnus is the named field following the technique qualifier."),
 ]
 
 
