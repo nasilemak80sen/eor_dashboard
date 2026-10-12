@@ -18,6 +18,7 @@ from sklearn.base import clone
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.impute import SimpleImputer
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -66,13 +67,12 @@ def build_features(frame: pd.DataFrame) -> pd.DataFrame:
     for prefix, low_col, high_col, unit in NUMERIC_RANGES:
         low = pd.to_numeric(frame[low_col], errors="coerce")
         high = pd.to_numeric(frame[high_col], errors="coerce")
-        if low.isna().any() or high.isna().any():
-            raise ValueError(f"Missing/non-numeric source values in {low_col}/{high_col}.")
-        if (high < low).any():
+        invalid_order = low.notna() & high.notna() & high.lt(low)
+        if invalid_order.any():
             raise ValueError(f"Invalid min/max ordering in {low_col}/{high_col}.")
         suffix = f"_{unit}" if unit else ""
         X[f"{prefix}_mid{suffix}"] = (low + high) / 2.0
-        X[f"{prefix}_span{suffix}"] = high - low
+        X[f"{prefix}_span{suffix}"] = (high - low).clip(lower=0)
 
     X["log10_perm_mid"] = np.log10(np.clip(X["perm_mid_md"], 1e-6, None))
     X["log10_visc_mid"] = np.log10(np.clip(X["visc_mid_cp"], 1e-6, None))
@@ -90,8 +90,10 @@ def build_features(frame: pd.DataFrame) -> pd.DataFrame:
     ]
     if forbidden:
         raise AssertionError(f"Provenance metadata entered model features: {forbidden}")
-    if X.isna().any().any() or not np.isfinite(X.to_numpy(dtype=float)).all():
-        raise ValueError("Feature matrix contains missing or non-finite values.")
+    values = X.to_numpy(dtype=float)
+    if np.isinf(values).any():
+        raise ValueError("Feature matrix contains infinite values.")
+    # Missing measurements are imputed inside each training fold, never before splitting.
     return X.astype(float)
 
 
@@ -156,22 +158,36 @@ def make_group_cv(
 
 
 def make_models() -> dict[str, Any]:
+    # Median imputation is fitted separately inside each fold to avoid validation leakage.
     return {
-        "DummyPrior": DummyClassifier(strategy="prior"),
+        "DummyPrior": make_pipeline(
+            SimpleImputer(strategy="median"),
+            DummyClassifier(strategy="prior"),
+        ),
         "LogisticRegression": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
             StandardScaler(),
             LogisticRegression(max_iter=4000, class_weight="balanced", random_state=42),
         ),
-        "RandomForest": RandomForestClassifier(
-            n_estimators=400, min_samples_leaf=2, class_weight="balanced_subsample",
-            random_state=42, n_jobs=-1,
+        "RandomForest": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
+            RandomForestClassifier(
+                n_estimators=400, min_samples_leaf=2, class_weight="balanced_subsample",
+                random_state=42, n_jobs=-1,
+            ),
         ),
-        "ExtraTrees": ExtraTreesClassifier(
-            n_estimators=400, min_samples_leaf=2, class_weight="balanced",
-            random_state=42, n_jobs=-1,
+        "ExtraTrees": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
+            ExtraTreesClassifier(
+                n_estimators=400, min_samples_leaf=2, class_weight="balanced",
+                random_state=42, n_jobs=-1,
+            ),
         ),
-        "HistGradientBoosting": HistGradientBoostingClassifier(
-            max_iter=200, l2_regularization=1.0, random_state=42,
+        "HistGradientBoosting": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
+            HistGradientBoostingClassifier(
+                max_iter=200, l2_regularization=1.0, random_state=42,
+            ),
         ),
     }
 
@@ -274,6 +290,11 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "Do not interpret these metrics as a validated nine-class production model."
         ),
         "feature_names": list(X.columns),
+        "feature_missing_values": {
+            str(column): int(count)
+            for column, count in X.isna().sum().items() if int(count) > 0
+        },
+        "imputation_policy": "median imputation fitted within each training fold; missingness indicators for predictive estimators",
         "provenance_columns_used_as_features": False,
         "group_column": "field_id",
         "holdout": {
