@@ -138,6 +138,12 @@ def select_training_table(preferred_name: str = "Dataset_01_EOR.xlsx") -> Tuple[
     return pd.read_excel(chosen["path"], sheet_name=chosen["sheet"]), chosen
 
 def standardize_training_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize values while preserving source-row identity.
+
+    Rows are not deduplicated by numeric values or their fingerprint. Two
+    source records can legitimately share measurements and must remain separate
+    observations with their own labels and provenance.
+    """
     out = pd.DataFrame(index=df.index)
     for name, aliases in COLUMN_ALIASES.items():
         source = find_column(df, aliases)
@@ -154,43 +160,46 @@ def standardize_training_table(df: pd.DataFrame) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Missing required fields: {missing}")
 
-    for c in required:
-        if c not in {"technique", "formation"}:
-            out[c] = pd.to_numeric(out[c], errors="coerce")
+    for column in required:
+        if column not in {"technique", "formation"}:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
 
-    out["technique"] = out["technique"].astype(str).str.strip()
-    out["formation"] = out["formation"].astype(str).str.strip().replace({
+    out["technique"] = out["technique"].astype("string").str.strip()
+    out["formation"] = out["formation"].astype("string").str.strip().replace({
         "Carbonate": "Carbonates",
         "Unconsolidated Sand": "Unconsolidated sands",
     })
-
     out = out.replace([np.inf, -np.inf], np.nan).dropna(subset=required).copy()
-    if "source_group" in out.columns:
-        source_groups = out["source_group"].astype("string").str.strip()
-        missing_groups = source_groups.str.lower().isin(["", "nan", "none", "null"])
-        out["source_group"] = source_groups.mask(missing_groups, pd.NA)
+    out = out[out["technique"].ne("") & out["formation"].ne("")].copy()
 
-    for lo, hi in [
-            ("depth_min", "depth_max"), ("por_min", "por_max"), ("perm_min", "perm_max"),
-            ("api_min", "api_max"), ("visc_min", "visc_max"),("so_min", "so_max"),]:
-    
-            out = out[out[hi] >= out[lo]]
-    
+    # Keep invalid/missing bounds visible to the cleaning report by excluding
+    # only mathematically invalid ranges, not by coalescing rows.
+    for low, high in [
+        ("depth_min", "depth_max"), ("por_min", "por_max"),
+        ("perm_min", "perm_max"), ("api_min", "api_max"),
+        ("visc_min", "visc_max"), ("so_min", "so_max"),
+    ]:
+        out = out[out[high] >= out[low]]
+
+    # Preserve all usable source observations; this fingerprint is diagnostic
+    # metadata only and never a key for deleting/merging rows.
     out["record_fingerprint"] = _fingerprints(out[required])
-
-    duplicate_key = ["record_fingerprint"]
-    if "source_group" in out.columns:
-        duplicate_key.append("source_group")
-    duplicate_count = int(out.duplicated(duplicate_key).sum())
-    out = out.drop_duplicates(duplicate_key, keep="first").reset_index(drop=True)
-    out.attrs["exact_duplicates_removed"] = duplicate_count
+    out = out.reset_index(drop=True)
+    out.attrs["source_rows_before_cleaning"] = int(len(df))
+    out.attrs["rows_removed_for_invalid_required_values"] = int(len(df) - len(out))
+    out.attrs["rows_merged_by_numeric_profile"] = 0
     return out
 
 
 def build_multilabel_table(
     df: pd.DataFrame,
 ) -> Tuple[pd.DataFrame, List[Tuple[str, ...]], np.ndarray | None]:
-    """Aggregate identical input profiles into one row with all associated labels."""
+    """Return one target label per source row without numeric-profile aggregation.
+
+    The historical name is retained for import compatibility only. Each row's
+    target is a singleton tuple. Repeated numeric features do not establish
+    source identity and do not justify merging distinct labels.
+    """
     required = [
         "technique", "formation",
         "depth_min", "depth_max", "por_min", "por_max",
@@ -199,71 +208,20 @@ def build_multilabel_table(
     ]
     missing = [column for column in required if column not in df.columns]
     if missing:
-        raise ValueError(f"Cannot build multi-label data; missing fields: {missing}")
+        raise ValueError(f"Cannot build row-preserving targets; missing fields: {missing}")
 
-    feature_columns = [column for column in required if column != "technique"]
-    feature_fingerprints = _fingerprints(df[feature_columns])
-    working = df.copy()
-    working["feature_fingerprint"] = feature_fingerprints
+    records = df.copy().reset_index(drop=True)
+    label_sets = [(str(label),) for label in records["technique"]]
 
-    has_source_groups = "source_group" in working.columns
-    source_series = None
-    if has_source_groups:
-        source_series = working["source_group"].astype("string").str.strip()
-        source_series = source_series.mask(
-            source_series.str.lower().isin(["", "nan", "none", "null"]),
-            pd.NA,
-        )
-
-    parents: dict[str, str] = {}
-
-    def find(node: str) -> str:
-        parents.setdefault(node, node)
-        if parents[node] != node:
-            parents[node] = find(parents[node])
-        return parents[node]
-
-    def union(left: str, right: str) -> None:
-        left_root, right_root = find(left), find(right)
-        if left_root != right_root:
-            parents[right_root] = left_root
-
-    representatives = []
-    label_sets: List[Tuple[str, ...]] = []
-    group_nodes: List[str | None] = []
-    for fingerprint, profile in working.groupby(
-        "feature_fingerprint", sort=False, dropna=False
-    ):
-        profile_index = profile.index
-        profile_labels = tuple(sorted(profile["technique"].astype(str).unique()))
-        representatives.append(profile.iloc[0].drop(labels=["feature_fingerprint"]))
-        label_sets.append(profile_labels)
-
-        if not has_source_groups:
-            group_nodes.append(None)
-            continue
-
-        profile_sources = source_series.loc[profile_index]
-        if profile_sources.isna().any():
-            group_nodes.append(None)
-            continue
-
-        profile_node = f"profile:{fingerprint}"
-        for source_id in profile_sources.unique():
-            source_node = f"source:{source_id}"
-            union(profile_node, source_node)
-        group_nodes.append(profile_node)
-
-    record_columns = list(df.columns)
-    records = pd.DataFrame(representatives).reindex(columns=record_columns).reset_index(drop=True)
-    if not has_source_groups:
+    if "source_group" not in records.columns:
         return records, label_sets, None
 
-    resolved_groups = [
-        find(node) if node is not None else pd.NA
-        for node in group_nodes
-    ]
-    return records, label_sets, np.asarray(resolved_groups, dtype=object)
+    source_groups = records["source_group"].astype("string").str.strip()
+    missing_values = source_groups.isna() | source_groups.str.casefold().isin(
+        {"", "nan", "none", "null", "unknown", "na", "needs_review"}
+    )
+    groups = source_groups.mask(missing_values, pd.NA).to_numpy(dtype=object)
+    return records, label_sets, groups
 
 
 def _fingerprints(frame: pd.DataFrame) -> List[str]:
