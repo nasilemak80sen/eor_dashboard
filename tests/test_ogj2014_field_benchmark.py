@@ -51,6 +51,10 @@ def test_field_holdout_and_cv_keep_fields_disjoint():
 
     train, test, _ = benchmark.make_group_holdout(labels, groups)
     assert set(groups[train]).isdisjoint(set(groups[test]))
+    train_support = benchmark._class_group_counts(labels, groups, train)
+    test_support = benchmark._class_group_counts(labels, groups, test)
+    assert min(train_support.values()) >= benchmark.MINIMUM_TRAIN_FIELDS_PER_CLASS
+    assert min(test_support.values()) >= benchmark.MINIMUM_HOLDOUT_FIELDS_PER_CLASS
 
     splits, folds, _ = benchmark.make_group_cv(labels[train], groups[train], requested_folds=3)
     assert folds >= 2
