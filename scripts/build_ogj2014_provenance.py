@@ -41,6 +41,18 @@ def striptech(s):
 # Manually reviewed field-name prefixes for rows the general parser could not
 # resolve. Each candidate is taken from an explicit field-like name in raw_line;
 # formations, reservoir zones, well IDs, and ambiguous codes remain unresolved.
+# Evidence-backed canonicalization is intentionally narrow: punctuation-only
+# variants are unified only when the operator, field wording, formation and
+# surrounding source context agree. Same-name fields in different geography
+# are not merged.
+REVIEWED_FIELD_CANONICAL_ALIASES = {
+    "arecuna (f.o)": "Arecuna (F.O.)",
+    "arecuna (f.o.)": "Arecuna (F.O.)",
+}
+REVIEWED_FIELD_GEOGRAPHY = {
+    "swan hills": "Alta.",
+}
+
 REVIEWED_FIELD_PREFIXES = [
     ("Kinder Morgan Goldsmith-Landreth TX", "Goldsmith-Landreth",
      "Operator prefix followed by explicit Goldsmith-Landreth field name."),
@@ -73,7 +85,15 @@ def parse_field(raw):
     raw=ns(raw)
     for prefix, field_name, evidence in REVIEWED_FIELD_PREFIXES:
         if raw.casefold().startswith(prefix.casefold()):
-            return field_name, "reviewed_prefix: " + evidence, ""
+            canonical_name = REVIEWED_FIELD_CANONICAL_ALIASES.get(
+                field_name.casefold(), field_name
+            )
+            geography = REVIEWED_FIELD_GEOGRAPHY.get(canonical_name.casefold(), "")
+            if canonical_name != field_name:
+                evidence += " Canonicalized a punctuation-only alias supported by matching operator, field wording, formation, and source context."
+            if geography:
+                evidence += " Assigned Alberta (Alta.) from corroborating source rows that name the same Swan Hills field; LS is the following lithology abbreviation."
+            return canonical_name, "reviewed_prefix: " + evidence, geography
     company,pos=find_company(raw)
     if company:
         rest=raw[pos+len(company):].strip(); m=DATE_RE.search(rest)
@@ -83,7 +103,11 @@ def parse_field(raw):
             if t in GEO:gi=i;break
         if gi is not None: field=" ".join(toks[:gi]).strip(" ,"); geo=toks[gi]
         else: field=pre.strip(" ,"); geo=""
-        if field and len(field)<=100:return field,"organization_field_span",geo
+        if field and len(field)<=100:
+            canonical_name = REVIEWED_FIELD_CANONICAL_ALIASES.get(field.casefold(), field)
+            if canonical_name != field:
+                return canonical_name, "organization_field_span: punctuation-only alias canonicalized from matching source context", geo
+            return field,"organization_field_span",geo
         return None,"ambiguous",""
     m=DATE_RE.search(raw)
     if m:
