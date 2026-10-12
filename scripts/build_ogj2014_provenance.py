@@ -75,98 +75,365 @@ def verify(before,after):
     return fails
 
 def main():
-    wb0,ma=matrix(CANONICAL); wb1,mb=matrix(MIRROR)
-    copy_diff=[]
-    if list(ma)!=list(mb):
-        copy_diff.append(f"sheet names/order differ: canonical={list(ma)}, mirror={list(mb)}")
+    outputs = {
+        CANONICAL.name: "OGJ2014_extracted_vs_Table1_provenance.xlsx",
+        MIRROR.name: "OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx",
+    }
+    source_matrices = {}
+    source_workbooks = {}
+    for path in (CANONICAL, MIRROR):
+        wb, sheets = matrix(path)
+        source_workbooks[path.name] = wb
+        source_matrices[path.name] = sheets
+
+    canonical_sheets = source_matrices[CANONICAL.name]
+    mirror_sheets = source_matrices[MIRROR.name]
+    mismatch_rows = []
+    if list(canonical_sheets) != list(mirror_sheets):
+        mismatch_rows.append({
+            "scope": "workbook",
+            "detail": "sheet names/order differ",
+            "canonical": list(canonical_sheets),
+            "mirror": list(mirror_sheets),
+        })
     else:
-        for sheet in ma:
-            left, right = ma[sheet], mb[sheet]
-            if left == right:
+        for sheet in canonical_sheets:
+            left = canonical_sheets[sheet]
+            right = mirror_sheets[sheet]
+            if sheet != TARGET:
+                if left != right:
+                    mismatch_rows.append({
+                        "scope": sheet,
+                        "detail": "non-target sheet values differ",
+                    })
                 continue
+
             if len(left) != len(right):
-                copy_diff.append(
-                    f"sheet {sheet}: row count differs (canonical={len(left)}, mirror={len(right)})"
-                )
-            differences = []
+                mismatch_rows.append({
+                    "scope": sheet,
+                    "detail": "row counts differ",
+                    "canonical_rows": len(left),
+                    "mirror_rows": len(right),
+                })
             for row_index in range(max(len(left), len(right))):
                 left_row = left[row_index] if row_index < len(left) else []
                 right_row = right[row_index] if row_index < len(right) else []
-                for col_index in range(max(len(left_row), len(right_row))):
+                for col_index in range(15):
                     lv = left_row[col_index] if col_index < len(left_row) else None
                     rv = right_row[col_index] if col_index < len(right_row) else None
-                    if lv != rv:
-                        differences.append(
-                            f"R{row_index+1}C{col_index+1}: canonical={lv!r}, mirror={rv!r}"
-                        )
-                        if len(differences) >= 10:
-                            break
-                if len(differences) >= 10:
+                    if lv == rv:
+                        continue
+                    if (
+                        row_index == 0 and col_index == 14
+                        and {lv, rv} == {"raw_line", "source_report"}
+                    ):
+                        mismatch_rows.append({
+                            "scope": f"{TARGET}!O1",
+                            "detail": "known semantic header difference; columns will be tagged independently",
+                            "canonical_header": lv,
+                            "mirror_header": rv,
+                        })
+                        continue
+                    mismatch_rows.append({
+                        "scope": sheet,
+                        "detail": f"cell R{row_index+1}C{col_index+1} differs",
+                        "canonical": repr(lv),
+                        "mirror": repr(rv),
+                    })
+                    if len(mismatch_rows) >= 30:
+                        break
+                if len(mismatch_rows) >= 30:
                     break
-            copy_diff.append(
-                f"sheet {sheet} differs; first cell differences: " + "; ".join(differences)
+            if len(mismatch_rows) >= 30:
+                break
+
+    unexpected = [
+        item for item in mismatch_rows
+        if item.get("detail") != "known semantic header difference; columns will be tagged independently"
+    ]
+    comparison = {
+        "canonical_workbook": str(CANONICAL.relative_to(ROOT)),
+        "mirror_workbook": str(MIRROR.relative_to(ROOT)),
+        "target_sheet": TARGET,
+        "copies_have_same_original_values": len(unexpected) == 0,
+        "known_header_difference": next(
+            (item for item in mismatch_rows if item.get("scope") == f"{TARGET}!O1"),
+            None,
+        ),
+        "unexpected_differences": unexpected,
+        "handling": (
+            "Each workbook is tagged using its own original column names; source_report is never treated as raw_line."
+        ),
+    }
+    (OUT / "ogj2014_source_copy_comparison.json").write_text(
+        json.dumps(comparison, indent=2), encoding="utf-8"
+    )
+    if unexpected:
+        raise SystemExit(
+            "SOURCE COPIES HAVE ADDITIONAL DIFFERENCES; no workbook was modified. "
+            + json.dumps(unexpected[:10], ensure_ascii=False)
+        )
+
+    def build_tags(path: Path, source_sheets: dict) -> list[dict]:
+        sheet_rows = source_sheets[TARGET]
+        headers = sheet_rows[0]
+        expected = [
+            "technique", "formation_category", "porosity_min_pct", "porosity_max_pct",
+            "perm_min_md", "perm_max_md", "depth_min_ft", "depth_max_ft", "api_min",
+            "api_max", "visc_min_cp", "visc_max_cp", "so_start_min_pct",
+            "so_start_max_pct", "raw_line",
+        ]
+        expected_mirror = expected[:14] + ["source_report"]
+        existing_enriched = (
+            len(headers) == 15 + len(NEW_COLS)
+            and headers[:15] in (expected, expected_mirror)
+            and headers[15:] == NEW_COLS
+        )
+        base_headers = headers[:15]
+        if not existing_enriched and base_headers not in (expected, expected_mirror):
+            raise SystemExit(f"Unexpected headers in {path}: {headers}")
+        if len(headers) not in (15, 15 + len(NEW_COLS)):
+            raise SystemExit(f"Unexpected column count in {path}: {len(headers)}")
+
+        raw_i = base_headers.index("raw_line") if "raw_line" in base_headers else None
+        sr_i = base_headers.index("source_report") if "source_report" in base_headers else None
+        rows = [
+            (excel_row, [row[col] if col < len(row) else None for col in range(15)])
+            for excel_row, row in enumerate(sheet_rows[1:], start=2)
+        ]
+        occurrences = Counter()
+        raw_counts = Counter(
+            source_norm(values[raw_i]) for _, values in rows
+            if raw_i is not None and source_norm(values[raw_i])
+        )
+        tags = []
+        for excel_row, values in rows:
+            content = "\\x1f".join("" if value is None else str(value) for value in values)
+            occurrences[content] += 1
+            record_id = hid("REC", content) + f"-{occurrences[content]:02d}"
+            source_report = values[sr_i] if sr_i is not None else ""
+            source_report_group_id = (
+                hid("SRG", source_norm(source_report))
+                if sr_i is not None and source_norm(source_report) else ""
             )
-    if copy_diff:
-        raise SystemExit("SOURCE COPIES DIFFER; no workbook was modified: " + " | ".join(copy_diff))
-    ws=wb0[TARGET]; headers=[c.value for c in ws[1]]
-    expected=["technique","formation_category","porosity_min_pct","porosity_max_pct","perm_min_md","perm_max_md","depth_min_ft","depth_max_ft","api_min","api_max","visc_min_cp","visc_max_cp","so_start_min_pct","so_start_max_pct","raw_line"]
-    already_enriched = (len(headers)==15+len(NEW_COLS) and headers[:15]==expected and headers[15:]==NEW_COLS)
-    if headers!=expected and not already_enriched:
-        raise SystemExit(f"Unexpected headers: {headers}")
-    raw_i=14; sr_i=headers.index("source_report") if "source_report" in headers else None
-    rows=[(r,[ws.cell(r,c).value for c in range(1,16)]) for r in range(2,ws.max_row+1)]
-    occ=Counter()
-    raw_counts=Counter(source_norm(vals[raw_i]) for _,vals in rows)
-    tags=[]
-    for er,vals in rows:
-        content="\x1f".join("" if v is None else str(v) for v in vals);occ[content]+=1
-        rid=hid("REC",content)+f"-{occ[content]:02d}"
-        raw=vals[raw_i]; rn=source_norm(raw)
-        srg=hid("SRG",source_norm(vals[sr_i])) if sr_i is not None and source_norm(vals[sr_i]) else ""
-        field,why,geo=parse_field(raw or "")
-        fid=hid("FIELD",nk(field)+"|"+nk(geo)) if field else ""
-        fstat="provisional" if field else "needs_review"
-        cid=hid("CASE",rn) if rn else ""
-        cstat="provisional" if cid else "needs_review"
-        conf="Low" if not field else ("High" if raw_counts[rn]>1 else "Medium")
-        review="Yes" if fstat=="needs_review" or cstat=="needs_review" else "No"
-        rat=[]
-        rat.append("No source_report column exists; source_report_group_id was not derived from raw_line.")
-        rat.append("No explicit publication citation/title is present; publication identity was not invented.")
-        rat.append(f"Field candidate '{field}' extracted conservatively from raw_line." if field else "Field identity unresolved from workbook evidence.")
-        rat.append("case_id is a deterministic hash of exact normalized raw_line; repeated identical raw_line values share the case group." if cid else "No reliable case evidence.")
-        tags.append({"excel_row":er,"source_report":vals[sr_i] if sr_i is not None else "","record_id":rid,"source_report_group_id":srg,"publication_id":"","publication_title":"","publication_id_status":"needs_review","field_id":fid,"field_name_normalized":ns(field),"field_id_status":fstat,"project_id":"","case_id":cid,"case_id_status":cstat,"tagging_confidence":conf,"tagging_rationale":" ".join(rat),"needs_review":review})
-    for src,name in [(CANONICAL,"OGJ2014_extracted_vs_Table1_provenance.xlsx"),(MIRROR,"OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx")]:
-        out=OUT/name;shutil.copy2(src,out);wb=load_workbook(out,data_only=False,read_only=False);ws=wb[TARGET]
-        current_headers=[ws.cell(1,c).value for c in range(1,ws.max_column+1)]
-        if current_headers[15:15+len(NEW_COLS)]==NEW_COLS:
-            ws.delete_cols(16,len(NEW_COLS))
-        elif ws.max_column!=15:
-            raise SystemExit(f"Unexpected existing columns in {src}: {current_headers}")
-        start=16;lh=ws.cell(1,start-1)
-        for j,h in enumerate(NEW_COLS):
-            c=ws.cell(1,start+j,h);c._style=copy(lh._style);c.font=copy(lh.font);c.fill=copy(lh.fill);c.border=copy(lh.border);c.alignment=copy(lh.alignment)
-        for i,t in enumerate(tags,2):
-            for j,h in enumerate(NEW_COLS):ws.cell(i,start+j,t[h])
-        wb.save(out)
-    with (OUT/"ogj2014_row_tagging_audit.csv").open("w",newline="",encoding="utf-8-sig") as f:
-        fields=["excel_row","source_report"]+NEW_COLS;w=csv.DictWriter(f,fieldnames=fields);w.writeheader();w.writerows(tags)
-    mp={}
-    for t in tags:
-        for typ,ident,key,evid,stat in [("record_id",t["record_id"],"row-content-hash","Original row values hashed with deterministic occurrence counter.","confirmed"),("case_id",t["case_id"],"exact-normalized-raw_line","Exact normalized raw_line text.","provisional"),("field_id",t["field_id"],nk(t["field_name_normalized"]),"Named field candidate extracted from raw_line.","provisional")]:
-            if not ident:continue
-            if ident not in mp:mp[ident]={"id_type":typ,"id":ident,"normalized_key":key,"supporting_evidence":evid,"status":stat,"confidence":t["tagging_confidence"],"source_rows":[],"needs_review":"No"}
-            mp[ident]["source_rows"].append(str(t["excel_row"]))
-            if t["needs_review"]=="Yes":mp[ident]["needs_review"]="Yes"
-    with (OUT/"ogj2014_id_mapping.csv").open("w",newline="",encoding="utf-8-sig") as f:
-        fs=["id_type","id","normalized_key","supporting_evidence","status","confidence","source_rows","needs_review"];w=csv.DictWriter(f,fieldnames=fs);w.writeheader()
-        for x in sorted(mp.values(),key=lambda z:(z["id_type"],z["id"])):x["source_rows"]=";".join(x["source_rows"]);w.writerow(x)
-    ver={}
-    for src,name in [(CANONICAL,"OGJ2014_extracted_vs_Table1_provenance.xlsx"),(MIRROR,"OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx")]:
-        _,before=matrix(src);_,after=matrix(OUT/name);outwb=load_workbook(OUT/name,data_only=False,read_only=False);outws=outwb[TARGET]
-        ver[name]={"failures":verify(before,after),"original_rows":len(before[TARGET]),"output_rows":len(after[TARGET]),"original_columns":15,"output_columns":29,"headers_at_end":[outws.cell(1,c).value for c in range(16,30)]==NEW_COLS,"technique_unchanged":all(before[TARGET][r][0]==after[TARGET][r][0] for r in range(len(before[TARGET])))}
-    summary={"source_copies_identical":True,"rows_tagged":len(tags),"source_report_column_present":sr_i is not None,"distinct_source_report_groups":len({t["source_report_group_id"] for t in tags if t["source_report_group_id"]}),"distinct_record_ids":len({t["record_id"] for t in tags}),"distinct_case_ids":len({t["case_id"] for t in tags if t["case_id"]}),"distinct_field_ids":len({t["field_id"] for t in tags if t["field_id"]}),"distinct_project_ids":0,"publication_confirmed":0,"publication_provisional":0,"publication_unknown":0,"publication_needs_review":len(tags),"field_confirmed":0,"field_provisional":sum(t["field_id_status"]=="provisional" for t in tags),"field_unknown":0,"field_needs_review":sum(t["field_id_status"]=="needs_review" for t in tags),"case_confirmed":0,"case_provisional":sum(t["case_id_status"]=="provisional" for t in tags),"case_unknown":0,"case_needs_review":sum(t["case_id_status"]=="needs_review" for t in tags),"rows_needing_review":sum(t["needs_review"]=="Yes" for t in tags),"ambiguous_or_conflicting_assignments":sum(t["field_id_status"]=="needs_review" for t in tags),"exact_raw_line_groups":len([x for x in raw_counts if x]),"repeated_exact_raw_line_groups":sum(v>1 for v in raw_counts.values()),"verification":ver}
-    (OUT/"ogj2014_provenance_summary.json").write_text(json.dumps(summary,indent=2),encoding="utf-8")
-    (OUT/"ogj2014_provenance_summary.md").write_text("# OGJ2014 provenance preparation\n\n"+json.dumps(summary,indent=2)+"\n\nAll added IDs are metadata only and must not be used as model features. The workbook contains no source_report column or explicit publication citation, so those identities were left unresolved rather than invented. raw_line was not repurposed as source_report.\n",encoding="utf-8")
-    print(json.dumps(summary,indent=2))
-if __name__=="__main__":main()
+
+            if raw_i is not None:
+                raw = values[raw_i]
+                raw_normalized = source_norm(raw)
+                field, parse_reason, geography = parse_field(raw or "")
+                case_id = hid("CASE", raw_normalized) if raw_normalized else ""
+                case_status = "provisional" if case_id else "needs_review"
+                confidence = (
+                    "Low" if not field
+                    else ("High" if raw_counts[raw_normalized] > 1 else "Medium")
+                )
+                field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
+                field_status = "provisional" if field else "needs_review"
+                field_rationale = (
+                    f"Field candidate '{field}' extracted conservatively from raw_line."
+                    if field else "Field identity unresolved from raw_line evidence."
+                )
+                case_rationale = (
+                    "case_id is a deterministic hash of exact normalized raw_line; exact repeats share a group."
+                    if case_id else "No reliable raw_line evidence for a case identifier."
+                )
+            else:
+                field = parse_reason = geography = None
+                case_id = ""
+                case_status = "needs_review"
+                field_id = ""
+                field_status = "needs_review"
+                confidence = "Low"
+                field_rationale = (
+                    "This workbook has source_report but no raw_line column; field identity was not inferred from source_report."
+                )
+                case_rationale = (
+                    "case_id was left blank because source_report is not treated as raw_line."
+                )
+
+            rationale = " ".join([
+                (
+                    "No explicit publication citation/title is present; publication identity was not invented."
+                ),
+                (
+                    "source_report_group_id is based only on the original source_report column."
+                    if sr_i is not None else
+                    "No source_report column exists; source_report_group_id was not derived from raw_line."
+                ),
+                field_rationale,
+                case_rationale,
+            ])
+            tags.append({
+                "workbook": path.name,
+                "excel_row": excel_row,
+                "source_report": source_report,
+                "record_id": record_id,
+                "source_report_group_id": source_report_group_id,
+                "publication_id": "",
+                "publication_title": "",
+                "publication_id_status": "needs_review",
+                "field_id": field_id,
+                "field_name_normalized": ns(field),
+                "field_id_status": field_status,
+                "project_id": "",
+                "case_id": case_id,
+                "case_id_status": case_status,
+                "tagging_confidence": confidence,
+                "tagging_rationale": rationale,
+                "needs_review": "Yes" if field_status == "needs_review" or case_status == "needs_review" else "No",
+            })
+        return tags
+
+    all_tags = {}
+    for path in (CANONICAL, MIRROR):
+        all_tags[path.name] = build_tags(path, source_matrices[path.name])
+
+    for path in (CANONICAL, MIRROR):
+        out_path = OUT / outputs[path.name]
+        shutil.copy2(path, out_path)
+        workbook = load_workbook(out_path, data_only=False, read_only=False)
+        worksheet = workbook[TARGET]
+        current_headers = [worksheet.cell(1, col).value for col in range(1, worksheet.max_column + 1)]
+        if current_headers[15:15 + len(NEW_COLS)] == NEW_COLS:
+            worksheet.delete_cols(16, len(NEW_COLS))
+        elif worksheet.max_column != 15:
+            raise SystemExit(f"Unexpected existing columns in {path}: {current_headers}")
+
+        start_col = 16
+        style_source = worksheet.cell(1, start_col - 1)
+        for offset, header in enumerate(NEW_COLS):
+            cell = worksheet.cell(1, start_col + offset, header)
+            cell._style = copy(style_source._style)
+            cell.font = copy(style_source.font)
+            cell.fill = copy(style_source.fill)
+            cell.border = copy(style_source.border)
+            cell.alignment = copy(style_source.alignment)
+
+        for excel_row, tag in enumerate(all_tags[path.name], start=2):
+            for offset, header in enumerate(NEW_COLS):
+                worksheet.cell(excel_row, start_col + offset, tag[header])
+        workbook.save(out_path)
+
+    audit_fields = ["workbook", "excel_row", "source_report"] + NEW_COLS
+    with (OUT / "ogj2014_row_tagging_audit.csv").open("w", newline="", encoding="utf-8-sig") as file:
+        writer = csv.DictWriter(file, fieldnames=audit_fields)
+        writer.writeheader()
+        for path in (CANONICAL, MIRROR):
+            writer.writerows(all_tags[path.name])
+
+    mappings = {}
+    for path in (CANONICAL, MIRROR):
+        workbook_name = path.name
+        for tag in all_tags[workbook_name]:
+            candidates = [
+                ("record_id", tag["record_id"], "row-content-hash",
+                 "Original first 15 row values hashed with deterministic occurrence counter.", "confirmed"),
+                ("case_id", tag["case_id"], "exact-normalized-raw_line",
+                 "Exact normalized raw_line text.", "provisional"),
+                ("field_id", tag["field_id"], tag["field_name_normalized"],
+                 "Conservative field candidate from raw_line; inspect rationale before treating as confirmed.", "provisional"),
+                ("source_report_group_id", tag["source_report_group_id"], source_norm(tag["source_report"]),
+                 "Exact normalized source_report text only.", "provisional"),
+            ]
+            for id_type, identifier, normalized_key, evidence, status in candidates:
+                if not identifier:
+                    continue
+                key = (workbook_name, id_type, identifier)
+                if key not in mappings:
+                    mappings[key] = {
+                        "workbook": workbook_name,
+                        "id_type": id_type,
+                        "id": identifier,
+                        "normalized_key": normalized_key,
+                        "supporting_evidence": evidence,
+                        "status": status,
+                        "confidence": tag["tagging_confidence"],
+                        "source_rows": [],
+                        "needs_review": "No",
+                    }
+                mappings[key]["source_rows"].append(str(tag["excel_row"]))
+                if tag["needs_review"] == "Yes":
+                    mappings[key]["needs_review"] = "Yes"
+
+    mapping_fields = ["workbook", "id_type", "id", "normalized_key", "supporting_evidence",
+                      "status", "confidence", "source_rows", "needs_review"]
+    with (OUT / "ogj2014_id_mapping.csv").open("w", newline="", encoding="utf-8-sig") as file:
+        writer = csv.DictWriter(file, fieldnames=mapping_fields)
+        writer.writeheader()
+        for item in sorted(mappings.values(), key=lambda value: (value["workbook"], value["id_type"], value["id"])):
+            item["source_rows"] = ";".join(item["source_rows"])
+            writer.writerow(item)
+
+    verification = {}
+    summaries = {}
+    for path in (CANONICAL, MIRROR):
+        original_workbook, before = matrix(path)
+        output_path = OUT / outputs[path.name]
+        _, after = matrix(output_path)
+        check_book = load_workbook(output_path, data_only=False, read_only=False)
+        check_sheet = check_book[TARGET]
+        output_headers = [check_sheet.cell(1, col).value for col in range(1, check_sheet.max_column + 1)]
+        expected_orig_cols = 15
+        failures = verify(before, after)
+        if not all(t["record_id"] for t in all_tags[path.name]):
+            failures.append("record_id missing on one or more source rows")
+        if len({t["record_id"] for t in all_tags[path.name]}) != len(all_tags[path.name]):
+            failures.append("record_id is not unique within workbook")
+        expected_base = before[TARGET][0][:15]
+        verification[path.name] = {
+            "failures": failures,
+            "original_rows_including_header": len(before[TARGET]),
+            "output_rows_including_header": len(after[TARGET]),
+            "original_columns": expected_orig_cols,
+            "output_columns": len(output_headers),
+            "original_headers_preserved": output_headers[:15] == expected_base,
+            "provenance_columns_appended_in_order": output_headers[15:] == NEW_COLS,
+            "technique_unchanged": all(
+                before[TARGET][index][0] == after[TARGET][index][0]
+                for index in range(len(before[TARGET]))
+            ),
+            "needs_review_rows": sum(tag["needs_review"] == "Yes" for tag in all_tags[path.name]),
+        }
+        tags = all_tags[path.name]
+        summaries[path.name] = {
+            "rows_tagged": len(tags),
+            "source_report_column_present": "source_report" in before[TARGET][0][:15],
+            "distinct_source_report_groups": len({tag["source_report_group_id"] for tag in tags if tag["source_report_group_id"]}),
+            "distinct_record_ids": len({tag["record_id"] for tag in tags if tag["record_id"]}),
+            "distinct_case_ids": len({tag["case_id"] for tag in tags if tag["case_id"]}),
+            "distinct_field_ids": len({tag["field_id"] for tag in tags if tag["field_id"]}),
+            "publication_ids_assigned": 0,
+            "project_ids_assigned": 0,
+            "field_rows_needing_review": sum(tag["field_id_status"] == "needs_review" for tag in tags),
+            "case_rows_needing_review": sum(tag["case_id_status"] == "needs_review" for tag in tags),
+        }
+
+    summary = {
+        "source_copy_comparison": comparison,
+        "per_workbook": summaries,
+        "verification": verification,
+        "rows_tagged_total_across_copies": sum(len(tags) for tags in all_tags.values()),
+        "notes": [
+            "The two workbook copies retain their own original column names and values.",
+            "raw_line is used for field/case candidate extraction only when that column exists.",
+            "source_report is never treated as raw_line; on the mirror copy it contributes only to source_report_group_id.",
+            "All provenance IDs are grouping/audit metadata, not model features.",
+            "Publication and project identities were not invented from the workbook name or raw text.",
+        ],
+    }
+    (OUT / "ogj2014_provenance_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (OUT / "ogj2014_provenance_summary.md").write_text(
+        "# OGJ2014 provenance preparation\n\n"
+        + json.dumps(summary, indent=2)
+        + "\n\nThe source-copy comparison is reported explicitly. Each workbook is enriched from its own schema; "
+          "the mirror's source_report column is never repurposed as raw_line.\n",
+        encoding="utf-8",
+    )
+
+    print(json.dumps(summary, indent=2))
+    if any(item["failures"] for item in verification.values()):
+        raise SystemExit("Workbook verification failed; inspect summary before consuming the outputs.")
+
+
+if __name__=="__main__":
+    main()
