@@ -1,7 +1,15 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.preprocessing import MultiLabelBinarizer
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+NOTEBOOK_DIR = REPO_ROOT / "eor_ml_research_layer" / "notebooks"
+sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(NOTEBOOK_DIR))
 
 from eor_ml_research_layer.notebooks.notebook_utils import (
     build_multilabel_table,
