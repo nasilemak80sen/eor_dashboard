@@ -43,11 +43,9 @@ COLUMN_ALIASES = {
     # IDs are metadata used for splitting/audit only, never predictive features.
     # Field-level grouping is the target for generalization. Incomplete field
     # IDs must be resolved or explicitly filtered; do not silently use case IDs.
-    "source_group": [
-        "field_id", "Field Name", "Field", "case_id",
-        "source_report_group_id", "publication_id", "project_id",
-        "source_id", "source_group", "report_id",
-    ],
+    # Only field-level provenance is valid for this research benchmark.
+    # Never substitute case/project/report IDs when field IDs are missing.
+    "source_group": ["field_id", "Field ID", "field_name_normalized"],
 }
 
 MINIMUM_GROUPS_PER_CLASS = 6
@@ -274,11 +272,13 @@ def validate_grouped_dataset(
             "source_group identifier. Add a field, project, report, or publication ID."
         )
     group_values = pd.Series(np.asarray(groups), dtype="string").str.strip()
-    missing_groups = group_values.isna() | group_values.str.lower().isin(
-        ["", "nan", "none", "null"]
+    missing_groups = group_values.isna() | group_values.str.casefold().isin(
+        ["", "nan", "none", "null", "unknown", "na", "needs_review"]
     )
     if missing_groups.any():
-        raise ValueError("source_group contains blank values; resolve them before evaluation.")
+        raise ValueError(
+            "source_group contains blank or unresolved field IDs; resolve them before field-level evaluation."
+        )
 
     label_values = np.asarray(labels)
     if label_values.ndim == 2:
