@@ -25,6 +25,10 @@ on:
       - "tests/test_ogj2014_field_overrides.py"
       - "tests/test_ogj2014_field_benchmark.py"
 
+concurrency:
+  group: ogj2014-field-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
