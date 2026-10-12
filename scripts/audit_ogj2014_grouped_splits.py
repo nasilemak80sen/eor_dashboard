@@ -171,6 +171,20 @@ def audit(path: Path = DATASET) -> dict:
         expected_classes=expected_classes,
     )
 
+    minimum_independent_field_groups = 6
+    field_group_support = field_audit["independent_groups_per_class"]
+    eligible_field_classes = sorted(
+        label for label, count in field_group_support.items()
+        if count >= minimum_independent_field_groups
+    )
+    unsupported_field_classes = {
+        label: count for label, count in sorted(field_group_support.items())
+        if count < minimum_independent_field_groups
+    }
+    eligible_field_rows = field_df[
+        field_df["technique"].astype(str).str.strip().isin(eligible_field_classes)
+    ]
+
     result = {
         "dataset": str(path.relative_to(ROOT)),
         "sheet": SHEET,
@@ -187,6 +201,18 @@ def audit(path: Path = DATASET) -> dict:
         "field_id_nonblank_rows": int(valid_field.sum()),
         "field_id_distinct_groups": int(df.loc[valid_field, "field_id"].nunique()),
         "field_id_missing_rows": int((~valid_field).sum()),
+        "field_level_training_scope": {
+            "minimum_independent_field_groups_per_class": minimum_independent_field_groups,
+            "eligible_technique_classes": eligible_field_classes,
+            "unsupported_technique_classes": unsupported_field_classes,
+            "eligible_class_count": len(eligible_field_classes),
+            "rows_in_eligible_class_scope_with_known_field_ids": int(len(eligible_field_rows)),
+            "rows_excluded_for_unknown_field_id": int((~valid_field).sum()),
+            "warning": (
+                "This is a documented restricted-scope research option, not permission to relabel or merge techniques. "
+                "The full 9-class model is not considered ready while any class lacks the minimum independent-field support."
+            ),
+        },
         "provenance_columns_excluded_from_features": sorted(c for c in ID_COLUMNS if c in df.columns),
         "case_level_validation": case_audit,
         "field_level_validation": {
