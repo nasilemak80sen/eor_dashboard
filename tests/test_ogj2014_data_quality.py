@@ -55,5 +55,7 @@ def test_quality_audit_flags_unresolved_rows_aliases_ranges_and_labels(tmp_path,
     remediation = {row["technique"]: row for row in summary["class_support_remediation"]}
     assert remediation["Steam"]["verified_independent_fields"] == 0
     assert remediation["Steam"]["verified_field_gap_to_six"] == 6
+    assert remediation["Polymer"]["rows_flagged_for_label_semantic_review"] == 1
+    assert remediation["Polymer"]["source_rows_after_label_review"] == 0
     assert (tmp_path / "audit" / "ogj2014_class_support_remediation.csv").is_file()
     assert (tmp_path / "audit" / "ogj2014_unresolved_field_review.csv").is_file()
