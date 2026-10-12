@@ -119,8 +119,8 @@ def cross_validate(
     assert_no_provenance_features(X)
     if groups is None:
         raise ValueError(
-            "Leakage-safe validation requires explicit groups. Supply case_id, "
-            "field_id, source_report_group_id, publication_id, or legacy Field."
+            "Leakage-safe validation requires explicit groups. Supply field_id, "
+            "or an explicitly approved case/report/publication grouping when field-level IDs are unavailable."
         )
 
     splits, actual_folds = grouped_stratified_splits(X, y, groups, folds=folds)
@@ -204,7 +204,7 @@ def train_and_save(
         "target_column": TARGET_COLUMN,
         "formation_column": FORMATION_COLUMN,
         "group_column": group_column,
-        "grouping_policy": "case_id > field_id > source_report_group_id > publication_id > Field",
+        "grouping_policy": "field_id first; no silent downgrade when field IDs are incomplete",
         "provenance_columns_used_as_features": False,
         "screening_gate_separate": True,
         "fuzzy_used_as_model_feature": False,
