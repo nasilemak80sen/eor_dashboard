@@ -34,6 +34,12 @@ jobs:
 
       - name: Publish both validated workbook copies
         run: |
+          # Rebase by rebuilding the workbook commit on the latest branch tip.
+          # The generated outputs under work/ are untracked/ignored and survive
+          # reset; this avoids binary Excel merge conflicts with prior workbook builds.
+          git fetch origin fix/openglobus-restore-after-revert
+          git reset --hard origin/fix/openglobus-restore-after-revert
+
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
 
@@ -44,9 +50,7 @@ jobs:
             echo "Validated workbooks already match the generated provenance data."
             exit 0
           fi
-          git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
-          git fetch origin fix/openglobus-restore-after-revert
-          git rebase origin/fix/openglobus-restore-after-revert
+          git commit -m "data: refresh OGJ2014 provenance IDs from source evidence"
           git push origin HEAD:fix/openglobus-restore-after-revert
 
       - name: Audit field-level grouping and class support
