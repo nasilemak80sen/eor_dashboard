@@ -30,6 +30,8 @@ from sklearn.model_selection import GroupShuffleSplit, StratifiedGroupKFold
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+from audit_ogj2014_data_quality import TECHNIQUE_FAMILY, TECHNIQUE_PATTERNS
+
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "src" / "notebooks" / "ml_data" / "OGJ2014_extracted_vs_Table1.xlsx"
 SHEET = "OGJ2014_Extracted_Rows"
@@ -52,7 +54,7 @@ NUMERIC_RANGES = [
     ("so", "so_start_min_pct", "so_start_max_pct", "pct"),
 ]
 REQUIRED_SOURCE_COLUMNS = {
-    "record_id", "technique", "formation_category", "field_id", "field_id_status",
+    "record_id", "technique", "formation_category", "field_id", "field_id_status", "raw_line",
     *(column for _, lo, hi, _ in NUMERIC_RANGES for column in (lo, hi)),
 }
 
@@ -98,6 +100,37 @@ def build_features(frame: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Feature matrix contains infinite values.")
     # Missing measurements are imputed inside each training fold, never before splitting.
     return X.astype(float)
+
+
+def label_semantic_conflict_audit(frame: pd.DataFrame) -> tuple[pd.Series, list[dict[str, Any]]]:
+    """Flag explicit source-text technique terms that conflict with structured labels."""
+    mask = pd.Series(False, index=frame.index, dtype=bool)
+    details: list[dict[str, Any]] = []
+    for idx, row in frame.iterrows():
+        structured_label = str(row.get("technique", "")).strip()
+        structured_family = TECHNIQUE_FAMILY.get(structured_label)
+        raw_text = str(row.get("raw_line", "") or "")
+        if structured_family is None or not raw_text.strip():
+            continue
+        detected = [
+            {"term": term, "family": TECHNIQUE_FAMILY[term]}
+            for term, pattern in TECHNIQUE_PATTERNS if pattern.search(raw_text)
+        ]
+        conflicting = [item for item in detected if item["family"] != structured_family]
+        if not conflicting:
+            continue
+        mask.loc[idx] = True
+        details.append({
+            "excel_row": int(idx + 2),
+            "record_id": str(row.get("record_id", "")),
+            "structured_technique_label": structured_label,
+            "structured_label_family": structured_family,
+            "source_text_technique_mentions": sorted({item["term"] for item in detected}),
+            "potentially_conflicting_mentions": sorted({item["term"] for item in conflicting}),
+            "raw_source_text": raw_text,
+            "action": "quarantined pending manual source-table review; no automatic relabel",
+        })
+    return mask, details
 
 
 def _all_classes_present(labels: np.ndarray, indices: np.ndarray, classes: set[str]) -> bool:
