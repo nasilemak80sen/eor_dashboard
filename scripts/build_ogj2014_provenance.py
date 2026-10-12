@@ -229,6 +229,16 @@ def main():
 
     canonical_sheets = source_matrices["canonical"]
     mirror_sheets = source_matrices["mirror"]
+    canonical_target_rows = canonical_sheets[TARGET]
+    if len(canonical_target_rows) < TABLE_E_START_EXCEL_ROW:
+        raise SystemExit("OGJ2014 source table is shorter than the expected Table E boundary.")
+    table_e_marker = ns(canonical_target_rows[TABLE_E_START_EXCEL_ROW - 1][14])
+    if not table_e_marker.startswith("Bahia Petrobras CO2 miscible Miranga"):
+        raise SystemExit(
+            "OGJ2014 Table E boundary changed; refusing to interpret project names as fields. "
+            f"Expected Excel row {TABLE_E_START_EXCEL_ROW} to begin with Bahia Petrobras CO2 miscible Miranga; "
+            f"found {table_e_marker[:100]!r}"
+        )
     mismatch_rows = []
     if list(canonical_sheets) != list(mirror_sheets):
         mismatch_rows.append({
@@ -720,9 +730,10 @@ def main():
             "The mirror's source_report header and cell values are preserved and never interpreted as raw_line; source_report_group_id remains blank.",
             "All provenance IDs are grouping/audit metadata, not model features.",
             "Publication identity is confirmed against the official Oil & Gas Journal 2014 worldwide EOR survey PDF, with a stable publication_id and source URL recorded in tagging_rationale.",
-            "Twenty-one previously unresolved field rows across eleven source-text patterns are mapped to explicit field names from the original PDF; those rows are marked confirmed with page-level evidence.",
+            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities, while the remaining rows are project/pay-zone text from Table E and are not forced into field_id.",
+            "Table E starts at the validated Excel row 480; its source schema separates Project and Field, and the Field cells represented here are blank. Project IDs are recorded separately; field_id and ambiguous case_id remain blank.",
             "Field IDs extracted from explicit operator-to-field spans, manually reviewed rules, or source-document overrides are marked confirmed; standalone candidates without enough source context remain provisional.",
-            "Only narrow source-supported aliases are canonicalized, including Arecuna and Bare (F.O.) punctuation variants and Swan Hills geography.",
+            "Only narrow source-supported field aliases are canonicalized; same-name fields with different geography remain separate.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
             "Any field candidate not established by source evidence remains blank and needs review.",
             "Project identities are not inferred from field names, pay zones, or the publication itself.",
