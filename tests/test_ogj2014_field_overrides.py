@@ -112,11 +112,20 @@ def test_evidence_backed_field_aliases_remain_narrow():
     assert swan_geo == report_geo == "Alta."
     assert "corroborating source rows" in swan_reason
 
-    arecuna_dot, _, geo_dot = provenance.parse_field(
+    arecuna_dot, context_dot, _ = provenance.parse_project(
         "Anzoategui PDVSA E&P Steam Arecuna (F.O.) 2/85 1,668 5 5 US"
     )
-    arecuna_no_dot, _, geo_no_dot = provenance.parse_field(
+    arecuna_no_dot, context_no_dot, _ = provenance.parse_project(
         "Anzoategui PDVSA E&P Steam Arecuna (F.O) 12/83 1,544 15 15 US"
     )
     assert arecuna_dot == arecuna_no_dot == "Arecuna (F.O.)"
-    assert geo_dot == geo_no_dot
+    assert context_dot == context_no_dot
+
+    bare_dot, bare_context_dot, _ = provenance.parse_project(
+        "Anzoategui PDVSA E&P Steam Bare (F.O.) 3/85 16,452 55 48 US"
+    )
+    bare_no_dot, bare_context_no_dot, _ = provenance.parse_project(
+        "Anzoategui PDVSA E&P Steam Bare (F.O). 3/87 8,066 66 65 US"
+    )
+    assert bare_dot == bare_no_dot == "Bare (F.O.)"
+    assert bare_context_dot == bare_context_no_dot
