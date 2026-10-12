@@ -15,7 +15,7 @@ COMPANIES=sorted(set([
 "Zulia PDVSA E&P","Anzoategui PDVSA E&P","Campo Jobo PDVSA E&P","Campo Pilon PDVSA E&P","Campo Cerro Negro PDVSA E&P","Maturin, Campo Mulata PDVSA E&P","Maturin, Campo Furrial PDVSA E&P","Lower Saxony, Grafschaft Bentheim Wintershall Holding AG","Lower Saxony, Diepholz Wintershall Holding AG","Rio Grande do Norte (RN) Petrobras","Bentheim Wintershall Holding AG","Point Fortin Petrotrin","Forest Reserve Petrotrin","Oropouche Petrotrin","Guapo Petrotrin","Pekanbaru PT Caltex","Espirito Santo Petrobras","Brazil Petrobras","Bahia Petrobras","Apache Canada","ExxonMobil Oil Canada","Shell Canada","Penn West Energy Trust","Pengrowth Corporation","Derek Oil & Gas Corp.","Derek Oil","MegaWest Energy Corp.","Encore Acquisition","Continental Resources","Chaparral Energy","Core Energy","Denbury Resources","Devon Canada","Devon","Energen Resources","ExxonMobil","Fasken","Hess","Kinder Morgan","Merit Energy","Occidental","ConocoPhillips","Husky Oil","Imperial Oil","CNRL","Cenovus","Penn West Energy","Seneca Resources","Tidelands","Great Western Drilling","Stanberry Oil","XTO Energy Inc.","XTO Energy","BP","Aera Energy","Berry","Carrizo","Chevron","Anadarko","Breitburn Energy","Apache","Orla Petco","Naftex","Bayou State","Whiting Petroleum","Trinity","Stockdale","Petrobras","Petrotrin","Wintershall Holding AG","PT Caltex","Scimitar"]),key=len,reverse=True)
 GEO=set("Calif. Calif Tex. Tex Wyo. Wyo Mo. Mo Mont. Mont Miss. Miss Alta. Alta Sask. Sask La. La Okla. Okla Alas. Alas Mich. Mich NM N.Mex. N.M. ND N.Dak. SD S.Dak. MT TX OCS Fla. Pa. Colo. Kan. Neb. Utah Ariz. Nev. Ark. Ala. Tenn. Ga. Ill. Ind. Ohio Va. N.Y. N.J. Alberta Saskatchewan".split())
 DATE_RE=re.compile(r"(?<!\d)(?:\d{1,2}/\d{1,2}(?:/\d{1,2})?(?:-\d{1,2}/\d{1,2})?|19\d{2}|20\d{2})(?!\d)")
-TECH=["Water (Steam Scavenging)","Hydrocarbon miscible","HC miscible/water","Cyclic steam","Steam–SAGD","Steam-SAGD","Miscible acid gas","Miscible CO2","Miscible HC","CO2 immiscible","CO2 miscible","Hot water","Enhanced cyclic steam","Technology","Surfactants","Surfactant","Nitrates","Microbial","Combustion","AGA","Polymer","Steam"]
+TECH=["Water (Steam Scavenging)","Hydrocarbon miscible","HC miscible/water","Cyclic steam","Steam–SAGD","Steam-SAGD","Miscible acid gas","Miscible CO2","Miscible HC","HC miscible","CO2 immiscible","CO2 miscible","Hot water","Enhanced cyclic steam","Technology","Surfactants","Surfactant","Nitrates","Microbial","Combustion","AGA","Polymer","Steam"]
 
 def ns(v):
     if v is None:return ""
@@ -178,6 +178,27 @@ def parse_field(raw):
         if 1<=len(pre.split())<=4 and not re.search(r"\b(?:Steam|Polymer|Microbial|Combustion|miscible|immiscible)\b",pre,re.I):
             return pre,"standalone_field", ""
     return None,"unresolved",""
+
+def parse_project(raw):
+    """Parse the project column for OGJ Table E only; never treat it as a field."""
+    raw = ns(raw)
+    for prefix, project_name, project_context, evidence in TABLE_E_PROJECT_OVERRIDES:
+        if raw.casefold().startswith(prefix.casefold()):
+            return project_name, project_context, "source_verified: " + evidence
+
+    company, pos = find_company(raw)
+    if not company:
+        return None, "", "unresolved"
+    project_context = ns(raw[:pos + len(company)])
+    rest = striptech(raw[pos + len(company):].strip())
+    date_match = DATE_RE.search(rest)
+    if not date_match:
+        return None, project_context, "no_date"
+    project_name = ns(rest[:date_match.start()]).strip(" ,")
+    if not project_name or len(project_name) > 100:
+        return None, project_context, "ambiguous_project_span"
+    return project_name, project_context, "source_project_span"
+
 
 def matrix(path):
     wb=load_workbook(path,data_only=False,read_only=False)
