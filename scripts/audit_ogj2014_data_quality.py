@@ -480,7 +480,7 @@ def audit(dataset: Path = DATASET) -> dict:
         "unresolved_field_rows": len(unresolved_rows),
         "field_rows_unknown_by_source_schema": int(field_status.astype(str).eq("unknown").sum()),
         "field_rows_needing_review": int(field_status.astype(str).eq("needs_review").sum()),
-        "unresolved_field_rows_excluding_source_schema_unknown": int(field_status.astype(str).isin(["needs_review", "provisional"]).sum() if "field_id" not in df.columns else ( (~field_valid) & ~field_status.astype(str).eq("unknown") ).sum()),
+        "unresolved_field_rows_excluding_source_schema_unknown": int(((~field_valid) & ~field_status.astype(str).eq("unknown")).sum()),
         "project_id_nonblank_rows": int(project_valid.sum()),
         "distinct_project_ids": int(df.loc[project_valid, "project_id"].nunique()) if "project_id" in df.columns else 0,
         "case_id_nonblank_rows": int(case_valid.sum()),
