@@ -486,7 +486,7 @@ def audit(dataset: Path = DATASET) -> dict:
         "rows_quarantined_for_explicit_text_conflict": len(explicit_conflict_indices),
         "rows_quarantined_for_source_section_conflict": len(source_section_conflict_indices),
         "source_section_label_conflict_candidates": source_section_label_candidates,
-        "provisional_identity_warning": "Current parser-generated field IDs are provisional, not independently verified; verified-field support is reported separately and must not be inferred from ID existence.",
+        "provisional_identity_warning": "Only explicit operator-to-field spans, manually reviewed field-name rules, and source-document overrides are confirmed. Standalone candidates without sufficient source context remain provisional; verified independent-field support is reported separately.",
         "potential_field_alias_or_split_candidates": len(alias_candidates),
         "alias_candidates": alias_candidates,
         "feature_completeness_and_range_audit": numeric_audit,
