@@ -499,6 +499,7 @@ def main():
                     "No source_report column exists; source_report_group_id was not derived from raw_line."
                 ),
                 field_rationale,
+                project_rationale,
                 case_rationale,
             ])
             tags.append({
@@ -513,12 +514,15 @@ def main():
                 "field_id": field_id,
                 "field_name_normalized": ns(field),
                 "field_id_status": field_status,
-                "project_id": "",
+                "project_id": project_id,
+                "project_name_normalized": ns(project_name),
+                "project_context_normalized": ns(project_context),
+                "project_id_status_internal": "confirmed" if project_id else "unknown",
                 "case_id": case_id,
                 "case_id_status": case_status,
                 "tagging_confidence": confidence,
                 "tagging_rationale": rationale,
-                "needs_review": "Yes" if field_status == "needs_review" or case_status == "needs_review" else "No",
+                "needs_review": "Yes" if field_status in {"needs_review", "unknown"} or case_status == "needs_review" else "No",
             })
         # If one row establishes a field identity from explicit source evidence,
         # propagate confirmation only to rows sharing that exact deterministic field ID.
@@ -595,7 +599,7 @@ def main():
                 worksheet.cell(excel_row, start_col + offset, tag[header])
         workbook.save(out_path)
 
-    audit_fields = ["workbook", "excel_row", "source_report"] + NEW_COLS
+    audit_fields = ["workbook", "excel_row", "source_report", "project_name_normalized", "project_context_normalized", "project_id_status_internal"] + NEW_COLS
     with (OUT / "ogj2014_row_tagging_audit.csv").open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(file, fieldnames=audit_fields)
         writer.writeheader()
@@ -610,6 +614,9 @@ def main():
                  "Original first 15 row values hashed with deterministic occurrence counter.", "confirmed"),
                 ("publication_id", tag["publication_id"], tag["publication_title"],
                  PUBLICATION_EVIDENCE, tag["publication_id_status"]),
+                ("project_id", tag["project_id"],
+                 tag["project_context_normalized"] + "|" + tag["project_name_normalized"],
+                 tag["tagging_rationale"], tag["project_id_status_internal"]),
                 ("case_id", tag["case_id"], "exact-normalized-raw_line",
                  "Exact normalized raw_line text from canonical source copy.", tag["case_id_status"]),
                 ("field_id", tag["field_id"], tag["field_name_normalized"],
@@ -693,7 +700,11 @@ def main():
             "distinct_field_ids": len({tag["field_id"] for tag in tags if tag["field_id"]}),
             "distinct_publication_ids": len({tag["publication_id"] for tag in tags if tag["publication_id"]}),
             "publication_id_status_counts": dict(Counter(tag["publication_id_status"] for tag in tags)),
-            "project_ids_assigned": 0,
+            "distinct_project_ids": len({tag["project_id"] for tag in tags if tag["project_id"]}),
+            "project_id_status_counts": dict(Counter(tag["project_id_status_internal"] for tag in tags)),
+            "table_e_rows": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW for tag in tags),
+            "table_e_rows_with_project_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and bool(tag["project_id"]) for tag in tags),
+            "table_e_rows_without_field_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and not tag["field_id"] for tag in tags),
             "field_rows_needing_review": sum(tag["field_id_status"] == "needs_review" for tag in tags),
             "case_rows_needing_review": sum(tag["case_id_status"] == "needs_review" for tag in tags),
         }
