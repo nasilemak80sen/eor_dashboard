@@ -75,19 +75,17 @@ def verify(before,after):
     return fails
 
 def main():
-    outputs = {
-        CANONICAL.name: "OGJ2014_extracted_vs_Table1_provenance.xlsx",
-        MIRROR.name: "OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx",
-    }
+    workbooks = [
+        ("canonical", CANONICAL, "OGJ2014_extracted_vs_Table1_provenance.xlsx"),
+        ("mirror", MIRROR, "OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx"),
+    ]
     source_matrices = {}
-    source_workbooks = {}
-    for path in (CANONICAL, MIRROR):
-        wb, sheets = matrix(path)
-        source_workbooks[path.name] = wb
-        source_matrices[path.name] = sheets
+    for label, path, _ in workbooks:
+        _, sheets = matrix(path)
+        source_matrices[label] = sheets
 
-    canonical_sheets = source_matrices[CANONICAL.name]
-    mirror_sheets = source_matrices[MIRROR.name]
+    canonical_sheets = source_matrices["canonical"]
+    mirror_sheets = source_matrices["mirror"]
     mismatch_rows = []
     if list(canonical_sheets) != list(mirror_sheets):
         mismatch_rows.append({
@@ -147,6 +145,10 @@ def main():
             if len(mismatch_rows) >= 30:
                 break
 
+    allowed_header_diff = next(
+        (item for item in mismatch_rows if item.get("scope") == f"{TARGET}!O1"),
+        None,
+    )
     unexpected = [
         item for item in mismatch_rows
         if item.get("detail") != "known semantic header difference; columns will be tagged independently"
@@ -156,10 +158,7 @@ def main():
         "mirror_workbook": str(MIRROR.relative_to(ROOT)),
         "target_sheet": TARGET,
         "copies_have_same_original_values": len(unexpected) == 0,
-        "known_header_difference": next(
-            (item for item in mismatch_rows if item.get("scope") == f"{TARGET}!O1"),
-            None,
-        ),
+        "known_header_difference": allowed_header_diff,
         "unexpected_differences": unexpected,
         "handling": (
             "Each workbook is tagged using its own original column names; source_report is never treated as raw_line."
@@ -174,7 +173,7 @@ def main():
             + json.dumps(unexpected[:10], ensure_ascii=False)
         )
 
-    def build_tags(path: Path, source_sheets: dict) -> list[dict]:
+    def build_tags(path: Path, source_sheets: dict, workbook_label: str) -> list[dict]:
         sheet_rows = source_sheets[TARGET]
         headers = sheet_rows[0]
         expected = [
@@ -238,7 +237,7 @@ def main():
                     if case_id else "No reliable raw_line evidence for a case identifier."
                 )
             else:
-                field = parse_reason = geography = None
+                field = None
                 case_id = ""
                 case_status = "needs_review"
                 field_id = ""
@@ -252,9 +251,7 @@ def main():
                 )
 
             rationale = " ".join([
-                (
-                    "No explicit publication citation/title is present; publication identity was not invented."
-                ),
+                "No explicit publication citation/title is present; publication identity was not invented.",
                 (
                     "source_report_group_id is based only on the original source_report column."
                     if sr_i is not None else
@@ -264,7 +261,7 @@ def main():
                 case_rationale,
             ])
             tags.append({
-                "workbook": path.name,
+                "workbook": workbook_label,
                 "excel_row": excel_row,
                 "source_report": source_report,
                 "record_id": record_id,
@@ -284,16 +281,20 @@ def main():
             })
         return tags
 
-    all_tags = {}
-    for path in (CANONICAL, MIRROR):
-        all_tags[path.name] = build_tags(path, source_matrices[path.name])
+    all_tags = {
+        label: build_tags(path, source_matrices[label], label)
+        for label, path, _ in workbooks
+    }
 
-    for path in (CANONICAL, MIRROR):
-        out_path = OUT / outputs[path.name]
+    for label, path, output_name in workbooks:
+        out_path = OUT / output_name
         shutil.copy2(path, out_path)
         workbook = load_workbook(out_path, data_only=False, read_only=False)
         worksheet = workbook[TARGET]
-        current_headers = [worksheet.cell(1, col).value for col in range(1, worksheet.max_column + 1)]
+        current_headers = [
+            worksheet.cell(1, col).value
+            for col in range(1, worksheet.max_column + 1)
+        ]
         if current_headers[15:15 + len(NEW_COLS)] == NEW_COLS:
             worksheet.delete_cols(16, len(NEW_COLS))
         elif worksheet.max_column != 15:
@@ -309,7 +310,7 @@ def main():
             cell.border = copy(style_source.border)
             cell.alignment = copy(style_source.alignment)
 
-        for excel_row, tag in enumerate(all_tags[path.name], start=2):
+        for excel_row, tag in enumerate(all_tags[label], start=2):
             for offset, header in enumerate(NEW_COLS):
                 worksheet.cell(excel_row, start_col + offset, tag[header])
         workbook.save(out_path)
@@ -318,13 +319,12 @@ def main():
     with (OUT / "ogj2014_row_tagging_audit.csv").open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(file, fieldnames=audit_fields)
         writer.writeheader()
-        for path in (CANONICAL, MIRROR):
-            writer.writerows(all_tags[path.name])
+        for label, _, _ in workbooks:
+            writer.writerows(all_tags[label])
 
     mappings = {}
-    for path in (CANONICAL, MIRROR):
-        workbook_name = path.name
-        for tag in all_tags[workbook_name]:
+    for label, _, _ in workbooks:
+        for tag in all_tags[label]:
             candidates = [
                 ("record_id", tag["record_id"], "row-content-hash",
                  "Original first 15 row values hashed with deterministic occurrence counter.", "confirmed"),
@@ -338,10 +338,10 @@ def main():
             for id_type, identifier, normalized_key, evidence, status in candidates:
                 if not identifier:
                     continue
-                key = (workbook_name, id_type, identifier)
+                key = (label, id_type, identifier)
                 if key not in mappings:
                     mappings[key] = {
-                        "workbook": workbook_name,
+                        "workbook": label,
                         "id_type": id_type,
                         "id": identifier,
                         "normalized_key": normalized_key,
@@ -366,39 +366,46 @@ def main():
 
     verification = {}
     summaries = {}
-    for path in (CANONICAL, MIRROR):
-        original_workbook, before = matrix(path)
-        output_path = OUT / outputs[path.name]
+    for label, path, output_name in workbooks:
+        _, before = matrix(path)
+        output_path = OUT / output_name
         _, after = matrix(output_path)
         check_book = load_workbook(output_path, data_only=False, read_only=False)
         check_sheet = check_book[TARGET]
-        output_headers = [check_sheet.cell(1, col).value for col in range(1, check_sheet.max_column + 1)]
-        expected_orig_cols = 15
+        output_headers = [
+            check_sheet.cell(1, col).value
+            for col in range(1, check_sheet.max_column + 1)
+        ]
         failures = verify(before, after)
-        if not all(t["record_id"] for t in all_tags[path.name]):
+        tags = all_tags[label]
+        if not all(tag["record_id"] for tag in tags):
             failures.append("record_id missing on one or more source rows")
-        if len({t["record_id"] for t in all_tags[path.name]}) != len(all_tags[path.name]):
+        if len({tag["record_id"] for tag in tags}) != len(tags):
             failures.append("record_id is not unique within workbook")
-        expected_base = before[TARGET][0][:15]
-        verification[path.name] = {
+        original_headers = before[TARGET][0][:15]
+        verification[label] = {
+            "input_path": str(path.relative_to(ROOT)),
+            "output_path": str(output_path.relative_to(ROOT)),
             "failures": failures,
             "original_rows_including_header": len(before[TARGET]),
             "output_rows_including_header": len(after[TARGET]),
-            "original_columns": expected_orig_cols,
+            "original_columns": 15,
             "output_columns": len(output_headers),
-            "original_headers_preserved": output_headers[:15] == expected_base,
+            "original_headers_preserved": output_headers[:15] == original_headers,
             "provenance_columns_appended_in_order": output_headers[15:] == NEW_COLS,
             "technique_unchanged": all(
                 before[TARGET][index][0] == after[TARGET][index][0]
                 for index in range(len(before[TARGET]))
             ),
-            "needs_review_rows": sum(tag["needs_review"] == "Yes" for tag in all_tags[path.name]),
+            "needs_review_rows": sum(tag["needs_review"] == "Yes" for tag in tags),
         }
-        tags = all_tags[path.name]
-        summaries[path.name] = {
+        summaries[label] = {
+            "workbook": str(path.relative_to(ROOT)),
             "rows_tagged": len(tags),
-            "source_report_column_present": "source_report" in before[TARGET][0][:15],
-            "distinct_source_report_groups": len({tag["source_report_group_id"] for tag in tags if tag["source_report_group_id"]}),
+            "source_report_column_present": "source_report" in original_headers,
+            "distinct_source_report_groups": len({
+                tag["source_report_group_id"] for tag in tags if tag["source_report_group_id"]
+            }),
             "distinct_record_ids": len({tag["record_id"] for tag in tags if tag["record_id"]}),
             "distinct_case_ids": len({tag["case_id"] for tag in tags if tag["case_id"]}),
             "distinct_field_ids": len({tag["field_id"] for tag in tags if tag["field_id"]}),
@@ -421,7 +428,9 @@ def main():
             "Publication and project identities were not invented from the workbook name or raw text.",
         ],
     }
-    (OUT / "ogj2014_provenance_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    (OUT / "ogj2014_provenance_summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
     (OUT / "ogj2014_provenance_summary.md").write_text(
         "# OGJ2014 provenance preparation\n\n"
         + json.dumps(summary, indent=2)
