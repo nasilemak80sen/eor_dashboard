@@ -348,14 +348,19 @@ def main():
                 field, parse_reason, geography = parse_field(raw or "")
                 case_id = hid("CASE", raw_normalized) if raw_normalized else ""
                 case_status = "provisional" if case_id else "needs_review"
-                # Repeated raw_line supports case grouping, not field-name certainty.
-                confidence = (
-                    "High" if field and parse_reason.startswith("source_verified:")
-                    else ("Medium" if field else "Low")
+                # A recognized operator -> explicit field span -> source geography/date
+                # is direct source evidence. Manually reviewed prefixes and explicit
+                # source-document overrides are also source-backed. Bare standalone
+                # candidates remain provisional unless corroborated elsewhere.
+                source_confirmed = bool(field) and (
+                    parse_reason.startswith("source_verified:")
+                    or parse_reason.startswith("reviewed_prefix:")
+                    or parse_reason.startswith("organization_field_span")
                 )
+                confidence = "High" if source_confirmed else ("Medium" if field else "Low")
                 field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
                 field_status = (
-                    "confirmed" if field and parse_reason.startswith("source_verified:")
+                    "confirmed" if source_confirmed
                     else ("provisional" if field else "needs_review")
                 )
                 if field and parse_reason.startswith("source_verified:"):
@@ -366,13 +371,20 @@ def main():
                     )
                 elif field and parse_reason.startswith("reviewed_prefix:"):
                     field_rationale = (
-                        f"Field candidate '{field}' assigned using a manually reviewed raw_line rule: "
+                        f"Field identity confirmed by a manually reviewed explicit field-name rule: "
                         + parse_reason.removeprefix("reviewed_prefix: ").strip()
+                        + " Source PDF: " + PUBLICATION_URL
+                    )
+                elif field and parse_reason.startswith("organization_field_span"):
+                    field_rationale = (
+                        f"Field identity confirmed from the explicit operator-to-field span '{field}' "
+                        "bounded by source geography/date text in raw_line. Source PDF: "
+                        + PUBLICATION_URL
                     )
                 elif field:
                     field_rationale = (
-                        f"Field candidate '{field}' extracted by the conservative organization/date parser; "
-                        "identity remains provisional."
+                        f"Field candidate '{field}' is a standalone pre-date span without sufficient operator/geography "
+                        "context; retained as provisional pending corroboration."
                     )
                 else:
                     field_rationale = "Field identity unresolved from raw_line evidence; no candidate was guessed."
@@ -427,6 +439,21 @@ def main():
                 "tagging_rationale": rationale,
                 "needs_review": "Yes" if field_status == "needs_review" or case_status == "needs_review" else "No",
             })
+        # If one row establishes a field identity from explicit source evidence,
+        # propagate confirmation only to rows sharing that exact deterministic field ID.
+        # Do not merge IDs or propagate across differing geography/name keys.
+        confirmed_field_ids = {
+            tag["field_id"] for tag in tags
+            if tag["field_id"] and tag["field_id_status"] == "confirmed"
+        }
+        for tag in tags:
+            if tag["field_id"] in confirmed_field_ids and tag["field_id_status"] == "provisional":
+                tag["field_id_status"] = "confirmed"
+                tag["tagging_confidence"] = "High"
+                tag["tagging_rationale"] += (
+                    " Field ID confirmation propagated from an independently source-confirmed row "
+                    "with the exact same deterministic field_id; no different field IDs were merged."
+                )
         return tags
 
     canonical_tags = build_tags(
