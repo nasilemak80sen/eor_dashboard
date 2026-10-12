@@ -170,6 +170,13 @@ def standardize_training_table(df: pd.DataFrame) -> pd.DataFrame:
     out = out.replace([np.inf, -np.inf], np.nan).dropna(subset=required).copy()
     out = out[out["technique"].ne("") & out["formation"].ne("")].copy()
 
+    if "source_group" in out.columns:
+        source_groups = out["source_group"].astype("string").str.strip()
+        unresolved = source_groups.isna() | source_groups.str.casefold().isin(
+            {"", "nan", "none", "null", "unknown", "na", "needs_review"}
+        )
+        out["source_group"] = source_groups.mask(unresolved, pd.NA)
+
     # Keep invalid/missing bounds visible to the cleaning report by excluding
     # only mathematically invalid ranges, not by coalescing rows.
     for low, high in [
