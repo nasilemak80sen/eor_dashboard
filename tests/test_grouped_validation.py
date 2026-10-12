@@ -9,13 +9,22 @@ from ml.grouped_validation import (
 )
 
 
-def test_case_id_has_priority_over_field_and_legacy_field():
+def test_field_id_has_priority_over_case_and_legacy_field():
     df = pd.DataFrame({
         "case_id": ["case-a", "case-b", "case-c", "case-d"],
         "field_id": ["field-a", "field-a", "field-b", "field-b"],
         "Field": ["old-a", "old-a", "old-b", "old-b"],
     })
-    assert choose_group_column(df) == "case_id"
+    assert choose_group_column(df) == "field_id"
+
+
+def test_incomplete_field_ids_do_not_silently_fall_back_to_case_ids():
+    df = pd.DataFrame({
+        "field_id": ["field-a", ""],
+        "case_id": ["case-a", "case-b"],
+    })
+    with pytest.raises(ValueError, match="Field-level validation is blocked"):
+        choose_group_column(df)
 
 
 def test_group_selection_rejects_incomplete_ids_instead_of_row_split():
