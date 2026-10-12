@@ -40,13 +40,41 @@ COLUMN_ALIASES = {
     "visc_max": ["Oil viscosity max (cp)", "visc_max_cp", "viscosity_max_cp", "visc_max"],
     "so_min": ["So at start min (%)", "so_start_min_pct", "so_min"],
     "so_max": ["So at start max (%)", "so_start_max_pct", "so_max"],
+    # IDs are metadata used for splitting/audit only, never predictive features.
+    # Prefer exact case groups; the OGJ2014 workbook has blank field IDs on a
+    # small number of unresolved rows, while case_id is complete.
     "source_group": [
-        "source_id", "source_group", "publication_id", "report_id",
-        "project_id", "field_id", "Field", "Field Name",
+        "case_id", "field_id", "Field Name", "Field",
+        "source_report_group_id", "publication_id", "project_id",
+        "source_id", "source_group", "report_id",
     ],
 }
 
 MINIMUM_GROUPS_PER_CLASS = 6
+
+PROVENANCE_METADATA_COLUMNS = {
+    "record_id", "source_report_group_id", "publication_id", "publication_title",
+    "publication_id_status", "field_id", "field_name_normalized",
+    "field_id_status", "project_id", "case_id", "case_id_status",
+    "source_group", "tagging_confidence", "tagging_rationale", "needs_review",
+}
+
+
+def assert_no_provenance_features(features: pd.DataFrame) -> None:
+    """Fail closed if provenance identifiers or audit metadata enter model X."""
+    forbidden = sorted(
+        column for column in features.columns
+        if column in PROVENANCE_METADATA_COLUMNS
+        or column.casefold().endswith("_id")
+        or column.casefold() in {"raw_line", "source_report", "publication_title",
+                                 "field_name_normalized", "tagging_rationale",
+                                 "tagging_confidence", "needs_review"}
+    )
+    if forbidden:
+        raise ValueError(
+            "Provenance/audit columns cannot be model features: "
+            + ", ".join(forbidden)
+        )
 
 def normalize_col(s: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(s).strip().lower()).strip("_")
@@ -451,7 +479,9 @@ def build_feature_table(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.Series, List
     for formation in ["Sandstone", "Carbonates", "Unconsolidated sands"]:
         X[f"formation_{normalize_col(formation)}"] = df["formation"].eq(formation).astype(float)
 
-    return X.astype(float), df["technique"].copy(), list(X.columns)
+    X = X.astype(float)
+    assert_no_provenance_features(X)
+    return X, df["technique"].copy(), list(X.columns)
 
 def multilabel_top_k_metrics(y_true, probabilities, k=3):
     """Return sample-level top-k hit rate and recall for multi-label targets."""
