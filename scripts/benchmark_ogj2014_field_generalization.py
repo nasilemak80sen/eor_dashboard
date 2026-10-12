@@ -39,6 +39,7 @@ REQUESTED_FOLDS = 5
 HOLDOUT_FRACTION = 0.20
 SEED_START = 42
 SEED_ATTEMPTS = 100
+REPEATED_HOLDOUTS = 20
 MINIMUM_HOLDOUT_FIELDS_PER_CLASS = 2
 MINIMUM_TRAIN_FIELDS_PER_CLASS = MINIMUM_FIELDS_PER_CLASS - MINIMUM_HOLDOUT_FIELDS_PER_CLASS
 
@@ -112,10 +113,15 @@ def _class_group_counts(labels: np.ndarray, groups: np.ndarray, indices: np.ndar
 
 
 def make_group_holdout(
-    labels: np.ndarray, groups: np.ndarray, *, test_size: float = HOLDOUT_FRACTION
+    labels: np.ndarray,
+    groups: np.ndarray,
+    *,
+    test_size: float = HOLDOUT_FRACTION,
+    seed_start: int = SEED_START,
+    seed_attempts: int = SEED_ATTEMPTS,
 ) -> tuple[np.ndarray, np.ndarray, int]:
     classes = set(labels.astype(str))
-    for seed in range(SEED_START, SEED_START + SEED_ATTEMPTS):
+    for seed in range(seed_start, seed_start + seed_attempts):
         splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
         train_idx, test_idx = next(splitter.split(np.zeros(len(labels)), labels, groups))
         train_support = _class_group_counts(labels, groups, train_idx)
@@ -277,6 +283,69 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         })
     cv_rows.sort(key=lambda row: (row["cv_macro_f1_mean"], row["cv_balanced_accuracy_mean"]), reverse=True)
     selected_name = cv_rows[0]["model"]
+
+    # Repeated field-isolated holdouts quantify sensitivity to which fields land in test.
+    # These overlapping resamples are a split-variability analysis, not independent
+    # replications or a formal confidence interval.
+    repeated_scores: dict[str, list[dict[str, float]]] = {
+        name: [] for name in make_models()
+    }
+    repeated_seeds: list[int] = []
+    repeated_split_summaries: list[dict[str, Any]] = []
+    model_factories = make_models()
+    for repeat_index in range(REPEATED_HOLDOUTS):
+        split_train, split_test, split_seed = make_group_holdout(
+            y, groups, seed_start=SEED_START + repeat_index * SEED_ATTEMPTS,
+            seed_attempts=SEED_ATTEMPTS,
+        )
+        split_train_groups = groups[split_train]
+        split_test_groups = groups[split_test]
+        if not set(split_train_groups).isdisjoint(set(split_test_groups)):
+            raise AssertionError(f"Repeated holdout {repeat_index + 1} has field leakage.")
+        train_support = _class_group_counts(y, groups, split_train)
+        test_support = _class_group_counts(y, groups, split_test)
+        if (
+            min(train_support.values()) < MINIMUM_TRAIN_FIELDS_PER_CLASS
+            or min(test_support.values()) < MINIMUM_HOLDOUT_FIELDS_PER_CLASS
+        ):
+            raise AssertionError(f"Repeated holdout {repeat_index + 1} violates class field support.")
+        repeated_seeds.append(split_seed)
+        repeated_split_summaries.append({
+            "repeat": repeat_index + 1,
+            "seed": split_seed,
+            "train_rows": int(len(split_train)),
+            "test_rows": int(len(split_test)),
+            "train_fields": int(pd.Series(split_train_groups).nunique()),
+            "test_fields": int(pd.Series(split_test_groups).nunique()),
+            "train_fields_per_class": train_support,
+            "test_fields_per_class": test_support,
+            "field_overlap": sorted(set(split_train_groups).intersection(set(split_test_groups))),
+        })
+        for name, estimator in model_factories.items():
+            model = clone(estimator)
+            model.fit(X.iloc[split_train], y[split_train])
+            predictions = model.predict(X.iloc[split_test]).astype(str)
+            repeated_scores[name].append({
+                "macro_f1": float(f1_score(y[split_test], predictions, labels=eligible_classes, average="macro", zero_division=0)),
+                "balanced_accuracy": float(balanced_accuracy_score(y[split_test], predictions)),
+                "accuracy": float(accuracy_score(y[split_test], predictions)),
+            })
+    repeated_summary = []
+    for name, scores in repeated_scores.items():
+        row: dict[str, Any] = {"model": name, "repeated_holdouts": len(scores)}
+        for metric in ("macro_f1", "balanced_accuracy", "accuracy"):
+            values = np.asarray([score[metric] for score in scores], dtype=float)
+            row[f"{metric}_mean"] = float(values.mean())
+            row[f"{metric}_std"] = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+            row[f"{metric}_p05"] = float(np.quantile(values, 0.05))
+            row[f"{metric}_p95"] = float(np.quantile(values, 0.95))
+        row["interpretation"] = (
+            "Empirical split-variability summary; 5th-95th percentiles are not a formal confidence interval."
+        )
+        repeated_summary.append(row)
+    repeated_summary.sort(
+        key=lambda row: (row["macro_f1_mean"], row["balanced_accuracy_mean"]), reverse=True
+    )
     selected = make_models()[selected_name]
     selected.fit(X_train, y_train)
     holdout_predictions = selected.predict(X_test).astype(str)
@@ -340,6 +409,17 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "model_comparison": cv_rows,
             "selection_metric": "mean grouped-CV macro-F1; balanced accuracy as tie-breaker",
         },
+        "repeated_field_isolated_holdouts": {
+            "requested_repeats": REPEATED_HOLDOUTS,
+            "completed_repeats": len(repeated_split_summaries),
+            "method": "Repeated GroupShuffleSplit; same field-isolated partitions for every model; minimum per-class field support enforced",
+            "seed_start": SEED_START,
+            "seed_attempts_per_repeat": SEED_ATTEMPTS,
+            "field_overlap_by_repeat": [item["field_overlap"] for item in repeated_split_summaries],
+            "split_support": repeated_split_summaries,
+            "model_comparison": repeated_summary,
+            "uncertainty_interpretation": "Across-split variability only; holdouts overlap and are not independent; percentiles are not confidence intervals.",
+        },
         "selected_model": selected_name,
         "holdout_metrics": {
             "macro_f1": float(f1_score(y_test, holdout_predictions, labels=labels_order, average="macro", zero_division=0)),
@@ -358,7 +438,8 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "The source table records observed techniques, not comparable outcomes or success labels.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
             "Four low-support classes are excluded from this restricted pilot and require more independent fields before full multiclass evaluation.",
-            "A single holdout and grouped CV are preliminary estimates, not external validation.",
+            "Repeated holdouts and grouped CV are preliminary internal estimates, not external validation.",
+            "Repeated holdouts overlap in their training/test fields across repeats; score percentiles describe split variability, not formal confidence intervals.",
         ],
     }
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -369,6 +450,9 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         {key: value for key, value in row.items() if key != "fold_scores"}
         for row in cv_rows
     ]).to_csv(OUTPUT_DIR / "ogj2014_field_generalization_model_comparison.csv", index=False)
+    pd.DataFrame(repeated_summary).to_csv(
+        OUTPUT_DIR / "ogj2014_repeated_holdout_model_comparison.csv", index=False
+    )
     return report
 
 
