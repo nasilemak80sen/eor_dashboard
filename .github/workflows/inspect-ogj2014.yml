@@ -1,9 +1,6 @@
 name: Build OGJ2014 provenance dataset
 
 on:
-  push:
-    branches:
-      - data/ogj2014-provenance
   workflow_dispatch:
 
 permissions:
