@@ -45,6 +45,8 @@ jobs:
             exit 0
           fi
           git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
+          git fetch origin fix/openglobus-restore-after-revert
+          git rebase origin/fix/openglobus-restore-after-revert
           git push origin HEAD:fix/openglobus-restore-after-revert
 
       - name: Audit field-level grouping and class support
