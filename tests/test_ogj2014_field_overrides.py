@@ -28,18 +28,35 @@ def test_reviewed_field_prefixes_resolve_only_explicit_names():
         assert reason.startswith("reviewed_prefix:")
 
 
-def test_ambiguous_formation_and_well_identifiers_remain_unresolved():
+def test_source_document_resolves_previously_ambiguous_field_names():
+    examples = {
+        "Creek 1 Member SS 17 25 1,750 39 0.6 105": "Salt Creek Southern Unit",
+        "Creek 2 Member SS 18 30 2,200 39 0.6 112": "Salt Creek Southern Unit",
+        "Residual Oil Zone Dolo. 10 5 5,700 32 1.0 105": "Hanford (San Andres)",
+        "(Enhanced cyclic steam) Alta. 2002 32 20 8 Clearwater US 32": "Cold Lake",
+        "11/14 12/11 150 12 2 Valanginian S 30 300-15,000": "Emlichheim, Block 11/14",
+        "2 immiscible Area 2102 6/76 58 6 2 Forest Sands S 32": "Area 2102",
+        "(S ORS 01) US 30 400-1,200 2,600": "Orocual",
+        "MFB-53) US 31.9 6,600 2,650 9.3 376 131": "Bare (F.O.)",
+        "MFB-23) US 28.6 5,000 3,050 9.2 351 136": "Bare (F.O.)",
+        "MM-407) S 30 1,500 3,820 11 270 159": "Melones",
+        "MM-412) S 28 792 3,515 14.5 260 154": "Melones",
+    }
+    for raw_line, expected in examples.items():
+        field, reason, _ = provenance.parse_field(raw_line)
+        assert field == expected, (raw_line, field, reason)
+        assert reason.startswith("source_verified:")
+
+
+def test_unknown_member_and_well_codes_stay_unresolved():
     examples = [
-        "Creek 1 Member SS 17 25 1,750 39 0.6 105",
-        "Residual Oil Zone Dolo. 10 5 5,700 32 1.0 105",
-        "MFB-53) US 31.9 6,600 2,650 9.3 376 131",
-        "MM-407) S 30 1,500 3,820 11 270 159",
-        "11/14 12/11 150 12 2 Valanginian S 30 300-15,000",
+        "Creek 3 Member SS 17 25 1,750 39 0.6 105",
+        "MFB-999) US 31.9 6,600 2,650 9.3 376 131",
+        "Unknown Member SS 17 25 1,750 39 0.6 105",
     ]
     for raw_line in examples:
         field, reason, _ = provenance.parse_field(raw_line)
         assert field is None, (raw_line, field, reason)
-
 
 
 def test_evidence_backed_aliases_share_canonical_field_identity():
@@ -61,3 +78,12 @@ def test_evidence_backed_aliases_share_canonical_field_identity():
     )
     assert arecuna_dot == arecuna_no_dot == "Arecuna (F.O.)"
     assert geo_dot == geo_no_dot
+
+    bare_dot, _, bare_geo_dot = provenance.parse_field(
+        "Anzoategui PDVSA E&P Steam Bare (F.O.) 3/85 16,452 55 48 US"
+    )
+    bare_no_dot, _, bare_geo_no_dot = provenance.parse_field(
+        "Anzoategui PDVSA E&P Steam Bare (F.O). 3/87 8,066 66 65 US"
+    )
+    assert bare_dot == bare_no_dot == "Bare (F.O.)"
+    assert bare_geo_dot == bare_geo_no_dot
