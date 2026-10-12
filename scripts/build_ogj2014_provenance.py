@@ -79,6 +79,10 @@ REVIEWED_SOURCE_FIELD_OVERRIDES = [
      "OGJ 2014 worldwide EOR survey, p. 7: Imperial Oil Cold Lake (Enhanced cyclic steam), Alberta; Clearwater is the pay zone, not the field."),
     ("Apache Canada Zama-Keg River Alta.", "Zama-Keg River", "Alta.",
      "OGJ 2014 worldwide EOR survey, p. 7: Acid gas miscible, Apache Canada, field Zama-Keg River, Alberta."),
+    ("Hockley 2008 1,048 96 30 San Andres Dolo. 10", "Slaughter (North West Mallet)", "Tex. Hockley",
+     "OGJ 2014 worldwide EOR survey, p. 5: the row reads Occidental Slaughter (North West Mallet), Texas, Hockley County, 2008, 1,048 acres, 96 producing wells, 30 injectors, San Andres Dolomite, 10% porosity."),
+    ("Resources McElmo Unit Utah", "McElmo Unit", "Utah",
+     "OGJ 2014 worldwide EOR survey, p. 5: the row reads Resolute Natural Resources McElmo Unit, Utah, 1/1/1985; 'Resources' is the operator suffix, not the field name."),
     ("BP Prudhoe Bay Alas.", "Prudhoe Bay", "Alas.",
      "OGJ 2014 worldwide EOR survey, p. 7: Hydrocarbon immiscible, BP, field Prudhoe Bay, Alaska."),
     ("BP Alaska Milne Point Alas.", "Alaska Milne Point", "Alas.",
@@ -586,7 +590,7 @@ def main():
                 "project_context_normalized": ns(project_context),
                 "project_id_status_internal": (
                     "confirmed" if project_id
-                    else ("unknown" if source_table == "Table E" else "not_applicable")
+                    else ("unknown" if source_table in {"Table E", "Ambiguous source fragment"} else "not_applicable")
                 ),
                 "case_id": case_id,
                 "case_id_status": case_status,
