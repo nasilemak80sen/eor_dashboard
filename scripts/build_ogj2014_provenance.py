@@ -577,13 +577,15 @@ def main():
         "rows_tagged_total_across_copies": sum(len(tags) for tags in all_tags.values()),
         "notes": [
             "The two workbook copies retain their own original column names and values.",
-            "raw_line is used for field/case candidate extraction only when that column exists.",
-            "source_report is never treated as raw_line; the mirror's source_report_group_id is withheld because its header conflicts with the canonical raw_line header while values match.",
+            "Canonical raw_line is the evidence source for case and field tagging; the mirror's metadata is transferred only by verified row alignment.",
+            "The mirror's source_report header and cell values are preserved and never interpreted as raw_line; source_report_group_id remains blank.",
             "All provenance IDs are grouping/audit metadata, not model features.",
-            "Only narrow source-supported alias rules are canonicalized: Arecuna (F.O)/(F.O.) punctuation and Swan Hills geography corroborated by explicit Alta. source rows.",
+            "Publication identity is confirmed against the official Oil & Gas Journal 2014 worldwide EOR survey PDF, with a stable publication_id and source URL recorded in tagging_rationale.",
+            "Eleven previously unresolved source-text patterns are now mapped to explicit field names from the original PDF; those rows are marked confirmed with page-level evidence.",
+            "Only narrow source-supported aliases are canonicalized, including Arecuna and Bare (F.O.) punctuation variants and Swan Hills geography.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
-            "Unresolved field candidates remain blank when source text names only formations, reservoir zones, dates, or identifier-like codes.",
-            "Publication and project identities were not invented from the workbook name or raw text.",
+            "Any field candidate not established by source evidence remains blank and needs review.",
+            "Project identities are not inferred from field names, pay zones, or the publication itself.",
         ],
     }
     (OUT / "ogj2014_provenance_summary.json").write_text(
