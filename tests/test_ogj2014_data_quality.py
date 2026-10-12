@@ -49,4 +49,8 @@ def test_quality_audit_flags_unresolved_rows_aliases_ranges_and_labels(tmp_path,
     assert summary["feature_completeness_and_range_audit"]["oil_saturation"]["both_missing"] == 1
     assert summary["feature_range_issue_rows"] >= 1
     assert summary["unrecognized_or_unreviewed_labels"][0]["raw_label"] == "Unreviewed technique"
+    remediation = {row["technique"]: row for row in summary["class_support_remediation"]}
+    assert remediation["Steam"]["verified_independent_fields"] == 0
+    assert remediation["Steam"]["verified_field_gap_to_six"] == 6
+    assert (tmp_path / "audit" / "ogj2014_class_support_remediation.csv").is_file()
     assert (tmp_path / "audit" / "ogj2014_unresolved_field_review.csv").is_file()
