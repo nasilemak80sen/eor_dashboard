@@ -39,7 +39,9 @@ jobs:
       - name: Run row-preserving field-level baseline benchmark
         run: python scripts/benchmark_ogj2014_field_generalization.py
 
+      # Preserve the support audit even if model splitting/training fails.
       - name: Upload audit and benchmark reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ogj2014-field-level-ml-reports
@@ -47,4 +49,4 @@ jobs:
             outputs/ml_research/ogj2014_grouped_split_audit.json
             outputs/ml_research/ogj2014_field_generalization_benchmark.json
             outputs/ml_research/ogj2014_field_generalization_model_comparison.csv
-          if-no-files-found: error
+          if-no-files-found: warn
