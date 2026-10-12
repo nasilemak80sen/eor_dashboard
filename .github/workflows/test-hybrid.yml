@@ -2,7 +2,7 @@ name: EOR Atlas Hybrid Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, data/ogj2014-provenance]
   pull_request:
     branches: [main]
 
@@ -50,6 +50,7 @@ jobs:
             src/candidate_analytics/ui.py \
             src/ml/hybrid_intelligence.py \
             src/ml/hybrid_feature_builder.py \
+            src/ml/grouped_validation.py \
             src/ml/hybrid_model_assessment.py \
             src/ml/train_hybrid_catboost.py
 
@@ -62,4 +63,4 @@ jobs:
       - name: Run hybrid, CEOR and UI regression tests
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py tests/test_screening_history.py tests/test_historical_studies.py tests/test_challenges.py tests/test_ceor_evidence.py tests/test_openglobus.py tests/test_ui_shell.py
+        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_model_assessment.py tests/test_grouped_validation.py tests/test_screening_history.py tests/test_historical_studies.py tests/test_challenges.py tests/test_ceor_evidence.py tests/test_openglobus.py tests/test_ui_shell.py
