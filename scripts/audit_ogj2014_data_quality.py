@@ -79,13 +79,26 @@ def audit(dataset: Path = DATASET) -> dict:
     unresolved = df.loc[~field_valid].copy()
     raw_col = "raw_line" if "raw_line" in df.columns else ("source_report" if "source_report" in df.columns else None)
     unresolved_rows = []
+    unresolved_text_groups: dict[str, dict] = {}
     for idx, row in unresolved.iterrows():
+        source_text = norm_text(row.get(raw_col, "")) if raw_col else ""
+        group = unresolved_text_groups.setdefault(source_text, {
+            "raw_source_text": source_text,
+            "excel_rows": [],
+            "record_ids": [],
+            "techniques": set(),
+            "formation_categories": set(),
+        })
+        group["excel_rows"].append(int(idx + 2))
+        group["record_ids"].append(norm_text(row.get("record_id", "")))
+        group["techniques"].add(norm_text(row.get("technique", "")))
+        group["formation_categories"].add(norm_text(row.get("formation_category", "")))
         unresolved_rows.append({
             "excel_row": int(idx + 2),
             "record_id": norm_text(row.get("record_id", "")),
             "technique": norm_text(row.get("technique", "")),
             "formation_category": norm_text(row.get("formation_category", "")),
-            "raw_source_text": norm_text(row.get(raw_col, "")) if raw_col else "",
+            "raw_source_text": source_text,
             "field_id_status": norm_text(row.get("field_id_status", "")),
             "tagging_rationale": norm_text(row.get("tagging_rationale", "")),
             "action": "manual source review; do not infer from formation, zone, well code, or row similarity",
@@ -226,11 +239,24 @@ def audit(dataset: Path = DATASET) -> dict:
             writer.writeheader()
             writer.writerows(rows)
 
+    unresolved_distinct = [
+        {
+            **item,
+            "excel_rows": sorted(item["excel_rows"]),
+            "record_ids": sorted(item["record_ids"]),
+            "techniques": sorted(item["techniques"]),
+            "formation_categories": sorted(item["formation_categories"]),
+            "row_count": len(item["excel_rows"]),
+        }
+        for item in unresolved_text_groups.values()
+    ]
     summary = {
         "dataset": str(dataset.relative_to(ROOT)) if dataset.is_relative_to(ROOT) else str(dataset),
         "source_rows": int(len(df)),
         "source_rows_unique_record_id": bool(df["record_id"].is_unique),
         "unresolved_field_rows": len(unresolved_rows),
+        "unresolved_distinct_source_text_count": len(unresolved_distinct),
+        "unresolved_distinct_source_texts": unresolved_distinct,
         "unresolved_field_rows_detail": unresolved_rows,
         "field_identity_status_counts": {
             str(k): int(v) for k, v in field_status.value_counts(dropna=False).sort_index().items()
