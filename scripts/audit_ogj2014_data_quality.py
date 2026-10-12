@@ -294,6 +294,24 @@ def audit(dataset: Path = DATASET) -> dict:
                 "action": "verify source extraction; do not clip or repair automatically",
             })
 
+    feature_completeness_by_technique = {}
+    for label in sorted(labels.unique()):
+        class_mask = labels.eq(label)
+        per_feature = {}
+        for feature_name, low_col, high_col, _, _ in RANGE_PAIRS:
+            low = pd.to_numeric(df[low_col], errors="coerce") if low_col in df.columns else pd.Series(np.nan, index=df.index)
+            high = pd.to_numeric(df[high_col], errors="coerce") if high_col in df.columns else pd.Series(np.nan, index=df.index)
+            missing_low = class_mask & low.isna()
+            missing_high = class_mask & high.isna()
+            per_feature[feature_name] = {
+                "rows": int(class_mask.sum()),
+                "missing_low": int(missing_low.sum()),
+                "missing_high": int(missing_high.sum()),
+                "both_endpoints_missing": int((missing_low & missing_high).sum()),
+                "one_endpoint_missing": int((missing_low ^ missing_high).sum()),
+            }
+        feature_completeness_by_technique[label] = per_feature
+
     label_rows = []
     for label, count in labels.value_counts(dropna=False).items():
         normalized = norm_text(label)
@@ -350,15 +368,67 @@ def audit(dataset: Path = DATASET) -> dict:
                     "action": "manual source-table review; do not relabel from text scan alone",
                 })
 
-    label_conflict_indices = {item["excel_row"] - 2 for item in label_semantic_candidates}
-    label_conflict_index_mask = pd.Series(df.index.isin(label_conflict_indices), index=df.index)
+    source_section_label_candidates = []
+    source_section_conflict_indices = set()
+    if raw_col:
+        normalized_raw = df[raw_col].map(norm_text)
+        labels_by_raw: dict[str, set[str]] = defaultdict(set)
+        for raw_text, label in zip(normalized_raw, labels):
+            labels_by_raw[raw_text].add(label)
+
+        for idx, row in df.iterrows():
+            raw_text = normalized_raw.loc[idx]
+            label = labels.loc[idx]
+            expected_context = None
+            evidence = None
+            if labels_by_raw.get(raw_text) == {"Miscible CO2", "Miscible HC"} and label == "Miscible HC":
+                expected_context = "Miscible CO2"
+                evidence = (
+                    "Exact raw_line also appears as Miscible CO2 and matches the OGJ 2014 PDF's "
+                    "CO2-miscible table on pp. 3-5, before the CO2-immiscible heading."
+                )
+            elif raw_text.startswith("Shell Canada Peace River Alta.") and label in {"Nitrogen immiscible", "Polymer"}:
+                expected_context = "Steam"
+                evidence = (
+                    "OGJ 2014 PDF p. 9 lists Peace River rows in the Canadian table continuation before "
+                    "the next Nitrogen heading, within the preceding Steam section."
+                )
+            elif raw_text.startswith("Chaparral Energy North Burbank Okla.") and label == "Nitrogen immiscible":
+                expected_context = "Chemical, polymer, surfactant (subtype unspecified)"
+                evidence = "OGJ 2014 PDF p. 7 places North Burbank under the Chemical, polymer, surfactant section."
+            elif raw_text.startswith("Occidental Midland Farms Unit Tex.") and label == "Nitrogen immiscible":
+                expected_context = "Chemical, polymer, surfactant (subtype unspecified)"
+                evidence = "OGJ 2014 PDF p. 7 places Midland Farms Unit under the Chemical, polymer, surfactant section."
+
+            if expected_context is None:
+                continue
+            source_section_conflict_indices.add(int(idx))
+            source_section_label_candidates.append({
+                "excel_row": int(idx + 2),
+                "record_id": norm_text(row.get("record_id", "")),
+                "structured_technique_label": label,
+                "source_section_technique_or_context": expected_context,
+                "raw_source_text": raw_text,
+                "source_evidence": evidence,
+                "action": "quarantine pending source-table adjudication; keep technique label unchanged",
+            })
+
+    explicit_conflict_indices = {item["excel_row"] - 2 for item in label_semantic_candidates}
+    all_conflict_indices = explicit_conflict_indices | source_section_conflict_indices
+    label_conflict_index_mask = pd.Series(df.index.isin(all_conflict_indices), index=df.index)
+    explicit_conflict_index_mask = pd.Series(df.index.isin(explicit_conflict_indices), index=df.index)
+    source_section_conflict_index_mask = pd.Series(df.index.isin(source_section_conflict_indices), index=df.index)
     for remediation in remediation_rows:
         label = remediation["technique"]
         class_mask = labels.eq(label)
+        class_explicit_mask = class_mask & explicit_conflict_index_mask
+        class_source_section_mask = class_mask & source_section_conflict_index_mask
         class_conflict_mask = class_mask & label_conflict_index_mask
         class_remaining_mask = class_mask & ~label_conflict_index_mask
         remaining_fields_mask = class_remaining_mask & field_valid
         remaining_verified_mask = class_remaining_mask & verified_mask
+        remediation["rows_flagged_for_explicit_label_review"] = int(class_explicit_mask.sum())
+        remediation["rows_flagged_for_source_section_review"] = int(class_source_section_mask.sum())
         remediation["rows_flagged_for_label_semantic_review"] = int(class_conflict_mask.sum())
         remediation["source_rows_after_label_review"] = int(class_remaining_mask.sum())
         remediation["provisional_field_groups_after_label_review"] = int(
@@ -376,6 +446,7 @@ def audit(dataset: Path = DATASET) -> dict:
         "ogj2014_technique_label_audit.csv": label_rows,
         "ogj2014_class_support_remediation.csv": remediation_rows,
         "ogj2014_technique_label_semantic_review.csv": label_semantic_candidates,
+        "ogj2014_source_section_label_conflicts.csv": source_section_label_candidates,
     }
     for filename, rows in outputs.items():
         path = OUT / filename
@@ -411,16 +482,21 @@ def audit(dataset: Path = DATASET) -> dict:
         },
         "support_by_technique": field_support,
         "class_support_remediation": remediation_rows,
-        "rows_quarantined_for_label_semantic_review": len(label_semantic_candidates),
+        "rows_quarantined_for_label_semantic_review": len(all_conflict_indices),
+        "rows_quarantined_for_explicit_text_conflict": len(explicit_conflict_indices),
+        "rows_quarantined_for_source_section_conflict": len(source_section_conflict_indices),
+        "source_section_label_conflict_candidates": source_section_label_candidates,
         "provisional_identity_warning": "Current parser-generated field IDs are provisional, not independently verified; verified-field support is reported separately and must not be inferred from ID existence.",
         "potential_field_alias_or_split_candidates": len(alias_candidates),
         "alias_candidates": alias_candidates,
         "feature_completeness_and_range_audit": numeric_audit,
+        "feature_completeness_by_technique": feature_completeness_by_technique,
         "feature_range_issue_rows": len(feature_issues),
         "technique_label_counts": label_rows,
         "technique_label_keys_with_multiple_raw_variants": label_variants,
-        "potential_label_semantic_conflict_rows": len(label_semantic_candidates),
-        "potential_label_semantic_conflict_candidates": label_semantic_candidates,
+        "potential_label_semantic_conflict_rows": len(all_conflict_indices),
+        "explicit_text_label_conflict_candidates": label_semantic_candidates,
+        "potential_label_semantic_conflict_candidates": label_semantic_candidates + source_section_label_candidates,
         "unrecognized_or_unreviewed_labels": [row for row in label_rows if not row["in_expected_label_vocabulary"]],
         "policy": "This audit only flags candidates. It never auto-assigns missing fields, merges field IDs, clips values, or remaps technique labels.",
     }
