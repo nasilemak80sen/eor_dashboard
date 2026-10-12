@@ -104,6 +104,12 @@ REVIEWED_SOURCE_FIELD_OVERRIDES = [
 TABLE_E_PROJECT_OVERRIDES = [
     ("11/14 12/11", "Emlichheim, Block 11/14", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
      "OGJ 2014 worldwide EOR survey, p. 9: project Emlichheim, Block 11/14; Field cell blank, 12/11 is start date."),
+    ("Lower Saxony, Grafschaft Bentheim Wintershall Holding AG Steam Emlichheim, Block 11/14", "Emlichheim, Block 11/14", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+     "OGJ 2014 worldwide EOR survey, p. 9: project Emlichheim, Block 11/14; Field cell blank."),
+    ("Bentheim Wintershall Holding AG Steam Emlichheim, Block 11/14", "Emlichheim, Block 11/14", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
+     "OGJ 2014 worldwide EOR survey, p. 9: project Emlichheim, Block 11/14; Field cell blank."),
+    ("Forest Reserve Petrotrin CO2 immiscible EOR 34-Cyclic", "EOR 34-Cyclic", "Forest Reserve Petrotrin",
+     "OGJ 2014 worldwide EOR survey, p. 9: project EOR 34-Cyclic; Forest Reserve is the area, Field cell blank."),
     ("Northeast 2/02", "Northeast", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
      "OGJ 2014 worldwide EOR survey, p. 9: project Northeast; Field cell blank."),
     ("7 North 2/99", "7 North", "Lower Saxony, Grafschaft Bentheim Wintershall Holding AG",
