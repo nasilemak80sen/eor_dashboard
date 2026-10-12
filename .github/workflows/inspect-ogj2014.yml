@@ -1,12 +1,6 @@
 name: Build OGJ2014 provenance workbooks
 
 on:
-  push:
-    branches:
-      - fix/openglobus-restore-after-revert
-    paths:
-      - "scripts/build_ogj2014_provenance.py"
-      - ".github/workflows/inspect-ogj2014.yml"
   workflow_dispatch:
 
 permissions:
