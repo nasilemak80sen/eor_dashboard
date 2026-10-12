@@ -116,6 +116,15 @@ def label_semantic_conflict_audit(frame: pd.DataFrame) -> tuple[pd.Series, list[
             {"term": term, "family": TECHNIQUE_FAMILY[term]}
             for term, pattern in TECHNIQUE_PATTERNS if pattern.search(raw_text)
         ]
+        explicit_miscible = any(
+            item["term"] in {"Miscible acid gas", "Miscible CO2", "CO2 miscible", "Miscible HC"}
+            for item in detected
+        )
+        if re.search(r"\bmiscible\b", raw_text, re.I) and not explicit_miscible:
+            detected.append({
+                "term": "Miscible (unspecified subtype)",
+                "family": TECHNIQUE_FAMILY["Miscible (unspecified subtype)"],
+            })
         conflicting = [item for item in detected if item["family"] != structured_family]
         if not conflicting:
             continue
