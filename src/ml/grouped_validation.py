@@ -29,12 +29,30 @@ PROVENANCE_COLUMNS = {
     "needs_review",
 }
 
-GROUP_PRIORITY = ("case_id", "field_id", "source_report_group_id", "publication_id", "Field")
+# Field-level grouping is the default generalization target. Case grouping is a
+# weaker fallback only when no field_id column exists at all.
+GROUP_PRIORITY = ("field_id", "case_id", "source_report_group_id", "publication_id", "Field")
 
 
 def choose_group_column(df: pd.DataFrame) -> str:
-    """Pick the most specific available grouping key, ignoring blank/unknown IDs."""
-    for column in GROUP_PRIORITY:
+    """Choose field-level grouping first; never silently downgrade incomplete field IDs."""
+    if "field_id" in df.columns:
+        values = df["field_id"].astype("string").str.strip()
+        valid = values.notna() & values.ne("") & ~values.str.casefold().isin(
+            {"unknown", "none", "nan", "na", "needs_review"}
+        )
+        if not valid.all():
+            missing = int((~valid).sum())
+            raise ValueError(
+                f"Field-level validation is blocked: field_id is missing or unresolved "
+                f"on {missing} row(s). Resolve these IDs or explicitly prepare a "
+                "documented field-complete subset; do not silently fall back to case_id."
+            )
+        if values.nunique(dropna=True) < 2:
+            raise ValueError("Field-level validation requires at least two distinct field IDs.")
+        return "field_id"
+
+    for column in GROUP_PRIORITY[1:]:
         if column not in df.columns:
             continue
         values = df[column].astype("string").str.strip()
