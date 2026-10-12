@@ -42,6 +42,30 @@ def test_field_id_is_used_for_grouping_before_case_and_empty_metadata():
     assert standardized["source_group"].tolist() == ["FIELD-001", "FIELD-002"]
 
 
+def test_incomplete_field_id_is_not_filled_from_case_id():
+    raw = _raw_table()
+    raw["field_id"] = ["FIELD-001", ""]
+    standardized = nu.standardize_training_table(raw)
+    assert standardized["source_group"].isna().any()
+    with pytest.raises(ValueError, match="unresolved field IDs"):
+        nu.validate_grouped_dataset(
+            labels=[0, 1],
+            groups=standardized["source_group"],
+            minimum_groups_per_class=1,
+        )
+
+
+def test_rows_with_identical_numeric_profiles_are_not_merged():
+    raw = _raw_table()
+    duplicate = raw.iloc[[0]].copy()
+    duplicate["technique"] = "Polymer"
+    duplicate["field_id"] = "FIELD-003"
+    raw = pd.concat([raw, duplicate], ignore_index=True)
+    standardized = nu.standardize_training_table(raw)
+    assert len(standardized) == len(raw)
+    assert standardized.attrs["rows_merged_by_numeric_profile"] == 0
+
+
 def test_provenance_identifiers_do_not_enter_feature_matrix():
     standardized = nu.standardize_training_table(_raw_table())
     features, _, feature_names = nu.build_feature_table(standardized)
@@ -52,7 +76,7 @@ def test_provenance_identifiers_do_not_enter_feature_matrix():
 
 
 def test_missing_group_ids_are_rejected_for_grouped_evaluation():
-    with pytest.raises(ValueError, match="source_group contains blank values"):
+    with pytest.raises(ValueError, match="blank or unresolved field IDs"):
         nu.validate_grouped_dataset(
             labels=[0, 1, 0, 1],
             groups=["CASE-001", "", "CASE-002", "CASE-003"],
