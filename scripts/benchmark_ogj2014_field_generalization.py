@@ -39,6 +39,8 @@ REQUESTED_FOLDS = 5
 HOLDOUT_FRACTION = 0.20
 SEED_START = 42
 SEED_ATTEMPTS = 100
+MINIMUM_HOLDOUT_FIELDS_PER_CLASS = 2
+MINIMUM_TRAIN_FIELDS_PER_CLASS = MINIMUM_FIELDS_PER_CLASS - MINIMUM_HOLDOUT_FIELDS_PER_CLASS
 
 NUMERIC_RANGES = [
     ("depth", "depth_min_ft", "depth_max_ft", "ft"),
@@ -101,6 +103,14 @@ def _all_classes_present(labels: np.ndarray, indices: np.ndarray, classes: set[s
     return set(labels[indices].astype(str)) == classes
 
 
+def _class_group_counts(labels: np.ndarray, groups: np.ndarray, indices: np.ndarray) -> dict[str, int]:
+    """Count independent fields supporting each class within a partition."""
+    return {
+        label: int(np.unique(groups[indices][labels[indices] == label]).size)
+        for label in sorted(set(labels.astype(str)))
+    }
+
+
 def make_group_holdout(
     labels: np.ndarray, groups: np.ndarray, *, test_size: float = HOLDOUT_FRACTION
 ) -> tuple[np.ndarray, np.ndarray, int]:
@@ -108,14 +118,20 @@ def make_group_holdout(
     for seed in range(SEED_START, SEED_START + SEED_ATTEMPTS):
         splitter = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
         train_idx, test_idx = next(splitter.split(np.zeros(len(labels)), labels, groups))
-        if set(groups[train_idx]).isdisjoint(set(groups[test_idx])) and (
-            _all_classes_present(labels, train_idx, classes)
+        train_support = _class_group_counts(labels, groups, train_idx)
+        test_support = _class_group_counts(labels, groups, test_idx)
+        if (
+            set(groups[train_idx]).isdisjoint(set(groups[test_idx]))
+            and _all_classes_present(labels, train_idx, classes)
             and _all_classes_present(labels, test_idx, classes)
+            and all(count >= MINIMUM_TRAIN_FIELDS_PER_CLASS for count in train_support.values())
+            and all(count >= MINIMUM_HOLDOUT_FIELDS_PER_CLASS for count in test_support.values())
         ):
             return train_idx, test_idx, seed
     raise ValueError(
-        "Could not find a field-isolated 80/20 holdout containing every eligible "
-        "technique class in both partitions. Do not use a row-wise fallback."
+        "Could not find a field-isolated holdout with every eligible class represented "
+        f"by at least {MINIMUM_TRAIN_FIELDS_PER_CLASS} training fields and "
+        f"{MINIMUM_HOLDOUT_FIELDS_PER_CLASS} test fields. Do not use a row-wise fallback."
     )
 
 
@@ -283,6 +299,8 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         },
         "field_support_all_classes": {str(k): int(v) for k, v in field_support.sort_index().items()},
         "minimum_independent_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
+        "minimum_holdout_fields_per_class": MINIMUM_HOLDOUT_FIELDS_PER_CLASS,
+        "minimum_training_fields_per_class": MINIMUM_TRAIN_FIELDS_PER_CLASS,
         "eligible_classes": eligible_classes,
         "unsupported_classes_excluded_from_this_restricted_pilot": unsupported_classes,
         "restricted_scope_warning": (
@@ -305,6 +323,8 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "test_rows": int(len(test_idx)),
             "train_fields": int(pd.Series(groups[train_idx]).nunique()),
             "test_fields": int(pd.Series(groups[test_idx]).nunique()),
+            "train_fields_per_class": _class_group_counts(y, groups, train_idx),
+            "test_fields_per_class": _class_group_counts(y, groups, test_idx),
             "field_overlap": sorted(set(groups[train_idx]).intersection(set(groups[test_idx]))),
         },
         "cross_validation": {
