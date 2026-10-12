@@ -28,9 +28,8 @@ RANGE_PAIRS = [
     ("oil_saturation", "so_start_min_pct", "so_start_max_pct", 0, 100),
 ]
 LABEL_EXPECTED = {
-    "Miscible acid gas", "Miscible CO2", "Miscible HC", "CO2 immiscible",
-    "CO2 miscible", "Hot water", "Enhanced cyclic steam", "Technology",
-    "Surfactants", "Nitrates", "Microbial", "Polymer", "Combustion", "Steam",
+    "Combustion", "HC immiscible", "Hot water", "Miscible CO2", "Miscible HC",
+    "Miscible acid gas", "Nitrogen immiscible", "Polymer", "Steam",
 }
 
 
@@ -112,6 +111,21 @@ def audit(dataset: Path = DATASET) -> dict:
         alias["rows"].append(int(idx + 2))
 
     alias_candidates = []
+    def evidence_for(rows: list[int]) -> list[dict]:
+        details = []
+        for excel_row in sorted(set(rows)):
+            source_idx = excel_row - 2
+            source_row = df.iloc[source_idx]
+            details.append({
+                "excel_row": excel_row,
+                "technique": norm_text(source_row.get("technique", "")),
+                "field_name_normalized": norm_text(source_row.get("field_name_normalized", "")),
+                "field_id": norm_text(source_row.get("field_id", "")),
+                "raw_source_text": norm_text(source_row.get(raw_col, "")) if raw_col else "",
+                "formation_category": norm_text(source_row.get("formation_category", "")),
+            })
+        return details
+
     for key, item in by_field_name.items():
         if len(item["field_ids"]) > 1:
             alias_candidates.append({
@@ -120,6 +134,7 @@ def audit(dataset: Path = DATASET) -> dict:
                 "field_names": sorted(item["names"]),
                 "field_ids": sorted(item["field_ids"]),
                 "source_excel_rows": sorted(item["rows"]),
+                "row_evidence": evidence_for(item["rows"]),
                 "decision": "review source evidence and geography; no automatic merge",
             })
     for key, item in by_alias.items():
@@ -130,6 +145,7 @@ def audit(dataset: Path = DATASET) -> dict:
                 "field_names": sorted(item["names"]),
                 "field_ids": sorted(item["field_ids"]),
                 "source_excel_rows": sorted(item["rows"]),
+                "row_evidence": evidence_for(item["rows"]),
                 "decision": "review source evidence and geography; no automatic merge",
             })
 
