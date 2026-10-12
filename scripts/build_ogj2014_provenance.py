@@ -563,7 +563,10 @@ def main():
                 "project_id": project_id,
                 "project_name_normalized": ns(project_name),
                 "project_context_normalized": ns(project_context),
-                "project_id_status_internal": "confirmed" if project_id else "unknown",
+                "project_id_status_internal": (
+                    "confirmed" if project_id
+                    else ("unknown" if source_table == "Table E" else "not_applicable")
+                ),
                 "case_id": case_id,
                 "case_id_status": case_status,
                 "tagging_confidence": confidence,
