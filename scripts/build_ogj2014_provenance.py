@@ -396,13 +396,15 @@ def main():
             project_id = ""
             project_name = ""
             project_context = ""
+            source_table = "unknown"
             project_rationale = (
                 "No separate project column is provided in source Tables A-D; project_id intentionally left blank."
             )
             if raw_i is not None:
                 raw = values[raw_i]
                 raw_normalized = source_norm(raw)
-                if excel_row >= TABLE_E_START_EXCEL_ROW:
+                source_table = "Table E" if is_table_e_source_row(raw or "") else "Tables A-D"
+                if is_table_e_source_row(raw or ""):
                     # OGJ Table E has distinct Project and Field columns. In the
                     # source rows represented here the Field cell is blank; do not
                     # mislabel the project name or pay zone as a field.
@@ -533,6 +535,7 @@ def main():
             tags.append({
                 "workbook": workbook_label,
                 "excel_row": excel_row,
+                "source_table": source_table,
                 "source_report": source_report,
                 "record_id": record_id,
                 "source_report_group_id": source_report_group_id,
@@ -627,7 +630,7 @@ def main():
                 worksheet.cell(excel_row, start_col + offset, tag[header])
         workbook.save(out_path)
 
-    audit_fields = ["workbook", "excel_row", "source_report", "project_name_normalized", "project_context_normalized", "project_id_status_internal"] + NEW_COLS
+    audit_fields = ["workbook", "excel_row", "source_table", "source_report", "project_name_normalized", "project_context_normalized", "project_id_status_internal"] + NEW_COLS
     with (OUT / "ogj2014_row_tagging_audit.csv").open("w", newline="", encoding="utf-8-sig") as file:
         writer = csv.DictWriter(file, fieldnames=audit_fields)
         writer.writeheader()
@@ -730,14 +733,14 @@ def main():
             "publication_id_status_counts": dict(Counter(tag["publication_id_status"] for tag in tags)),
             "distinct_project_ids": len({tag["project_id"] for tag in tags if tag["project_id"]}),
             "project_id_status_counts": dict(Counter(tag["project_id_status_internal"] for tag in tags)),
-            "table_e_rows": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW for tag in tags),
-            "table_e_rows_with_project_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and bool(tag["project_id"]) for tag in tags),
-            "table_e_rows_without_project_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and not tag["project_id"] for tag in tags),
-            "table_e_rows_without_field_id": sum(tag["excel_row"] >= TABLE_E_START_EXCEL_ROW and not tag["field_id"] for tag in tags),
+            "table_e_rows": sum(tag["source_table"] == "Table E" for tag in tags),
+            "table_e_rows_with_project_id": sum(tag["source_table"] == "Table E" and bool(tag["project_id"]) for tag in tags),
+            "table_e_rows_without_project_id": sum(tag["source_table"] == "Table E" and not tag["project_id"] for tag in tags),
+            "table_e_rows_without_field_id": sum(tag["source_table"] == "Table E" and not tag["field_id"] for tag in tags),
             "field_id_status_counts": dict(Counter(tag["field_id_status"] for tag in tags)),
             "field_rows_unknown": sum(tag["field_id_status"] == "unknown" for tag in tags),
             "field_rows_needing_review": sum(tag["field_id_status"] == "needs_review" for tag in tags),
-            "field_rows_missing_outside_table_e": sum(tag["excel_row"] < TABLE_E_START_EXCEL_ROW and not tag["field_id"] for tag in tags),
+            "field_rows_missing_outside_table_e": sum(tag["source_table"] != "Table E" and not tag["field_id"] for tag in tags),
             "case_rows_needing_review": sum(tag["case_id_status"] == "needs_review" for tag in tags),
         }
 
@@ -752,8 +755,8 @@ def main():
             "The mirror's source_report header and cell values are preserved and never interpreted as raw_line; source_report_group_id remains blank.",
             "All provenance IDs are grouping/audit metadata, not model features.",
             "Publication identity is confirmed against the official Oil & Gas Journal 2014 worldwide EOR survey PDF, with a stable publication_id and source URL recorded in tagging_rationale.",
-            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities, while the remaining rows are project/pay-zone text from Table E and are not forced into field_id.",
-            "Table E starts at the validated Excel row 480; its source schema separates Project and Field, and the Field cells represented here are blank. Project IDs are recorded separately; field_id and ambiguous case_id remain blank.",
+            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities, while the remaining rows are project/pay-zone text or ambiguous fragments and are not forced into field_id.",
+            "Table E rows are identified from source-text context, not Excel row position. Its source schema separates Project and Field; where the Field cell is blank, project IDs are recorded separately and field_id remains blank.",
             "Field IDs extracted from explicit operator-to-field spans, manually reviewed rules, or source-document overrides are marked confirmed; standalone candidates without enough source context remain provisional.",
             "Only narrow source-supported field aliases are canonicalized; same-name fields with different geography remain separate.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
