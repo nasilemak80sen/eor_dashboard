@@ -28,12 +28,6 @@ jobs:
       - name: Verify source copies and build provenance metadata
         run: python scripts/build_ogj2014_provenance.py
 
-      - name: Audit field-level grouping and class support
-        run: python scripts/audit_ogj2014_grouped_splits.py
-
-      - name: Run row-preserving field-level baseline benchmark
-        run: python scripts/benchmark_ogj2014_field_generalization.py
-
       - name: Publish both validated workbook copies
         run: |
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
@@ -48,6 +42,12 @@ jobs:
           fi
           git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
           git push origin HEAD:fix/openglobus-restore-after-revert
+
+      - name: Audit field-level grouping and class support
+        run: python scripts/audit_ogj2014_grouped_splits.py
+
+      - name: Run row-preserving field-level baseline benchmark
+        run: python scripts/benchmark_ogj2014_field_generalization.py
 
       - name: Upload provenance, grouped-audit and ML benchmark reports
         if: always()
