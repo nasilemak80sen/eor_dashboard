@@ -204,11 +204,7 @@ TABLE_E_SOURCE_PREFIXES = (
     "Cairo Scimitar", "Batman TPAO", "Campo Cerro Negro", "Campo Jobo", "Campo Pilon",
     "Zulia PDVSA E&P", "11/14 12/11", "2 immiscible Area 2102", "(S ORS 01)",
     "MFB-53)", "MFB-23)", "MM-407)", "MM-412)", "Superior S 23", "miscible Magnus",
-    "Carmopolis S/Congl.", "L’Enfer S", "L'Enfer S", "Forest Sands S", "Valanginian ",
     "water Furrial ",
-    "Naricual S", "Acu S ", "Urucutuca S", "Bluesky S", "Cretaceous-Bullhead",
-    "Cruse E", "Cruse E & F", "L.L. S ", "Morichal-Memb.", "Jobo Member",
-    "Rindu ", "Pertama-Kedua", "Garzan LS",
 )
 
 
@@ -216,6 +212,21 @@ def is_table_e_source_row(raw: str) -> bool:
     """Identify international Table E rows/fragments by source-text evidence, not row position."""
     text = ns(raw)
     return any(text.casefold().startswith(prefix.casefold()) for prefix in TABLE_E_SOURCE_PREFIXES)
+
+
+AMBIGUOUS_SOURCE_FRAGMENT_PREFIXES = (
+    "Carmopolis S/Congl.", "L’Enfer S", "L'Enfer S", "Forest Sands S", "Valanginian ",
+    "Naricual S", "Acu S ", "Urucutuca S", "Bluesky S", "Cretaceous-Bullhead",
+    "Cruse E", "Cruse E & F", "L.L. S ", "Morichal-Memb.", "Jobo Member",
+    "Rindu ", "Pertama-Kedua", "Garzan LS", "Bachaquero S", "Wabiskaw",
+    "T(YAC.MFA-52)", "Catu-1 S",
+)
+
+
+def is_ambiguous_source_fragment(raw: str) -> bool:
+    """Detect pay-zone/reservoir fragments that cannot establish a field or project."""
+    text = ns(raw)
+    return any(text.casefold().startswith(prefix.casefold()) for prefix in AMBIGUOUS_SOURCE_FRAGMENT_PREFIXES)
 
 
 def parse_project(raw):
@@ -418,12 +429,19 @@ def main():
             if raw_i is not None:
                 raw = values[raw_i]
                 raw_normalized = source_norm(raw)
-                source_table = "Table E" if is_table_e_source_row(raw or "") else "Tables A-D"
-                if is_table_e_source_row(raw or ""):
+                table_e_row = is_table_e_source_row(raw or "")
+                ambiguous_fragment = is_ambiguous_source_fragment(raw or "")
+                source_table = (
+                    "Table E" if table_e_row
+                    else ("Ambiguous source fragment" if ambiguous_fragment else "Tables A-D")
+                )
+                if table_e_row or ambiguous_fragment:
                     # OGJ Table E has distinct Project and Field columns. In the
                     # source rows represented here the Field cell is blank; do not
                     # mislabel the project name or pay zone as a field.
-                    project_name, project_context, project_reason = parse_project(raw or "")
+                    project_name, project_context, project_reason = (
+                        parse_project(raw or "") if table_e_row else (None, "", "unresolved")
+                    )
                     project_id = (
                         hid("PROJ", nk(project_context) + "|" + nk(project_name))
                         if project_name else ""
@@ -436,6 +454,9 @@ def main():
                     field_rationale = (
                         "OGJ Table E separates Project and Field. The source Field cell is blank for this row; "
                         "field_id is intentionally blank rather than reusing the project name or pay-zone text."
+                        if table_e_row else
+                        "raw_line is an ambiguous pay-zone/reservoir fragment without enough source-row context to identify a field; "
+                        "field_id is intentionally blank."
                     )
                     if project_id:
                         if project_reason.startswith("source_verified:"):
@@ -752,6 +773,7 @@ def main():
             "distinct_project_ids": len({tag["project_id"] for tag in tags if tag["project_id"]}),
             "project_id_status_counts": dict(Counter(tag["project_id_status_internal"] for tag in tags)),
             "table_e_rows": sum(tag["source_table"] == "Table E" for tag in tags),
+            "ambiguous_source_fragment_rows": sum(tag["source_table"] == "Ambiguous source fragment" for tag in tags),
             "table_e_rows_with_project_id": sum(tag["source_table"] == "Table E" and bool(tag["project_id"]) for tag in tags),
             "table_e_rows_without_project_id": sum(tag["source_table"] == "Table E" and not tag["project_id"] for tag in tags),
             "table_e_rows_without_field_id": sum(tag["source_table"] == "Table E" and not tag["field_id"] for tag in tags),
@@ -773,8 +795,8 @@ def main():
             "The mirror's source_report header and cell values are preserved and never interpreted as raw_line; source_report_group_id remains blank.",
             "All provenance IDs are grouping/audit metadata, not model features.",
             "Publication identity is confirmed against the official Oil & Gas Journal 2014 worldwide EOR survey PDF, with a stable publication_id and source URL recorded in tagging_rationale.",
-            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities, while the remaining rows are project/pay-zone text or ambiguous fragments and are not forced into field_id.",
-            "Table E rows are identified from source-text context, not Excel row position. Its source schema separates Project and Field; where the Field cell is blank, project IDs are recorded separately and field_id remains blank.",
+            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities; the remaining rows are project/pay-zone text or ambiguous fragments and are not forced into field_id.",
+            "Table E rows are identified from source-text context, not Excel row position. Its source schema separates Project and Field; where the Field cell is blank, project IDs are recorded separately and field_id remains blank. Ambiguous fragments without unique project context are left without case_id as well.",
             "Field IDs extracted from explicit operator-to-field spans, manually reviewed rules, or source-document overrides are marked confirmed; standalone candidates without enough source context remain provisional.",
             "Only narrow source-supported field aliases are canonicalized; same-name fields with different geography remain separate.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
