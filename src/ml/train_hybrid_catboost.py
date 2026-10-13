@@ -66,11 +66,35 @@ def _load_dataset(path: Path) -> pd.DataFrame:
     return df
 
 
+MINIMUM_INDEPENDENT_FIELDS_PER_CLASS = 6
+
+
 def _validate_columns(df: pd.DataFrame) -> None:
     required = {TARGET_COLUMN, FORMATION_COLUMN}
     missing = sorted(required.difference(df.columns))
     if missing:
         raise ValueError(f"Training dataset is missing required columns: {missing}")
+
+    for column in (TARGET_COLUMN, FORMATION_COLUMN):
+        values = df[column].astype("string").str.strip()
+        invalid = values.isna() | values.eq("") | values.str.casefold().isin(
+            {"nan", "none", "null", "unknown", "needs_review", "n/a"}
+        )
+        if invalid.any():
+            raise ValueError(
+                f"Training blocked: {int(invalid.sum())} row(s) have missing or unresolved "
+                f"{column!r} values. Resolve or explicitly quarantine these rows before training."
+            )
+
+    if "needs_review" in df.columns:
+        flagged = df["needs_review"].astype("string").str.strip().str.casefold().isin(
+            {"true", "yes", "1", "y", "needs_review"}
+        )
+        if flagged.any():
+            raise ValueError(
+                f"Training blocked: {int(flagged.sum())} row(s) are marked needs_review. "
+                "Resolve label/provenance conflicts or build a documented reviewed subset."
+            )
 
 
 def build_training_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, LabelEncoder]:
@@ -176,6 +200,24 @@ def train_and_save(
 
     group_column = choose_group_column(df)
     groups = df[group_column].astype(str).to_numpy()
+
+    # Row counts alone overstate evidence when many observations come from the
+    # same field. Require independent field support for every class before CV.
+    group_support = {
+        str(label): int(np.unique(groups[y == label]).size)
+        for label in np.unique(y)
+    }
+    insufficient = {
+        label: count for label, count in group_support.items()
+        if count < MINIMUM_INDEPENDENT_FIELDS_PER_CLASS
+    }
+    if insufficient:
+        raise ValueError(
+            "Training blocked: insufficient independent field support per technique. "
+            f"Need at least {MINIMUM_INDEPENDENT_FIELDS_PER_CLASS} distinct groups per "
+            f"class; observed {insufficient}. Collect reviewed field-level labels or "
+            "report the model as research-only without a generalisation claim."
+        )
 
     params = dict(DEFAULT_PARAMS)
     validation = cross_validate(X, y, params, groups=groups)
