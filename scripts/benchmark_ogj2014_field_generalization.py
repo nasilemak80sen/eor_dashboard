@@ -607,7 +607,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
 
     cv_rows = []
     fitted_cv_models = {}
-    for model_name, estimator in model_factories.items()
+    for model_name, estimator in model_factories.items():
         fold_scores = []
         for fold_index, (fold_train, fold_test) in enumerate(cv_splits, start=1):
             if not set(groups_train[fold_train]).isdisjoint(set(groups_train[fold_test])):
