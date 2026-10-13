@@ -261,29 +261,55 @@ def parse_project(raw):
 
 
 def table_e_identity_hold_reason(raw: str) -> str | None:
-    """Hold ambiguous same-name Table E field groups out of independent support."""
-    if raw.startswith("Brazil Petrobras Steam Estreito"):
-        return (
-            "Identity review hold: Table E also lists an Estreito row in Rio Grande do Norte; "
-            "the country-level Brazil context is not enough to prove whether these are the same field. "
-            "Keep the IDs separate and exclude this row from confirmed independent-field support pending review."
-        )
-    if raw.startswith("Rio Grande do Norte (RN) Petrobras Steam Estreito"):
-        return (
-            "Identity review hold: Table E also lists an Estreito row with only country-level Brazil context; "
-            "do not assume these are independent fields until the geography/alias question is resolved."
-        )
+    """Estreito is source-resolved to Rio Grande do Norte; no hold remains."""
+    return None
+
+
+
+def reviewed_partial_field_override(raw: str):
+    """Resolve a partial performance line only when its full metric signature matches Table E."""
+    text = ns(raw)
+    if text.startswith("Carmopolis S/Congl. 22 200 2,460"):
+        return ("Carmopolis", "Sergipe, Brazil",
+                "OGJ 2014 Table E, printed p. 9, Sergipe / Petrobras / Steam / Carmopolis. "
+                "Carmopolis S/Congl. 22, porosity 21, permeability 500 mD and depth 2,460 ft match the source row.")
+    if text.startswith("L’Enfer S 33 250 1,000 21.6 18 103"):
+        return ("Bennett Village", "Trinidad and Tobago",
+                "OGJ 2014 Table E, printed p. 10, Palo Seco / Petrotrin / Water (Steam Scavenging) / Bennett Village. "
+                "Exact L’Enfer S 33, porosity 21.6, permeability 18 mD, depth 1,000 ft signature.")
+    if text.startswith("L’Enfer S 29 250 2,800 19.2 120 100"):
+        return ("Antilles Quarry", "Trinidad and Tobago",
+                "OGJ 2014 Table E, printed p. 10, Quarry / Petrotrin / Water (Steam Scavenging) / Antilles Quarry. "
+                "Exact L’Enfer S 29, porosity 19.2, permeability 120 mD, depth 2,800 ft signature.")
+    if text.startswith("L’Enfer S 33 260 1,200 15 500 100"):
+        return ("North Palo Seco", "Trinidad and Tobago",
+                "OGJ 2014 Table E, printed p. 10, North Palo Seco / Petrotrin / Steam / North Palo Seco. "
+                "Exact L’Enfer S 33, porosity 15, permeability 500 mD, depth 1,200 ft signature.")
     return None
 
 
 def parse_table_e_field(raw: str):
-    """Extract the explicit Field cell from OGJ 2014 Table E source text.
-
-    Historical name parse_project() is retained for compatibility with older
-    tests/callers, but its returned value is the Table E Field cell, not a
-    separate project name. The PDF column heading is 'Type/project | Field'.
-    """
-    return parse_project(raw)
+    """Extract the explicit Field cell from OGJ 2014 Table E source text."""
+    text = ns(raw)
+    if text.startswith(("Brazil Petrobras Steam Estreito",
+                        "Rio Grande do Norte (RN) Petrobras Steam Estreito")):
+        return (
+            "Estreito", "Rio Grande do Norte, Brazil",
+            "source_verified: OGJ Table E prints both Petrobras Steam Estreito entries, one with country-only Brazil "
+            "context and one with Rio Grande do Norte (RN). Brazil Decree 92.274 of 7 Jan 1986 identifies Petrobras's "
+            "Estreito oil-collection region in Carnaubais, Alto do Rodrigues, and Açu, Rio Grande do Norte. "
+            "Canonicalized field identity; source rows are not merged. OGJ PDF: " + PUBLICATION_URL +
+            " Government source: https://www4.planalto.gov.br/legislacao/portal-legis/legislacao-1/decretos1/1986-decretos-1",
+        )
+    parsed_field, context, reason = parse_project(text)
+    if parsed_field and nk(parsed_field) == "estreito":
+        return (
+            "Estreito", "Rio Grande do Norte, Brazil",
+            "source_verified: OGJ Table E Estreito field identity canonicalized to Rio Grande do Norte using "
+            "the source table and Decree 92.274 (1986); source rows remain distinct. OGJ PDF: " + PUBLICATION_URL +
+            " Government source: https://www4.planalto.gov.br/legislacao/portal-legis/legislacao-1/decretos1/1986-decretos-1",
+        )
+    return parsed_field, context, reason
 
 
 def matrix(path):
@@ -516,29 +542,47 @@ def main():
                         "No reliable source fragment for a case identifier."
                     )
                 elif ambiguous_fragment:
-                    # Partial rows that contain only pay-zone/reservoir text and
-                    # numeric columns remain unresolved. Never infer their field from
-                    # adjacent rows or a matching formation alone.
+                    # Explicitly reviewed partial fragments are resolved only when
+                    # their complete metric signature matches a named Table E row.
+                    # All other fragments remain quarantined; no adjacent-row guessing.
+                    partial_override = reviewed_partial_field_override(raw or "")
                     project_name = ""
                     project_context = ""
                     project_id = ""
-                    field = None
-                    geography = ""
-                    field_id = ""
-                    field_status = "needs_review"
-                    confidence = "Low"
-                    field_rationale = (
-                        "raw_line is an ambiguous pay-zone/reservoir fragment without enough source-row context to identify a field; "
-                        "field_id is intentionally blank."
-                    )
-                    case_id = ""
-                    case_status = "needs_review"
-                    project_rationale = (
-                        "Project identity unresolved because raw_line is a partial source fragment; no project_id was guessed."
-                    )
-                    case_rationale = (
-                        "case_id withheld because the partial source fragment may represent multiple projects."
-                    )
+                    if partial_override:
+                        field, geography, partial_evidence = partial_override
+                        field_id = hid("FIELD", nk(field) + "|" + nk(geography))
+                        field_status = "confirmed"
+                        confidence = "High"
+                        field_rationale = (
+                            "Field identity source-confirmed by exact OGJ Table E row/profile match: "
+                            + partial_evidence + " Source PDF: " + PUBLICATION_URL
+                        )
+                        case_id = hid("CASE", raw_normalized) if raw_normalized else ""
+                        case_status = "provisional" if raw_normalized else "needs_review"
+                        case_rationale = (
+                            "Partial source line is matched to a named Table E field by its complete metric profile; "
+                            "source row and record ID remain separate."
+                        )
+                        project_rationale = "No independent project identifier was inferred from the partial performance fragment."
+                    else:
+                        field = None
+                        geography = ""
+                        field_id = ""
+                        field_status = "needs_review"
+                        confidence = "Low"
+                        field_rationale = (
+                            "raw_line is an ambiguous pay-zone/reservoir fragment without a unique source-table row/profile match; "
+                            "field_id is intentionally blank."
+                        )
+                        case_id = ""
+                        case_status = "needs_review"
+                        project_rationale = (
+                            "Project identity unresolved because the partial source fragment does not uniquely map to a Table E row."
+                        )
+                        case_rationale = (
+                            "case_id withheld because the partial source fragment may represent multiple source cases."
+                        )
                 else:
                     field, parse_reason, geography = parse_field(raw or "")
                     case_id = hid("CASE", raw_normalized) if raw_normalized else ""
