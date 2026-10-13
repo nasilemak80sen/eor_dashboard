@@ -1076,35 +1076,60 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "accuracy": float(accuracy_score(y_test, recipe_predictions)),
         }
 
+    deployed_artifact_unseen_field_comparison = evaluate_production_on_genuinely_unseen_fields(df)
+    training_membership_summary = (
+        json.loads(TRAINING_MEMBERSHIP_REPORT_PATH.read_text(encoding="utf-8"))
+        if TRAINING_MEMBERSHIP_REPORT_PATH.is_file() else None
+    )
+    full_nine_class_gate_pass = bool(source_adjudication_summary["all_nine_classes_supported_at_minimum"])
+
     report = {
         "dataset": str(dataset.relative_to(ROOT)),
         "sheet": SHEET,
         "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
-        "study_type": "observed EOR technique classification",
+        "study_type": "source-adjudicated observed EOR technique classification",
         "not_a_prediction_of": "EOR success, recovery uplift, or economic value",
+        "source_adjudication": source_adjudication_summary,
+        "full_nine_class_support_gate": {
+            "status": "passed" if full_nine_class_gate_pass else "blocked_insufficient_confirmed_independent_field_support",
+            "minimum_confirmed_independent_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
+            "class_field_support": source_adjudication_summary["class_field_support"],
+            "unsupported_classes": unsupported_classes,
+            "required_classes": PRODUCTION_CLASSES,
+        },
         "production_model_comparison": {
-            "status": "blocked_pending_training_provenance_and_nine_class_support",
+            "status": (
+                "training_membership_reconstructed_direct_unseen_field_check_completed_full_class_gate_passed"
+                if full_nine_class_gate_pass else
+                "training_membership_reconstructed_direct_unseen_field_check_completed_full_nine_class_gate_blocked"
+            ),
             "artifact": "outputs/model_artifacts/eor_catboost_v1.0.0.joblib",
             "artifact_config": "outputs/model_artifacts/config_catboost_v1.0.0.json",
             "artifact_version": "1.0.0",
             "artifact_class_count": 9,
             "artifact_configured_training_rows": 526,
             "source_workbook_rows": int(len(df)),
-            "training_record_ids_available": False,
-            "training_dataset_hash_available": False,
-            "production_hyperparameters_fully_recorded": False,
+            "training_record_ids_available": bool(TRAINING_MANIFEST_PATH.is_file()),
+            "training_dataset_hash_available": bool(
+                training_membership_summary
+                and training_membership_summary.get("historic_source_workbook_sha256")
+                and training_membership_summary.get("training_membership_sha256_ordered_record_ids")
+            ),
+            "production_hyperparameters_fully_recorded_in_config": False,
+            "effective_hyperparameters_recovered_from_serialized_model": True,
+            "training_membership_reconstruction": training_membership_summary,
+            "direct_deployed_artifact_evaluation_on_genuinely_unseen_fields": deployed_artifact_unseen_field_comparison,
             "reason": (
-                "The deployed artifact config says it was trained on 526 rows from this same OGJ2014 workbook, "
-                "but it provides no training-row manifest or training-data hash to prove the grouped holdout rows "
-                "were unseen. Its config also leaves key CatBoost parameters null. In addition, the nine-class "
-                "production target cannot pass the minimum confirmed-field support gate for every class; the "
-                "restricted research pilot covers only the eligible classes. Direct deployed-artifact metrics "
-                "would therefore be leakage-prone and not comparable to the restricted pilot."
+                "The historical training notebook/config and unchanged v1.0.0 artifact were used to reconstruct "
+                "the exact 526 training record IDs and source workbook hashes. Evaluation now excludes every field "
+                "with any production-training row. This permits a genuine unseen-field diagnostic, but does not "
+                "override the full nine-class support gate: classes below the minimum remain promotion blockers. "
+                "The original config still omits some effective CatBoost settings; these were recovered from the "
+                "serialized artifact for fold-retrained recipe comparison."
             ),
             "allowed_next_step": (
-                "Recover the artifact's exact training-row manifest/hash and full training recipe, or report a "
-                "separately fold-retrained production-compatible recipe as a different experiment. Do not report "
-                "the current artifact as fairly benchmarked or promote a model until all nine classes meet the gate."
+                "Source-review the low-support class gaps and obtain additional independently documented fields. "
+                "Do not promote based on a restricted pilot or an unseen-field diagnostic that lacks support across all nine classes."
             ),
             "research_pilot_classes": eligible_classes,
             "classes_below_minimum_confirmed_field_support": unsupported_classes,
@@ -1118,7 +1143,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
                     (row for row in repeated_summary if row["model"] == "ProductionRecipeCatBoost"),
                     None,
                 ),
-                "untouched_grouped_holdout_metrics": production_recipe_holdout,
+                "restricted_pilot_untouched_grouped_holdout_metrics": production_recipe_holdout,
             },
         },
         "row_preservation": {
