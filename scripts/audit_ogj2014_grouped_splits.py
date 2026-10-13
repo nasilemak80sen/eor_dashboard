@@ -73,12 +73,6 @@ def _audit_grouped_splits(
     if len(frame) == 0:
         result["validation_reason"] = f"No rows have a usable {group_name}."
         return result
-    if classes_missing:
-        result["validation_reason"] = (
-            "Some technique classes have no rows with a valid grouping identifier. "
-            "No labels were assigned to guessed groups."
-        )
-        return result
     if folds < 2:
         result["validation_reason"] = (
             "Insufficient row/class/group support for at least two grouped folds. "
@@ -89,7 +83,7 @@ def _audit_grouped_splits(
     splitter = StratifiedGroupKFold(n_splits=folds, shuffle=True, random_state=42)
     X = pd.DataFrame(index=range(len(frame)))  # diagnostics only; not predictive features
     splits = list(splitter.split(X, labels, groups))
-    all_classes = set(expected_classes)
+    all_classes = set(classes_present)
     overlaps = []
     coverage = []
     all_classes_covered = True
@@ -117,17 +111,27 @@ def _audit_grouped_splits(
     result["folds"] = folds
     result["group_overlap_by_fold"] = overlaps
     result["class_coverage_by_fold"] = coverage
-    result["all_expected_classes_present_in_each_train_and_test"] = bool(all_classes_covered)
+    full_class_set_covered = not classes_missing and all_classes_covered
+    result["all_expected_classes_present_in_each_train_and_test"] = bool(full_class_set_covered)
     result["validation_status"] = (
-        "split_integrity_passed" if all_classes_covered
-        else "split_integrity_passed_support_limited"
+        "split_integrity_passed" if full_class_set_covered
+        else ("split_integrity_passed_subset_only" if all_classes_covered and classes_missing
+              else "split_integrity_passed_support_limited")
     )
-    result["validation_reason"] = (
-        "Groups are isolated across folds. Class coverage is complete in every train/test fold."
-        if all_classes_covered else
-        "Groups are isolated, but at least one train/test fold lacks one or more technique classes. "
-        "This is a split-integrity audit only, not evidence that model evaluation is statistically adequate."
-    )
+    if full_class_set_covered:
+        result["validation_reason"] = (
+            "Groups are isolated across folds. Class coverage is complete in every train/test fold."
+        )
+    elif all_classes_covered and classes_missing:
+        result["validation_reason"] = (
+            "Groups are isolated for the subset with usable grouping IDs, but one or more technique classes "
+            "have no usable IDs and are absent from this split audit. No IDs or labels were guessed."
+        )
+    else:
+        result["validation_reason"] = (
+            "Groups are isolated, but at least one train/test fold lacks one or more technique classes. "
+            "This is a split-integrity audit only, not evidence that model evaluation is statistically adequate."
+        )
     return result
 
 
@@ -152,11 +156,15 @@ def audit(path: Path = DATASET) -> dict:
     expected_classes = sorted(labels.unique().tolist())
 
     valid_case = _valid_group(df["case_id"])
-    if not valid_case.all():
-        raise ValueError("case_id is incomplete; refusing row-wise fallback.")
-    case_groups = df["case_id"].astype(str)
+    case_df = df.loc[valid_case].copy().reset_index(drop=True)
+    case_labels = case_df["technique"].astype(str).str.strip()
+    case_groups = case_df["case_id"].astype(str)
     case_audit = _audit_grouped_splits(
-        df, labels, case_groups, group_name="case_id", expected_classes=expected_classes
+        case_df,
+        case_labels,
+        case_groups,
+        group_name="case_id",
+        expected_classes=expected_classes,
     )
 
     valid_field = _valid_group(df["field_id"])
@@ -193,11 +201,15 @@ def audit(path: Path = DATASET) -> dict:
         "technique_counts": {str(k): int(v) for k, v in labels.value_counts().sort_index().items()},
         "record_id_unique": bool(df["record_id"].is_unique),
         "case_id_group_count": int(case_groups.nunique()),
-        "case_id_rows_per_group": {
-            "min": int(case_groups.value_counts().min()),
-            "median": float(case_groups.value_counts().median()),
-            "max": int(case_groups.value_counts().max()),
-        },
+        "case_id_missing_rows": int((~valid_case).sum()),
+        "technique_classes_without_valid_case_id": sorted(set(expected_classes) - set(case_labels.unique())),
+        "case_id_rows_per_group": (
+            {
+                "min": int(case_groups.value_counts().min()),
+                "median": float(case_groups.value_counts().median()),
+                "max": int(case_groups.value_counts().max()),
+            } if len(case_groups) else {}
+        ),
         "field_id_nonblank_rows": int(valid_field.sum()),
         "field_id_distinct_groups": int(df.loc[valid_field, "field_id"].nunique()),
         "field_id_missing_rows": int((~valid_field).sum()),

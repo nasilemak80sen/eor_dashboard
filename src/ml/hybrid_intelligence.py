@@ -60,13 +60,18 @@ class HybridDecisionService:
 
     @staticmethod
     def _safe_probability(value: Any) -> float:
+        """Validate model probabilities instead of hiding broken model output as zero."""
         try:
-            value = float(value)
-        except (TypeError, ValueError):
-            return 0.0
-        if not np.isfinite(value):
-            return 0.0
-        return float(np.clip(value, 0.0, 1.0))
+            probability = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"ML probability must be numeric; received {value!r}.") from exc
+        if not np.isfinite(probability):
+            raise ValueError("ML probability must be finite.")
+        if probability < 0.0 or probability > 1.0:
+            raise ValueError(
+                f"ML probability must be within [0, 1]; received {probability}."
+            )
+        return probability
 
     @staticmethod
     def _engineering_score(result: Mapping[str, Any]) -> float:
@@ -116,15 +121,17 @@ class HybridDecisionService:
                     "FAIL (CRITICAL)",
                 }
 
+                # A failed deterministic engineering gate is a hard exclusion,
+                # not merely a zero score that can still appear as the top result.
                 if gate_failed:
-                    hybrid_raw = 0.0
-                else:
-                    hybrid_raw = (
-                        self.weights.ml * probability
-                        + self.weights.engineering * engineering
-                    )
-                    if conditional:
-                        hybrid_raw *= self.weights.conditional_penalty
+                    continue
+
+                hybrid_raw = (
+                    self.weights.ml * probability
+                    + self.weights.engineering * engineering
+                )
+                if conditional:
+                    hybrid_raw *= self.weights.conditional_penalty
 
                 candidates.append(
                     {
@@ -134,7 +141,7 @@ class HybridDecisionService:
                         "Engineering Score": engineering,
                         "Engineering Status": screen_row.get("Status", ""),
                         "Hybrid Score Raw": float(hybrid_raw),
-                        "Gate Failed": gate_failed,
+                        "Gate Failed": False,
                         "Conditional": conditional,
                         "Engineering Reason": screen_row.get("Cause of Fail/Pass", ""),
                     }

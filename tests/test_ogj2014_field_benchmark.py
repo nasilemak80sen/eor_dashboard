@@ -41,8 +41,29 @@ def test_features_exclude_ids_and_preserve_duplicate_numeric_profiles():
 
     assert len(features) == len(frame)
     assert features.iloc[0].equals(features.iloc[1])
+    assert list(features.columns) == benchmark.PRODUCTION_FEATURE_NAMES
+    assert "formation_unknown" not in features.columns
     assert not any(name.endswith("_id") for name in features.columns)
     assert not any("record" in name.casefold() or "case" in name.casefold() for name in features.columns)
+
+
+def test_production_recipe_parameters_are_recovered_from_artifact():
+    params, metadata = benchmark.production_recipe_parameters(["Combustion", "Miscible CO2"])
+    assert metadata["status"] == "available"
+    assert metadata["artifact_version"] == "1.0.0"
+    assert params["iterations"] > 0
+    assert params["depth"] > 0
+    assert params["learning_rate"] > 0
+    assert params["thread_count"] == 2
+    assert params["allow_writing_files"] is False
+    assert "classes_count" not in params
+    assert "class_names" not in params
+    assert "deployed artifact" in metadata["interpretation"]
+    estimator = benchmark.ProductionRecipeCatBoostEstimator(params)
+    cloned = benchmark.clone(estimator)
+    assert cloned.params == params
+    models = benchmark.make_models(["Combustion", "Miscible CO2"], params)
+    assert "ProductionRecipeCatBoost" in models
 
 
 def test_field_holdout_and_cv_keep_fields_disjoint():
@@ -61,6 +82,14 @@ def test_field_holdout_and_cv_keep_fields_disjoint():
     for train_idx, test_idx in splits:
         assert set(groups[train][train_idx]).isdisjoint(set(groups[train][test_idx]))
 
+
+
+def test_only_confirmed_field_ids_contribute_to_benchmark():
+    frame = pd.DataFrame({
+        "field_id": ["FIELD-A", "FIELD-B", "", "FIELD-D"],
+        "field_id_status": ["confirmed", "provisional", "needs_review", "confirmed"],
+    })
+    assert benchmark.verified_field_mask(frame).tolist() == [True, False, False, True]
 
 
 def test_label_semantic_conflicts_are_flagged_without_auto_relabel():
@@ -82,3 +111,31 @@ def test_label_semantic_conflicts_are_flagged_without_auto_relabel():
         ["Steam"], ["CO2 miscible"], ["Microbial"], ["Miscible (unspecified subtype)"]
     ]
     assert frame["technique"].tolist() == ["Polymer", "Polymer", "Steam", "Polymer", "Polymer"]
+
+
+def test_source_section_conflicts_are_quarantined_without_relabeling():
+    co2_raw = "TECHNOLOGYHess Seminole Unit-ROZ Stage 1 Tex. Gaines 10/07 2,320 44 29"
+    peace_river = "Shell Canada Peace River Alta. 1979 4,900 97 109 Bluesky S 26.5"
+    north_burbank = "Chaparral Energy North Burbank Okla. Osage 12/07 480 19 9"
+    midland = "Occidental Midland Farms Unit Tex. Andrews 3/10 40 6 1"
+    frame = pd.DataFrame({
+        "record_id": [f"REC-{i}" for i in range(6)],
+        "technique": [
+            "Miscible CO2", "Miscible HC", "Nitrogen immiscible",
+            "Polymer", "Nitrogen immiscible", "Nitrogen immiscible",
+        ],
+        "raw_line": [
+            co2_raw, co2_raw, peace_river, peace_river, north_burbank, midland,
+        ],
+    })
+
+    mask, details = benchmark.source_section_label_conflict_audit(frame)
+
+    assert mask.tolist() == [False, True, True, True, True, True]
+    assert len(details) == 5
+    assert details[0]["source_section_technique_or_context"] == "Miscible CO2"
+    assert all("quarantined" in item["action"] for item in details)
+    assert frame["technique"].tolist() == [
+        "Miscible CO2", "Miscible HC", "Nitrogen immiscible",
+        "Polymer", "Nitrogen immiscible", "Nitrogen immiscible",
+    ]

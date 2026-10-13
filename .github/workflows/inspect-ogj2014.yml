@@ -4,10 +4,19 @@ on:
   push:
     branches:
       - fix/openglobus-restore-after-revert
+      - ml/field-aware-eor-research
     paths:
       - "scripts/build_ogj2014_provenance.py"
+      - "scripts/build_ogj2014_source_adjudications.py"
+      - "scripts/reconstruct_catboost_training_manifest.py"
+      - "scripts/benchmark_ogj2014_field_generalization.py"
+      - "tests/test_ogj2014_field_overrides.py"
       - ".github/workflows/inspect-ogj2014.yml"
   workflow_dispatch:
+
+concurrency:
+  group: ogj2014-provenance-build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -17,19 +26,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install workbook and research dependencies
-        run: python -m pip install openpyxl pandas numpy scikit-learn
+        run: python -m pip install openpyxl pandas numpy scikit-learn catboost
 
       - name: Verify source copies and build provenance metadata
         run: python scripts/build_ogj2014_provenance.py
 
       - name: Publish both validated workbook copies
         run: |
+          # Rebuild against the branch that triggered this workflow. Never reset
+          # the ML research branch onto the OpenGlobus fix branch or vice versa.
+          # Generated files under work/ survive reset and avoid binary merge conflicts.
+          git fetch origin "${GITHUB_REF_NAME}"
+          git reset --hard FETCH_HEAD
+
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
 
@@ -40,14 +57,36 @@ jobs:
             echo "Validated workbooks already match the generated provenance data."
             exit 0
           fi
-          git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
-          git push origin HEAD:fix/openglobus-restore-after-revert
+          git commit -m "data: refresh OGJ2014 provenance IDs from source evidence"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Audit field-level grouping and class support
         run: python scripts/audit_ogj2014_grouped_splits.py
 
       - name: Audit unresolved fields, aliases, features, labels, and class support
         run: python scripts/audit_ogj2014_data_quality.py
+
+      - name: Build source-adjudication registers without modifying source labels
+        run: python scripts/build_ogj2014_source_adjudications.py
+
+      - name: Reconstruct production CatBoost training membership and hashes
+        run: python scripts/reconstruct_catboost_training_manifest.py
+
+      - name: Publish reproducible provenance registers
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/provenance/ogj2014_technique_label_adjudications.csv \
+                  data/provenance/ogj2014_field_identity_adjudications.csv \
+                  data/provenance/ogj2014_source_adjudication_summary.json \
+                  data/provenance/catboost_v1.0.0_training_manifest.csv \
+                  data/provenance/catboost_v1.0.0_training_membership.json
+          if git diff --cached --quiet; then
+            echo "Provenance registers are unchanged."
+            exit 0
+          fi
+          git commit -m "data: record OGJ source adjudications and production training provenance"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Run row-preserving field-level baseline benchmark
         run: python scripts/benchmark_ogj2014_field_generalization.py
@@ -59,6 +98,11 @@ jobs:
           name: ogj2014-provenance-and-ml-reports
           path: |
             work/ogj2014_provenance/
+            data/provenance/ogj2014_technique_label_adjudications.csv
+            data/provenance/ogj2014_field_identity_adjudications.csv
+            data/provenance/ogj2014_source_adjudication_summary.json
+            data/provenance/catboost_v1.0.0_training_manifest.csv
+            data/provenance/catboost_v1.0.0_training_membership.json
             outputs/ml_research/ogj2014_grouped_split_audit.json
             outputs/ml_research/ogj2014_field_generalization_benchmark.json
             outputs/ml_research/ogj2014_field_generalization_model_comparison.csv
@@ -70,4 +114,5 @@ jobs:
             outputs/ml_research/ogj2014_technique_label_audit.csv
             outputs/ml_research/ogj2014_class_support_remediation.csv
             outputs/ml_research/ogj2014_technique_label_semantic_review.csv
+            outputs/ml_research/ogj2014_source_section_label_conflicts.csv
           if-no-files-found: warn

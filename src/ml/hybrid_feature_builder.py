@@ -103,6 +103,45 @@ def _score(values: Mapping[str, Any], key: str, family: str) -> float:
     return float(CATEGORY_SCORES[family].get(_norm(values.get(key)), 0.0))
 
 
+def _validate_categorical_inputs(values: Mapping[str, Any]) -> None:
+    """Reject unfamiliar non-empty categories rather than silently scoring them as zero."""
+    categorical_fields = {
+        "gas_injectivity": "injectivity",
+        "water_injectivity": "injectivity",
+        "mobility_ratio": "mobility",
+        "heterogeneity": "heterogeneity",
+        "field_maturity": "maturity",
+        "adsorption_risk": "risk",
+        "water_handling": "water_handling",
+    }
+    binary_fields = (
+        "co2_availability", "mmp_satisfied", "waterflood_history",
+        "water_injection_facilities", "gas_injection_facilities", "offshore",
+        "gas_reinjectable", "hc_gas_availability", "gas_availability",
+    )
+    for key, family in categorical_fields.items():
+        normalized = _norm(values.get(key))
+        if normalized and normalized not in CATEGORY_SCORES[family]:
+            allowed = ", ".join(sorted(CATEGORY_SCORES[family]))
+            raise ValueError(
+                f"Unrecognized category for '{key}': {values.get(key)!r}. "
+                f"Expected one of: {allowed}."
+            )
+    for key in binary_fields:
+        normalized = _norm(values.get(key))
+        if normalized and normalized not in {"yes", "no"}:
+            raise ValueError(
+                f"Unrecognized category for '{key}': {values.get(key)!r}. "
+                "Expected 'yes' or 'no'."
+            )
+    wag = _norm(values.get("wag_ratio", "1:1"))
+    if wag and wag not in {"1:1", "2:1", "1:2"}:
+        raise ValueError(
+            f"Unrecognized WAG ratio {values.get('wag_ratio')!r}. "
+            "Expected one of: 1:1, 2:1, 1:2."
+        )
+
+
 def _gor_category(gor: float | None) -> str:
     if gor is None:
         return ""
@@ -113,8 +152,60 @@ def _gor_category(gor: float | None) -> str:
     return "low"
 
 
+def _validated_number(values: Mapping[str, Any], key: str, *, minimum: float | None = None, maximum: float | None = None) -> float:
+    """Read a required engineering input without silently converting missing data to zero."""
+    raw = values.get(key)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raise ValueError(f"Required reservoir input '{key}' is missing.")
+    try:
+        number = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Reservoir input '{key}' must be numeric; received {raw!r}.") from exc
+    if not math.isfinite(number):
+        raise ValueError(f"Reservoir input '{key}' must be finite.")
+    if minimum is not None and number < minimum:
+        raise ValueError(f"Reservoir input '{key}' must be >= {minimum}; received {number}.")
+    if maximum is not None and number > maximum:
+        raise ValueError(f"Reservoir input '{key}' must be <= {maximum}; received {number}.")
+    return number
+
+
+def validate_hybrid_inputs(values: Mapping[str, Any]) -> dict[str, float]:
+    """Validate the minimum physical inputs required for a meaningful ML feature vector.
+
+    Optional v3 measurements remain optional and are represented by explicit
+    availability flags. Required base measurements are never silently imputed.
+    """
+    validated = {
+        "depth_ft": _validated_number(values, "depth_ft", minimum=0.01),
+        "temperature_c": _validated_number(values, "temperature_c", minimum=-20, maximum=400),
+        "reservoir_pressure": _validated_number(values, "reservoir_pressure", minimum=0.01),
+        "porosity_pct": _validated_number(values, "porosity_pct", minimum=0, maximum=100),
+        "perm_md": _validated_number(values, "perm_md", minimum=0),
+        "api": _validated_number(values, "api", minimum=0, maximum=100),
+        "visc_cp": _validated_number(values, "visc_cp", minimum=0.000001),
+        "so_pct": _validated_number(values, "so_pct", minimum=0, maximum=100),
+    }
+    for key, minimum, maximum in (
+        ("sorw_pct", 0, 100),
+        ("produced_gor_scf_stb", 0, None),
+        ("salinity_ppm", 0, None),
+        ("hardness_ppm", 0, None),
+        ("bubble_point_psi", 0, None),
+        ("net_pay_m", 0, None),
+        ("water_cut_pct", 0, 100),
+    ):
+        raw = values.get(key)
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            continue
+        _validated_number(values, key, minimum=minimum, maximum=maximum)
+    return validated
+
+
 def build_hybrid_features(values: Mapping[str, Any], formation: str) -> pd.DataFrame:
-    """Build the versioned engineering-aware feature vector."""
+    """Build the versioned engineering-aware feature vector from validated inputs."""
+    validate_hybrid_inputs(values)
+    _validate_categorical_inputs(values)
     depth = _number(values, "depth_ft")
     temperature = _number(values, "temperature_c")
     pressure = _number(values, "reservoir_pressure")
