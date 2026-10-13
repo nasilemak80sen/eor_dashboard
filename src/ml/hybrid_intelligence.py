@@ -60,13 +60,18 @@ class HybridDecisionService:
 
     @staticmethod
     def _safe_probability(value: Any) -> float:
+        """Validate model probabilities instead of hiding broken model output as zero."""
         try:
-            value = float(value)
-        except (TypeError, ValueError):
-            return 0.0
-        if not np.isfinite(value):
-            return 0.0
-        return float(np.clip(value, 0.0, 1.0))
+            probability = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"ML probability must be numeric; received {value!r}.") from exc
+        if not np.isfinite(probability):
+            raise ValueError("ML probability must be finite.")
+        if probability < 0.0 or probability > 1.0:
+            raise ValueError(
+                f"ML probability must be within [0, 1]; received {probability}."
+            )
+        return probability
 
     @staticmethod
     def _engineering_score(result: Mapping[str, Any]) -> float:
