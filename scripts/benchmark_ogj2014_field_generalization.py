@@ -217,6 +217,16 @@ def source_section_label_conflict_audit(
     return mask, details
 
 
+
+def verified_field_mask(df: pd.DataFrame) -> pd.Series:
+    """Only source-confirmed field IDs can contribute to field-level evaluation."""
+    if "field_id" not in df.columns or "field_id_status" not in df.columns:
+        return pd.Series(False, index=df.index)
+    valid = _valid_ids(df["field_id"])
+    status = df["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
+    return valid & status.isin({"verified", "confirmed"})
+
+
 def _all_classes_present(labels: np.ndarray, indices: np.ndarray, classes: set[str]) -> bool:
     return set(labels[indices].astype(str)) == classes
 
@@ -376,10 +386,10 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         for label in sorted(df["technique"].astype(str).unique())
     }
 
-    valid_field = _valid_ids(label_reviewed["field_id"])
-    identity_status = label_reviewed["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
-    verified_field = valid_field & identity_status.isin({"verified", "confirmed"})
-    known = label_reviewed.loc[valid_field].copy()
+    verified_field = verified_field_mask(label_reviewed)
+    # Provisional or unresolved identities remain in audit outputs, but cannot
+    # increase class support or enter a field-generalisation benchmark.
+    known = label_reviewed.loc[verified_field].copy()
     field_support = known.groupby("technique")["field_id"].nunique().sort_values()
     verified_field_support_after_quarantine = {
         str(label): int(label_reviewed.loc[verified_field & label_reviewed["technique"].astype(str).eq(str(label)), "field_id"].nunique())
