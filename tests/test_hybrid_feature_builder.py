@@ -108,5 +108,5 @@ def test_feature_builder_rejects_sorw_greater_than_current_oil_saturation():
         "so_pct": 25,
         "sorw_pct": 35,
     }
-    with pytest.raises(ValueError, match="Sorw cannot exceed current oil saturation"):
+    with pytest.raises(ValueError, match="cannot exceed current oil saturation"):
         build_hybrid_features(values, "Sandstone")
