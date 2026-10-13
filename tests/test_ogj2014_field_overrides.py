@@ -113,22 +113,38 @@ def test_salt_creek_same_name_is_not_merged_across_operator_and_geography():
     assert occidental_reason.startswith("organization_field_span")
 
 
-def test_estreito_ambiguous_geography_is_held_out_of_confirmed_support():
-    # A country-level Brazil row and a Rio Grande do Norte row both say Estreito.
-    # The source excerpt does not prove whether these are the same field.
-    for raw in [
-        "Brazil Petrobras Steam Estreito 12/09 176 48 Acu S 25",
-        "Rio Grande do Norte (RN) Petrobras Steam Estreito 1984 700 Acu S 25",
-    ]:
-        reason = provenance.table_e_identity_hold_reason(raw)
-        assert reason
-        assert "Identity review hold" in reason
-    assert provenance.table_e_identity_hold_reason(
-        "Espirito Santo Petrobras Steam Fazenda Alegre 2001"
-    ) is None
+def test_estreito_rows_share_source_confirmed_canonical_field_without_row_merge():
+    generic = "Brazil Petrobras Steam Estreito 12/09 176 48 Acu S 25"
+    explicit_rn = "Rio Grande do Norte (RN) Petrobras Steam Estreito 1984 700 Acu S 25"
+    a = provenance.parse_table_e_field(generic)
+    b = provenance.parse_table_e_field(explicit_rn)
+    assert a[0] == b[0] == "Estreito"
+    assert a[1] == b[1] == "Rio Grande do Norte, Brazil"
+    assert a[2].startswith("source_verified:")
+    assert b[2].startswith("source_verified:")
+    assert provenance.hid("FIELD", provenance.nk(a[0]) + "|" + provenance.nk(a[1])) == provenance.hid(
+        "FIELD", provenance.nk(b[0]) + "|" + provenance.nk(b[1])
+    )
+    assert provenance.table_e_identity_hold_reason(generic) is None
+    assert provenance.table_e_identity_hold_reason(explicit_rn) is None
 
 
-def test_table_e_source_detection_uses_source_context_not_row_position():
+def test_eight_partial_field_fragments_match_only_reviewed_source_rows():
+    examples = {
+        "Carmopolis S/Congl. 22 200 2,460 21 500 122 NC 3,860 3,860 Succ. Yes FW": ("Carmopolis", "Sergipe, Brazil"),
+        "L’Enfer S 33 250 1,000 21.6 18 103 S 73 45 NC 280 280 Succ. Yes Exp. UL": ("Bennett Village", "Trinidad and Tobago"),
+        "L’Enfer S 29 250 2,800 19.2 120 100 S 72 51 NC 330 330 Succ. Yes Exp. UL": ("Antilles Quarry", "Trinidad and Tobago"),
+        "L’Enfer S 33 260 1,200 15 500 100 C 71 35 NC 1,132 1,132 Succ. Yes Exp. LW": ("North Palo Seco", "Trinidad and Tobago"),
+    }
+    for raw, expected in examples.items():
+        override = provenance.reviewed_partial_field_override(raw)
+        assert override is not None
+        assert override[:2] == expected
+        assert override[2].startswith("OGJ 2014 Table E")
+    assert provenance.reviewed_partial_field_override("L’Enfer S 40 999 999") is None
+
+
+\ndef test_table_e_source_detection_uses_source_context_not_row_position():
     assert provenance.is_table_e_source_row(
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
     )
