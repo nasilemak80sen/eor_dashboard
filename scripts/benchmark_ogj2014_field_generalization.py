@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import joblib
 from pathlib import Path
 from typing import Any
 import joblib
@@ -45,6 +46,16 @@ PRODUCTION_CONFIG_PATH = ROOT / "outputs" / "model_artifacts" / "config_catboost
 DATASET = ROOT / "src" / "notebooks" / "ml_data" / "OGJ2014_extracted_vs_Table1.xlsx"
 SHEET = "OGJ2014_Extracted_Rows"
 OUTPUT_DIR = ROOT / "outputs" / "ml_research"
+SOURCE_ADJUDICATION_PATH = ROOT / "data" / "provenance" / "ogj2014_technique_label_adjudications.csv"
+FIELD_IDENTITY_ADJUDICATION_PATH = ROOT / "data" / "provenance" / "ogj2014_field_identity_adjudications.csv"
+TRAINING_MANIFEST_PATH = ROOT / "data" / "provenance" / "catboost_v1.0.0_training_manifest.csv"
+TRAINING_MEMBERSHIP_REPORT_PATH = ROOT / "data" / "provenance" / "catboost_v1.0.0_training_membership.json"
+PRODUCTION_MODEL_PATH = ROOT / "outputs" / "model_artifacts" / "eor_catboost_v1.0.0.joblib"
+PRODUCTION_LABEL_ENCODER_PATH = ROOT / "outputs" / "model_artifacts" / "label_encoder_catboost_v1.0.0.joblib"
+PRODUCTION_CLASSES = [
+    "Combustion", "HC immiscible", "Hot water", "Miscible CO2", "Miscible HC",
+    "Miscible acid gas", "Nitrogen immiscible", "Polymer", "Steam",
+]
 MINIMUM_FIELDS_PER_CLASS = 6
 REQUESTED_FOLDS = 5
 HOLDOUT_FRACTION = 0.20
@@ -524,6 +535,30 @@ def make_models(eligible_classes: list[str], production_params: dict[str, Any] |
     }
 
 
+def clean_text(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return re.sub(r"\\s+", " ", str(value)).strip()
+
+
+def decision_record(record_id: object, source_adj_by_id: pd.DataFrame) -> dict:
+    key = str(record_id or "")
+    if key not in source_adj_by_id.index:
+        return {
+            "source_adjudication_status": "unresolved_quarantined",
+            "source_adjudicated_technique": "",
+            "source_adjudicated_model_class": "",
+            "taxonomy_status": "unresolved",
+        }
+    row = source_adj_by_id.loc[key]
+    return {
+        "source_adjudication_status": str(row["adjudication_status"]),
+        "source_adjudicated_technique": str(row["source_adjudicated_technique"]),
+        "source_adjudicated_model_class": str(row["source_adjudicated_model_class"]),
+        "taxonomy_status": str(row["taxonomy_status"]),
+    }
+
+
 def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     if not dataset.is_file():
         raise FileNotFoundError(f"Canonical OGJ2014 workbook not found: {dataset}")
@@ -536,44 +571,165 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     if df["record_id"].isna().any() or not df["record_id"].is_unique:
         raise ValueError("record_id must be populated and unique for every source row.")
     if df["technique"].isna().any() or df["technique"].astype(str).str.strip().eq("").any():
-        raise ValueError("Technique labels must be present; do not infer or relabel them.")
+        raise ValueError("Original structured technique labels must remain present.")
 
-    explicit_conflict_mask, explicit_conflict_details = label_semantic_conflict_audit(df)
-    source_section_conflict_mask, source_section_conflict_details = source_section_label_conflict_audit(df)
-    label_conflict_mask = explicit_conflict_mask | source_section_conflict_mask
-    label_conflict_details = explicit_conflict_details + source_section_conflict_details
+    # Audit the original structured labels first. These columns remain unchanged
+    # in the workbook; the sidecar supplies a separate, source-adjudicated target.
+    original_structured_labels = df["technique"].astype("string").str.strip().copy()
+    explicit_detected_mask, explicit_conflict_details = label_semantic_conflict_audit(df)
+    section_detected_mask, source_section_conflict_details = source_section_label_conflict_audit(df)
+    detected_conflict_mask = explicit_detected_mask | section_detected_mask
+    detected_conflict_details = explicit_conflict_details + source_section_conflict_details
+    detected_conflict_ids = {
+        str(item.get("record_id", "")) for item in detected_conflict_details
+    }
+
+    if not SOURCE_ADJUDICATION_PATH.is_file():
+        raise FileNotFoundError(
+            f"Source adjudication register missing: {SOURCE_ADJUDICATION_PATH}. "
+            "Run scripts/build_ogj2014_source_adjudications.py first."
+        )
+    adjudication_df = pd.read_csv(SOURCE_ADJUDICATION_PATH, dtype={"record_id": "string"}).fillna("")
+    required_adjudication_columns = {
+        "record_id", "excel_row", "raw_source_text", "source_adjudicated_technique",
+        "source_adjudicated_model_class", "adjudication_status", "source_context_type",
+    }
+    missing_adjudication_columns = sorted(required_adjudication_columns - set(adjudication_df.columns))
+    if missing_adjudication_columns:
+        raise ValueError(f"Source adjudication register lacks columns: {missing_adjudication_columns}")
+    if adjudication_df["record_id"].duplicated().any():
+        raise ValueError("Source adjudication register contains duplicate record IDs.")
+    if len(adjudication_df) != 187:
+        raise ValueError(f"Expected 187 source adjudication decisions, found {len(adjudication_df)}.")
+
+    workbook_ids = set(df["record_id"].astype(str))
+    if not set(adjudication_df["record_id"].astype(str)).issubset(workbook_ids):
+        raise ValueError("The source adjudication register references unknown record IDs.")
+    conflict_register_ids = set(
+        adjudication_df.loc[
+            adjudication_df["source_context_type"].ne("exact_partial_row_profile_match"),
+            "record_id",
+        ].astype(str)
+    )
+    if conflict_register_ids != detected_conflict_ids:
+        raise ValueError(
+            "Source adjudication register does not exactly cover the 179 detected conflict records. "
+            f"Missing={sorted(detected_conflict_ids-conflict_register_ids)[:5]}, "
+            f"extra={sorted(conflict_register_ids-detected_conflict_ids)[:5]}"
+        )
+    if not set(adjudication_df["adjudication_status"]).issubset({
+        "source_adjudicated_in_taxonomy", "source_adjudicated_out_of_taxonomy",
+    }):
+        raise ValueError("Every review-queue record must be resolved in-taxonomy or explicitly out-of-taxonomy.")
+
+    original_ids_to_row = {
+        str(record_id): int(index + 2) for index, record_id in enumerate(df["record_id"])
+    }
+    raw_by_id = dict(zip(df["record_id"].astype(str), df["raw_line"].astype(str)))
+    for item in adjudication_df.itertuples(index=False):
+        record_id = str(item.record_id)
+        actual_row = original_ids_to_row.get(record_id)
+        if actual_row != int(item.excel_row):
+            raise ValueError(f"Excel-row/record-ID mismatch for {record_id}.")
+        if clean_text(raw_by_id[record_id]) != clean_text(item.raw_source_text):
+            raise ValueError(f"Raw source text changed for adjudicated record {record_id}.")
+
+    source_adj_by_id = adjudication_df.set_index("record_id", drop=False)
+    source_adjudicated_labels = original_structured_labels.copy()
+    source_adjudication_status = pd.Series("not_flagged_by_source_audit", index=df.index, dtype="string")
+    target_is_out_of_taxonomy = pd.Series(False, index=df.index, dtype=bool)
+    for index, record_id in enumerate(df["record_id"].astype(str)):
+        if record_id not in source_adj_by_id.index:
+            continue
+        decision = source_adj_by_id.loc[record_id]
+        model_label = str(decision["source_adjudicated_model_class"]).strip()
+        if model_label:
+            if model_label not in PRODUCTION_CLASSES:
+                raise ValueError(f"Adjudicated target is outside the production taxonomy: {model_label}")
+            source_adjudicated_labels.iloc[index] = model_label
+        else:
+            source_adjudicated_labels.iloc[index] = pd.NA
+            target_is_out_of_taxonomy.iloc[index] = True
+        source_adjudication_status.iloc[index] = str(decision["adjudication_status"])
+
+    df["structured_technique_label"] = original_structured_labels
+    df["source_adjudication_status"] = source_adjudication_status
+    df["technique"] = source_adjudicated_labels
+    target_valid = df["technique"].astype("string").isin(PRODUCTION_CLASSES)
+
+    source_adjudicated_ids = set(adjudication_df["record_id"].astype(str))
+    unresolved_explicit_mask = explicit_detected_mask & ~df["record_id"].astype(str).isin(source_adjudicated_ids)
+    unresolved_section_mask = section_detected_mask & ~df["record_id"].astype(str).isin(source_adjudicated_ids)
+    label_conflict_mask = unresolved_explicit_mask | unresolved_section_mask
     label_reviewed = df.loc[~label_conflict_mask].copy()
+    explicit_conflict_mask = unresolved_explicit_mask
+    source_section_conflict_mask = unresolved_section_mask
+    explicit_conflict_details = [
+        {**item, **decision_record(item.get("record_id", ""), source_adj_by_id)}
+        for item in explicit_conflict_details
+    ]
+    source_section_conflict_details = [
+        {**item, **decision_record(item.get("record_id", ""), source_adj_by_id)}
+        for item in source_section_conflict_details
+    ]
+    label_conflict_details = explicit_conflict_details + source_section_conflict_details
+
     source_valid_field = _valid_ids(df["field_id"])
     source_status = df["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
-    source_verified_field = source_valid_field & source_status.isin({"verified", "confirmed"})
-    source_field_support = df.loc[source_valid_field].groupby("technique")["field_id"].nunique().sort_values()
+    source_verified_field = source_valid_field & source_status.isin({"verified", "confirmed"}) & target_valid
+    source_field_support = (
+        df.loc[source_valid_field & target_valid].groupby("technique")["field_id"].nunique().sort_values()
+    )
     source_verified_field_support = {
-        str(label): int(df.loc[source_verified_field & df["technique"].astype(str).eq(str(label)), "field_id"].nunique())
-        for label in sorted(df["technique"].astype(str).unique())
+        label: int(df.loc[
+            source_verified_field & df["technique"].astype("string").eq(label), "field_id"
+        ].nunique())
+        for label in PRODUCTION_CLASSES
     }
 
     identity_status = label_reviewed["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
-    verified_field = verified_field_mask(label_reviewed)
-    # Provisional or unresolved identities remain in audit outputs, but cannot
-    # increase class support or enter a field-generalisation benchmark.
+    verified_field = verified_field_mask(label_reviewed) & label_reviewed["technique"].astype("string").isin(PRODUCTION_CLASSES)
+    # Only confirmed field IDs and source-adjudicated in-taxonomy labels enter the model scope.
     known = label_reviewed.loc[verified_field].copy()
-    field_support = known.groupby("technique")["field_id"].nunique().sort_values()
-    verified_field_support_after_quarantine = {
-        str(label): int(label_reviewed.loc[verified_field & label_reviewed["technique"].astype(str).eq(str(label)), "field_id"].nunique())
-        for label in sorted(label_reviewed["technique"].astype(str).unique())
+    support_counts = {
+        label: int(known.loc[known["technique"].astype(str).eq(label), "field_id"].nunique())
+        for label in PRODUCTION_CLASSES
     }
+    field_support = pd.Series(support_counts).sort_values()
+    verified_field_support_after_quarantine = dict(support_counts)
     eligible_classes = sorted(
-        field_support[field_support >= MINIMUM_FIELDS_PER_CLASS].index.astype(str).tolist()
+        label for label, count in support_counts.items()
+        if count >= MINIMUM_FIELDS_PER_CLASS
     )
     unsupported_classes = {
-        str(label): int(count)
-        for label, count in field_support.items()
+        label: int(count) for label, count in support_counts.items()
         if count < MINIMUM_FIELDS_PER_CLASS
     }
     if len(eligible_classes) < 2:
-        raise ValueError("Fewer than two technique classes meet the field-support threshold after label-conflict quarantine.")
+        raise ValueError(
+            "Fewer than two source-adjudicated classes meet the confirmed-field support threshold. "
+            "The full nine-class evaluation is unavailable."
+        )
 
-    # Preserve every eligible non-conflicting source row; no feature-profile deduplication or label aggregation.
+    source_adjudication_summary = {
+        "source_conflicts_detected": int(detected_conflict_mask.sum()),
+        "explicit_text_conflicts_detected": int(explicit_detected_mask.sum()),
+        "source_section_conflicts_detected": int(section_detected_mask.sum()),
+        "source_conflicts_adjudicated": int(len(detected_conflict_ids & source_adjudicated_ids)),
+        "source_conflicts_unresolved": int(label_conflict_mask.sum()),
+        "conflict_records_excluded_as_out_of_taxonomy": int(
+            adjudication_df.loc[
+                adjudication_df["source_context_type"].ne("exact_partial_row_profile_match")
+                & adjudication_df["source_adjudicated_model_class"].eq(""),
+            ].shape[0]
+        ),
+        "all_nine_classes_supported_at_minimum": all(support_counts.get(label, 0) >= MINIMUM_FIELDS_PER_CLASS for label in PRODUCTION_CLASSES),
+        "class_field_support": support_counts,
+        "minimum_confirmed_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
+        "source_adjudication_register": str(SOURCE_ADJUDICATION_PATH.relative_to(ROOT)),
+    }
+
+    # Preserve each row and its original source values; no numeric-profile deduplication.
     scope = known.loc[known["technique"].astype(str).isin(eligible_classes)].copy().reset_index(drop=True)
 
     scope_feature_completeness = {}
