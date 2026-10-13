@@ -825,13 +825,13 @@ def main():
             "The mirror's source_report header and cell values are preserved and never interpreted as raw_line; source_report_group_id remains blank.",
             "All provenance IDs are grouping/audit metadata, not model features.",
             "Publication identity is confirmed against the official Oil & Gas Journal 2014 worldwide EOR survey PDF, with a stable publication_id and source URL recorded in tagging_rationale.",
-            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities; the remaining rows are project/pay-zone text or ambiguous fragments and are not forced into field_id.",
-            "Table E rows are identified from source-text context, not Excel row position. Its source schema separates Project and Field; where the Field cell is blank, project IDs are recorded separately and field_id remains blank. Ambiguous fragments without unique project context are left without case_id as well.",
+            "The source PDF was used to resolve explicit field cells and a narrow set of previously ambiguous field names; remaining partial pay-zone/reservoir fragments are not forced into field_id.",
+            "Table E rows are identified from source-text context, not Excel row position. The PDF heading is Type/project | Field | Start date; explicit Field values populate field_id. The Type/project technique label is not treated as a separate project identifier. Ambiguous partial fragments remain without field_id or case_id.",
             "Field IDs extracted from explicit operator-to-field spans, manually reviewed rules, or source-document overrides are marked confirmed; standalone candidates without enough source context remain provisional.",
             "Only narrow source-supported field aliases are canonicalized; same-name fields with different geography remain separate.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
             "Any field candidate not established by source evidence remains blank and needs review.",
-            "Project IDs are assigned only from the source Table E Project column or unique source-backed fragments; no project is inferred from numeric features or publication identity alone.",
+            "project_id is left blank unless an independent project identity is explicitly established; technique labels, numeric features, and publication identity are not used as project IDs.",
         ],
     }
     (OUT / "ogj2014_provenance_summary.json").write_text(
