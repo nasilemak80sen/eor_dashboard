@@ -705,6 +705,15 @@ def evaluate_production_on_genuinely_unseen_fields(frame: pd.DataFrame) -> dict[
         test_field_support.get(label, 0) >= MINIMUM_HOLDOUT_FIELDS_PER_CLASS
         for label in PRODUCTION_CLASSES
     )
+    full_source_support = {
+        label: int(frame.loc[
+            confirmed_field & frame["technique"].astype("string").eq(label), "field_id"
+        ].nunique())
+        for label in PRODUCTION_CLASSES
+    }
+    full_source_support_pass = all(
+        count >= MINIMUM_FIELDS_PER_CLASS for count in full_source_support.values()
+    )
     return {
         "status": (
             "unseen_field_diagnostic_all_nine_classes_present"
@@ -726,15 +735,9 @@ def evaluate_production_on_genuinely_unseen_fields(frame: pd.DataFrame) -> dict[
         "unseen_test_classes": test_classes,
         "all_nine_classes_present_in_unseen_holdout": nine_classes_present,
         "every_nine_class_has_at_least_two_unseen_fields": every_class_has_holdout_support,
+        "confirmed_field_support_all_nine_classes": full_source_support,
         "promotion_support_gate": (
-            "pass" if all(
-                sum(1 for field in frame.loc[
-                    confirmed_field & target_valid, "field_id"].astype(str).unique()
-                ) >= 0 for _label in []
-            ) and all(
-                int(frame.loc[confirmed_field & frame["technique"].astype("string").eq(label), "field_id"].nunique())
-                >= MINIMUM_FIELDS_PER_CLASS for label in PRODUCTION_CLASSES
-            ) else "blocked"
+            "pass" if full_source_support_pass else "blocked_insufficient_confirmed_independent_field_support"
         ),
         "comparison_models": comparison,
         "fold_retrained_production_recipe_metadata": recipe_meta,
