@@ -214,7 +214,16 @@ def main() -> None:
     headers = [cell.value for cell in current_sheet[1]]
     if "record_id" in headers:
         id_column = headers.index("record_id") + 1
-        current_ids = [current_sheet.cell(row=index + 2, column=id_column).value for index in range(len(ids))]
+        current_ids = [
+            row[0]
+            for row in current_sheet.iter_rows(
+                min_row=2,
+                max_row=len(ids) + 1,
+                min_col=id_column,
+                max_col=id_column,
+                values_only=True,
+            )
+        ]
     current_book.close()
     if current_ids and any(str(a) != str(b) for a, b in zip(ids, current_ids)):
         # Excel/OpenPyXL vs pandas string conversions can differ for numeric cell
