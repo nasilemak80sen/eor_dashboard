@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
+from catboost import CatBoostClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -143,6 +144,79 @@ def label_semantic_conflict_audit(frame: pd.DataFrame) -> tuple[pd.Series, list[
     return mask, details
 
 
+def source_section_label_conflict_audit(
+    frame: pd.DataFrame,
+) -> tuple[pd.Series, list[dict[str, Any]]]:
+    """Flag source-section/duplicate-case label conflicts without rewriting labels."""
+    mask = pd.Series(False, index=frame.index, dtype=bool)
+    details: list[dict[str, Any]] = []
+    raw_col = "raw_line" if "raw_line" in frame.columns else None
+    if raw_col is None:
+        return mask, details
+
+    normalized = frame[raw_col].fillna("").astype(str).str.replace(r"\s+", " ", regex=True).str.strip()
+    labels = frame["technique"].astype(str).str.strip()
+    grouped_labels: dict[str, set[str]] = {}
+    for raw_text, label in zip(normalized, labels):
+        grouped_labels.setdefault(raw_text, set()).add(label)
+
+    for idx, row in frame.iterrows():
+        raw_text = normalized.loc[idx]
+        label = labels.loc[idx]
+        source_expected = None
+        evidence = None
+
+        # These exact source rows occur in the OGJ PDF's CO2-miscible table
+        # (pp. 3-5, before the CO2-immiscible heading). The duplicated HC label
+        # lacks a distinct source-row/project identifier and is not auto-corrected.
+        if (
+            grouped_labels.get(raw_text) == {"Miscible CO2", "Miscible HC"}
+            and label == "Miscible HC"
+        ):
+            source_expected = "Miscible CO2"
+            evidence = (
+                "Same exact raw_line is present under both Miscible CO2 and Miscible HC; "
+                "the matched row appears in the OGJ 2014 PDF's CO2-miscible table on pp. 3-5, "
+                "before the CO2-immiscible heading. The HC-labelled duplicate is quarantined, not relabelled."
+            )
+        elif raw_text.startswith("Shell Canada Peace River Alta.") and label in {
+            "Nitrogen immiscible", "Polymer"
+        }:
+            source_expected = "Steam"
+            evidence = (
+                "OGJ 2014 PDF p. 9 lists these Peace River rows in the Canadian table continuation "
+                "before the next Nitrogen heading, within the preceding Steam section. "
+                "The conflicting structured label is quarantined, not relabelled."
+            )
+        elif raw_text.startswith("Chaparral Energy North Burbank Okla.") and label == "Nitrogen immiscible":
+            source_expected = "Chemical, polymer, surfactant (subtype unspecified)"
+            evidence = (
+                "OGJ 2014 PDF p. 7 places North Burbank under 'Chemical, polymer, surfactant', "
+                "not Nitrogen immiscible. The specific chemical subtype is not inferred."
+            )
+        elif raw_text.startswith("Occidental Midland Farms Unit Tex.") and label == "Nitrogen immiscible":
+            source_expected = "Chemical, polymer, surfactant (subtype unspecified)"
+            evidence = (
+                "OGJ 2014 PDF p. 7 places Midland Farms Unit under 'Chemical, polymer, surfactant', "
+                "not Nitrogen immiscible. The specific chemical subtype is not inferred."
+            )
+
+        if source_expected is None:
+            continue
+        mask.loc[idx] = True
+        details.append({
+            "excel_row": int(idx + 2),
+            "record_id": str(row.get("record_id", "")),
+            "structured_technique_label": label,
+            "source_section_technique_or_context": source_expected,
+            "raw_source_text": raw_text,
+            "source_evidence": evidence,
+            "action": "quarantined pending source-table adjudication; technique label unchanged",
+        })
+
+    return mask, details
+
+
 def _all_classes_present(labels: np.ndarray, indices: np.ndarray, classes: set[str]) -> bool:
     return set(labels[indices].astype(str)) == classes
 
@@ -229,6 +303,23 @@ def make_models() -> dict[str, Any]:
             SimpleImputer(strategy="median"),
             DummyClassifier(strategy="prior"),
         ),
+        # CatBoost is evaluated on exactly the same field-isolated partitions as
+        # the simple prior baseline. Imputation and missingness indicators are
+        # fitted within each training fold, preventing validation leakage.
+        "CatBoost": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
+            CatBoostClassifier(
+                iterations=250,
+                depth=6,
+                learning_rate=0.05,
+                loss_function="MultiClass",
+                auto_class_weights="Balanced",
+                random_seed=42,
+                verbose=False,
+                allow_writing_files=False,
+                thread_count=2,
+            ),
+        ),
         "LogisticRegression": make_pipeline(
             SimpleImputer(strategy="median", add_indicator=True),
             StandardScaler(),
@@ -271,7 +362,10 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     if df["technique"].isna().any() or df["technique"].astype(str).str.strip().eq("").any():
         raise ValueError("Technique labels must be present; do not infer or relabel them.")
 
-    label_conflict_mask, label_conflict_details = label_semantic_conflict_audit(df)
+    explicit_conflict_mask, explicit_conflict_details = label_semantic_conflict_audit(df)
+    source_section_conflict_mask, source_section_conflict_details = source_section_label_conflict_audit(df)
+    label_conflict_mask = explicit_conflict_mask | source_section_conflict_mask
+    label_conflict_details = explicit_conflict_details + source_section_conflict_details
     label_reviewed = df.loc[~label_conflict_mask].copy()
     source_valid_field = _valid_ids(df["field_id"])
     source_status = df["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
@@ -304,6 +398,29 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
 
     # Preserve every eligible non-conflicting source row; no feature-profile deduplication or label aggregation.
     scope = known.loc[known["technique"].astype(str).isin(eligible_classes)].copy().reset_index(drop=True)
+
+    scope_feature_completeness = {}
+    scope_feature_completeness_by_class = {}
+    for feature_name, low_col, high_col, _unit in NUMERIC_RANGES:
+        low = pd.to_numeric(scope[low_col], errors="coerce")
+        high = pd.to_numeric(scope[high_col], errors="coerce")
+        missing_low = low.isna()
+        missing_high = high.isna()
+        scope_feature_completeness[feature_name] = {
+            "rows": int(len(scope)),
+            "missing_low": int(missing_low.sum()),
+            "missing_high": int(missing_high.sum()),
+            "both_endpoints_missing": int((missing_low & missing_high).sum()),
+            "one_endpoint_missing": int((missing_low ^ missing_high).sum()),
+        }
+        scope_feature_completeness_by_class[feature_name] = {
+            str(label): {
+                "rows": int((scope["technique"] == label).sum()),
+                "missing_low": int((scope.loc[scope["technique"] == label, low_col].pipe(pd.to_numeric, errors="coerce").isna()).sum()),
+                "missing_high": int((scope.loc[scope["technique"] == label, high_col].pipe(pd.to_numeric, errors="coerce").isna()).sum()),
+            }
+            for label in eligible_classes
+        }
 
     X = build_features(scope)
     y = scope["technique"].astype(str).to_numpy()
@@ -424,6 +541,8 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "rows_with_resolved_field_id_before_label_quarantine": int(source_valid_field.sum()),
             "rows_excluded_for_unresolved_field_id": int((~source_valid_field).sum()),
             "rows_quarantined_for_label_semantic_review": int(label_conflict_mask.sum()),
+            "rows_quarantined_for_explicit_text_conflict": int(explicit_conflict_mask.sum()),
+            "rows_quarantined_for_source_section_conflict": int(source_section_conflict_mask.sum()),
             "label_conflict_rows_also_missing_field_id": int((label_conflict_mask & ~source_valid_field).sum()),
             "rows_remaining_after_label_quarantine": int(len(label_reviewed)),
             "eligible_scope_rows": int(len(scope)),
@@ -445,22 +564,32 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "verified_independent_field_support_all_classes_before_label_quarantine": source_verified_field_support,
         "verified_independent_field_support_all_classes_after_label_quarantine": verified_field_support_after_quarantine,
         "label_semantic_review": {
-            "quarantined_rows": int(label_conflict_mask.sum()),
+            "quarantined_rows_total": int(label_conflict_mask.sum()),
+            "explicit_text_conflict_rows": int(explicit_conflict_mask.sum()),
+            "source_section_conflict_rows": int(source_section_conflict_mask.sum()),
             "quarantined_by_structured_label": {
                 str(k): int(v) for k, v in df.loc[label_conflict_mask, "technique"].value_counts().sort_index().items()
             },
+            "explicit_text_candidates": explicit_conflict_details,
+            "source_section_candidates": source_section_conflict_details,
             "candidates": label_conflict_details,
-            "policy": "Rows whose explicit raw-source technique wording conflicts with the structured label are excluded pending manual review. No label is automatically rewritten.",
+            "policy": "Rows whose explicit source text or original table-section context conflicts with the structured label are excluded pending review. Technique labels are never automatically rewritten.",
         },
         "field_identity_verification_warning": (
-            "Field IDs are currently provisional parser-derived grouping candidates. "
-            "Zero groups are marked verified/confirmed, so these scores are provisional field-isolation estimates, "
-            "not confirmed real-world unseen-field generalization."
+            "Only field IDs with explicit source-document evidence are marked confirmed; remaining parser-derived IDs "
+            "stay provisional. Scores are research-only field-isolation estimates, not validated EOR recommendations "
+            "or evidence of EOR success, recovery uplift, or economic value."
         ),
         "minimum_independent_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
         "minimum_holdout_fields_per_class": MINIMUM_HOLDOUT_FIELDS_PER_CLASS,
         "minimum_training_fields_per_class": MINIMUM_TRAIN_FIELDS_PER_CLASS,
         "eligible_classes": eligible_classes,
+        "feature_completeness_in_eligible_scope": scope_feature_completeness,
+        "feature_completeness_in_eligible_scope_by_class": scope_feature_completeness_by_class,
+        "missing_value_handling": (
+            "Numeric midpoint/span features are imputed inside each model pipeline using training-fold medians; "
+            "tree pipelines also add missingness indicators. No imputer is fit on validation/test rows."
+        ),
         "unsupported_classes_excluded_from_this_restricted_pilot": unsupported_classes,
         "restricted_scope_warning": (
             "The pilot excludes unsupported technique classes without renaming or merging them. "
@@ -526,7 +655,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "limitations": [
             "Field identifiers are provisional parser-derived candidates; no field groups are marked verified/confirmed, so true unseen-field generalization is not yet established.",
             "The source table records observed techniques, not comparable outcomes or success labels.",
-            "Rows with explicit raw-source technique wording that conflicts with the structured technique label are quarantined until manually adjudicated; no automatic relabelling is performed.",
+            "Rows with explicit source-text conflicts or source-table-section conflicts are quarantined until manually adjudicated; no automatic relabelling is performed.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
             "Four low-support classes are excluded from this restricted pilot and require more independent fields before full multiclass evaluation.",
             "Repeated holdouts and grouped CV are preliminary internal estimates, not external validation.",

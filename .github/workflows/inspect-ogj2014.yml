@@ -9,6 +9,10 @@ on:
       - ".github/workflows/inspect-ogj2014.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ogj2014-provenance-build-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -30,6 +34,12 @@ jobs:
 
       - name: Publish both validated workbook copies
         run: |
+          # Rebase by rebuilding the workbook commit on the latest branch tip.
+          # The generated outputs under work/ are untracked/ignored and survive
+          # reset; this avoids binary Excel merge conflicts with prior workbook builds.
+          git fetch origin fix/openglobus-restore-after-revert
+          git reset --hard origin/fix/openglobus-restore-after-revert
+
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
 
@@ -40,7 +50,7 @@ jobs:
             echo "Validated workbooks already match the generated provenance data."
             exit 0
           fi
-          git commit -m "data: add OGJ2014 provenance IDs to Excel workbooks"
+          git commit -m "data: refresh OGJ2014 provenance IDs from source evidence"
           git push origin HEAD:fix/openglobus-restore-after-revert
 
       - name: Audit field-level grouping and class support
@@ -70,4 +80,5 @@ jobs:
             outputs/ml_research/ogj2014_technique_label_audit.csv
             outputs/ml_research/ogj2014_class_support_remediation.csv
             outputs/ml_research/ogj2014_technique_label_semantic_review.csv
+            outputs/ml_research/ogj2014_source_section_label_conflicts.csv
           if-no-files-found: warn

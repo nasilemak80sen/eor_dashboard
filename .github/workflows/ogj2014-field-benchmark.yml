@@ -9,6 +9,10 @@ on:
       - "scripts/audit_ogj2014_grouped_splits.py"
       - "scripts/audit_ogj2014_data_quality.py"
       - "scripts/benchmark_ogj2014_field_generalization.py"
+      - "tests/test_ogj2014_field_overrides.py"
+      - "tests/test_ogj2014_field_benchmark.py"
+      - "tests/test_ogj2014_field_overrides.py"
+      - "tests/test_ogj2014_field_benchmark.py"
       - ".github/workflows/ogj2014-field-benchmark.yml"
   pull_request:
     branches:
@@ -17,6 +21,13 @@ on:
       - "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
       - "scripts/audit_ogj2014_grouped_splits.py"
       - "scripts/benchmark_ogj2014_field_generalization.py"
+      - "scripts/audit_ogj2014_data_quality.py"
+      - "tests/test_ogj2014_field_overrides.py"
+      - "tests/test_ogj2014_field_benchmark.py"
+
+concurrency:
+  group: ogj2014-field-benchmark-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -32,7 +43,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install research dependencies
-        run: python -m pip install pandas numpy scikit-learn openpyxl
+        run: python -m pip install pandas numpy scikit-learn openpyxl pytest catboost
+
+      - name: Test field overrides and source-section conflict policy
+        run: pytest -q tests/test_ogj2014_field_overrides.py tests/test_ogj2014_field_benchmark.py
 
       - name: Audit provenance and class support
         run: python scripts/audit_ogj2014_grouped_splits.py
@@ -61,4 +75,5 @@ jobs:
             outputs/ml_research/ogj2014_technique_label_audit.csv
             outputs/ml_research/ogj2014_class_support_remediation.csv
             outputs/ml_research/ogj2014_technique_label_semantic_review.csv
+            outputs/ml_research/ogj2014_source_section_label_conflicts.csv
           if-no-files-found: warn
