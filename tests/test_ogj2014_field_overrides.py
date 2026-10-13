@@ -96,6 +96,23 @@ def test_table_e_field_parser_uses_explicit_pdf_field_column():
         assert reason.startswith(("source_verified:", "source_project_span"))
 
 
+def test_salt_creek_same_name_is_not_merged_across_operator_and_geography():
+    anadarko, anadarko_reason, anadarko_geo = provenance.parse_field(
+        "Anadarko Salt Creek Wyo. Natrona 10/05 5 4 1 Wall Creek 1 (Frontier) S 17"
+    )
+    occidental, occidental_reason, occidental_geo = provenance.parse_field(
+        "Occidental Salt Creek Tex. Kent 10/93 12,000 168 145 Canyon LS 20"
+    )
+    assert anadarko == occidental == "Salt Creek"
+    assert anadarko_geo == "Wyo."
+    assert occidental_geo == "Tex."
+    anadarko_id = provenance.hid("FIELD", provenance.nk(anadarko) + "|" + provenance.nk(anadarko_geo))
+    occidental_id = provenance.hid("FIELD", provenance.nk(occidental) + "|" + provenance.nk(occidental_geo))
+    assert anadarko_id != occidental_id
+    assert anadarko_reason.startswith("organization_field_span")
+    assert occidental_reason.startswith("organization_field_span")
+
+
 def test_table_e_source_detection_uses_source_context_not_row_position():
     assert provenance.is_table_e_source_row(
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
