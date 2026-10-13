@@ -97,6 +97,39 @@ def _validate_columns(df: pd.DataFrame) -> None:
             )
 
 
+def validate_independent_group_support(
+    y: np.ndarray,
+    groups: np.ndarray,
+    *,
+    minimum_groups_per_class: int = MINIMUM_INDEPENDENT_FIELDS_PER_CLASS,
+) -> dict[str, int]:
+    """Require independent source groups per target class, not just row counts."""
+    y = np.asarray(y)
+    groups = np.asarray(groups, dtype=str)
+    if len(y) != len(groups):
+        raise ValueError("Target labels and group identifiers must have identical row counts.")
+    if not minimum_groups_per_class >= 2:
+        raise ValueError("minimum_groups_per_class must be at least 2.")
+    if any(not value.strip() or value.casefold() in {"nan", "none", "unknown", "needs_review"} for value in groups):
+        raise ValueError("Training blocked: group identifiers must be complete and resolved.")
+    support = {
+        str(label): int(np.unique(groups[y == label]).size)
+        for label in np.unique(y)
+    }
+    insufficient = {
+        label: count for label, count in support.items()
+        if count < minimum_groups_per_class
+    }
+    if insufficient:
+        raise ValueError(
+            "Training blocked: insufficient independent field support per technique. "
+            f"Need at least {minimum_groups_per_class} distinct groups per class; "
+            f"observed {insufficient}. Collect reviewed field-level labels or report "
+            "the model as research-only without a generalisation claim."
+        )
+    return support
+
+
 def build_training_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, LabelEncoder]:
     _validate_columns(df)
 
@@ -203,21 +236,7 @@ def train_and_save(
 
     # Row counts alone overstate evidence when many observations come from the
     # same field. Require independent field support for every class before CV.
-    group_support = {
-        str(label): int(np.unique(groups[y == label]).size)
-        for label in np.unique(y)
-    }
-    insufficient = {
-        label: count for label, count in group_support.items()
-        if count < MINIMUM_INDEPENDENT_FIELDS_PER_CLASS
-    }
-    if insufficient:
-        raise ValueError(
-            "Training blocked: insufficient independent field support per technique. "
-            f"Need at least {MINIMUM_INDEPENDENT_FIELDS_PER_CLASS} distinct groups per "
-            f"class; observed {insufficient}. Collect reviewed field-level labels or "
-            "report the model as research-only without a generalisation claim."
-        )
+    group_support = validate_independent_group_support(y, groups)
 
     params = dict(DEFAULT_PARAMS)
     validation = cross_validate(X, y, params, groups=groups)
