@@ -59,6 +59,9 @@ def test_production_recipe_parameters_are_recovered_from_artifact():
     assert "classes_count" not in params
     assert "class_names" not in params
     assert "deployed artifact" in metadata["interpretation"]
+    estimator = benchmark.ProductionRecipeCatBoostEstimator(params)
+    cloned = benchmark.clone(estimator)
+    assert cloned.params == params
 
 
 def test_field_holdout_and_cv_keep_fields_disjoint():
