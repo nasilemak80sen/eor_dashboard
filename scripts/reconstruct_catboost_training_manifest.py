@@ -142,7 +142,7 @@ def make_record_ids(original_rows: list[list[object]]) -> list[str]:
     counts: Counter[str] = Counter()
     ids = []
     for values in original_rows[1:]:
-        content = "\x1f".join("" if value is None else str(value) for value in values[:15])
+        content = "\\x1f".join("" if value is None else str(value) for value in values[:15])
         key = hashlib.sha256(content.encode("utf-8")).hexdigest()[:12]
         counts[key] += 1
         ids.append(f"REC-{key}-{counts[key]:02d}")
