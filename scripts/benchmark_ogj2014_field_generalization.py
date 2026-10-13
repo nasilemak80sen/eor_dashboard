@@ -16,6 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
+from catboost import CatBoostClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -301,6 +302,23 @@ def make_models() -> dict[str, Any]:
         "DummyPrior": make_pipeline(
             SimpleImputer(strategy="median"),
             DummyClassifier(strategy="prior"),
+        ),
+        # CatBoost is evaluated on exactly the same field-isolated partitions as
+        # the simple prior baseline. Imputation and missingness indicators are
+        # fitted within each training fold, preventing validation leakage.
+        "CatBoost": make_pipeline(
+            SimpleImputer(strategy="median", add_indicator=True),
+            CatBoostClassifier(
+                iterations=250,
+                depth=6,
+                learning_rate=0.05,
+                loss_function="MultiClass",
+                auto_class_weights="Balanced",
+                random_seed=42,
+                verbose=False,
+                allow_writing_files=False,
+                thread_count=2,
+            ),
         ),
         "LogisticRegression": make_pipeline(
             SimpleImputer(strategy="median", add_indicator=True),
