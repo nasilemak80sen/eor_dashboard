@@ -249,8 +249,9 @@ def main() -> None:
             ["git", "rev-parse", f"{TRAINING_COMMIT}:{HISTORICAL_WORKBOOK_PATH}"], cwd=ROOT, text=True
         ).strip(),
         "historical_source_matrix_sha256": dataset_matrix_digest,
-        "current_original_15_column_matrix_sha256": matrix_sha256(current_rows),
+        "current_original_15_column_matrix_sha256": matrix_sha256([row[:15] for row in current_rows]),
         "current_original_15_columns_cell_identical": True,
+        "historical_and_current_source_matrix_hashes_match": matrix_sha256(historical_rows) == matrix_sha256([row[:15] for row in current_rows]),
         "historical_config_sha256": hashlib.sha256(historic_config_bytes).hexdigest(),
         "historical_model_artifact_sha256": hashlib.sha256(historic_artifact_bytes).hexdigest(),
         "current_model_artifact_sha256": hashlib.sha256(current_artifact_bytes).hexdigest(),
