@@ -9,6 +9,9 @@ on:
       - "scripts/audit_ogj2014_grouped_splits.py"
       - "scripts/audit_ogj2014_data_quality.py"
       - "scripts/benchmark_ogj2014_field_generalization.py"
+      - "scripts/build_ogj2014_provenance.py"
+      - "scripts/build_ogj2014_source_adjudications.py"
+      - "scripts/reconstruct_catboost_training_manifest.py"
       - "tests/test_ogj2014_field_overrides.py"
       - "tests/test_ogj2014_field_benchmark.py"
       - "tests/test_ogj2014_field_overrides.py"
@@ -37,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -54,6 +59,12 @@ jobs:
       - name: Audit unresolved fields, aliases, features, and labels
         run: python scripts/audit_ogj2014_data_quality.py
 
+      - name: Build source-adjudication registers
+        run: python scripts/build_ogj2014_source_adjudications.py
+
+      - name: Reconstruct CatBoost production training membership
+        run: python scripts/reconstruct_catboost_training_manifest.py
+
       - name: Run row-preserving field-level baseline benchmark
         run: python scripts/benchmark_ogj2014_field_generalization.py
 
@@ -64,6 +75,11 @@ jobs:
         with:
           name: ogj2014-field-level-ml-reports
           path: |
+            data/provenance/ogj2014_technique_label_adjudications.csv
+            data/provenance/ogj2014_field_identity_adjudications.csv
+            data/provenance/ogj2014_source_adjudication_summary.json
+            data/provenance/catboost_v1.0.0_training_manifest.csv
+            data/provenance/catboost_v1.0.0_training_membership.json
             outputs/ml_research/ogj2014_grouped_split_audit.json
             outputs/ml_research/ogj2014_field_generalization_benchmark.json
             outputs/ml_research/ogj2014_field_generalization_model_comparison.csv
