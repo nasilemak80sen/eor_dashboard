@@ -714,7 +714,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "The source table records observed techniques, not comparable outcomes or success labels.",
             "Rows with explicit source-text conflicts or source-table-section conflicts are quarantined until manually adjudicated; no automatic relabelling is performed.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
-            "Five low-support classes are excluded from this restricted pilot; full nine-class evaluation and a direct production-model comparison remain blocked until every class has sufficient confirmed independent fields and the deployed artifact training provenance is recovered.",
+            "Four classes remain below the minimum confirmed-field support gate after quarantine; full nine-class evaluation and a direct production-artifact comparison remain blocked until every class has sufficient confirmed independent fields and the deployed artifact training provenance is recovered.",
             "Repeated holdouts and grouped CV are preliminary internal estimates, not external validation.",
             "Repeated holdouts overlap in their training/test fields across repeats; score percentiles describe split variability, not formal confidence intervals.",
         ],
