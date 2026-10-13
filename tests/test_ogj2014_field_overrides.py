@@ -113,6 +113,21 @@ def test_salt_creek_same_name_is_not_merged_across_operator_and_geography():
     assert occidental_reason.startswith("organization_field_span")
 
 
+def test_estreito_ambiguous_geography_is_held_out_of_confirmed_support():
+    # A country-level Brazil row and a Rio Grande do Norte row both say Estreito.
+    # The source excerpt does not prove whether these are the same field.
+    for raw in [
+        "Brazil Petrobras Steam Estreito 12/09 176 48 Acu S 25",
+        "Rio Grande do Norte (RN) Petrobras Steam Estreito 1984 700 Acu S 25",
+    ]:
+        reason = provenance.table_e_identity_hold_reason(raw)
+        assert reason
+        assert "Identity review hold" in reason
+    assert provenance.table_e_identity_hold_reason(
+        "Espirito Santo Petrobras Steam Fazenda Alegre 2001"
+    ) is None
+
+
 def test_table_e_source_detection_uses_source_context_not_row_position():
     assert provenance.is_table_e_source_row(
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
