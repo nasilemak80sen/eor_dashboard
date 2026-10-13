@@ -15,7 +15,7 @@ This note defines the safety boundary for the engineering-aware CatBoost trainin
 - `visc_cp` (> 0 cp)
 - `so_pct` (0–100%)
 
-Optional measurements such as Sorw and produced GOR remain optional; the feature schema uses explicit availability indicators for these two inputs. When optional numeric values are supplied, invalid values are rejected rather than silently normalised.
+Optional measurements such as Sorw and produced GOR remain optional; the feature schema uses explicit availability indicators for these two inputs. When optional numeric values are supplied, invalid values are rejected rather than silently normalised. Unrecognized non-empty categorical values (including injectivity, mobility, risk, binary yes/no, and WAG ratio inputs) are rejected rather than silently mapped to zero or a default ratio. An unfamiliar formation name remains explicitly unclassified by the three existing formation indicator features.
 
 ## Training readiness gates
 
@@ -34,7 +34,7 @@ If a gate fails, the expected outcome is an actionable error and no newly promot
 
 The OGJ2014 literature table represents reported technique associations. It does not provide a direct outcome target for recovery factor uplift, economic value, or project success. A model trained on it must be described as a technique-association/research model, not an EOR success predictor.
 
-The Excel/ScreenTool engineering gate remains authoritative. ML output is supplementary evidence and must never override a critical engineering failure. Relative hybrid ranking scores are not calibrated probabilities of success.
+The Excel/ScreenTool engineering gate remains authoritative. ML output is supplementary evidence and must never override a critical engineering failure. A technique that fails the hard gate is excluded from the recommendation ranking; if every mapped technique fails, the service returns no recommendation. Relative hybrid ranking scores are not calibrated probabilities of success.
 
 ## Validation
 
