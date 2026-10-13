@@ -339,9 +339,9 @@ def main() -> None:
         "additional_partial_fragment_records_adjudicated": partial_count,
         "label_adjudication_records_total": len(adjud_df),
         "in_taxonomy_records": int(adjud_df["source_adjudicated_model_class"].ne("").sum()),
-        "out_of_taxonomy_records": int(adjud_df["model_class_mapping"].eq("").sum()),
+        "out_of_taxonomy_records": int(adjud_df["source_adjudicated_model_class"].eq("").sum()),
         "out_of_taxonomy_source_labels": sorted(adjud_df.loc[
-            adjud_df["model_class_mapping"].eq(""), "source_adjudicated_technique"
+            adjud_df["source_adjudicated_model_class"].eq(""), "source_adjudicated_technique"
         ].unique().tolist()),
         "identity_records_resolved": len(identity_df),
         "identity_field_groups_resolved": int(identity_df["canonical_field_id"].nunique()),
@@ -349,7 +349,7 @@ def main() -> None:
         "original_structured_labels_modified": False,
         "original_raw_source_text_modified": False,
         "source_pdf_url": OGJ_URL,
-        "government_est reito_source_url": PLANALTO_URL,
+        "government_estreito_source_url": PLANALTO_URL,
     }
     (OUT / "ogj2014_source_adjudication_summary.json").write_text(
         pd.Series(summary).to_json(force_ascii=False, indent=2), encoding="utf-8"
