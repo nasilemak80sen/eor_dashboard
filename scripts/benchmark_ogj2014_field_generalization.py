@@ -16,7 +16,7 @@ import joblib
 
 import numpy as np
 import pandas as pd
-from sklearn.base import clone
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from catboost import CatBoostClassifier
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import ExtraTreesClassifier, HistGradientBoostingClassifier, RandomForestClassifier
@@ -449,6 +449,23 @@ def make_group_cv(
     )
 
 
+
+class ProductionRecipeCatBoostEstimator(ClassifierMixin, BaseEstimator):
+    """Clone-safe wrapper that constructs CatBoost only inside fit()."""
+
+    def __init__(self, params: dict[str, Any]):
+        self.params = params
+
+    def fit(self, X: pd.DataFrame, y: np.ndarray):
+        self.model_ = CatBoostClassifier(**self.params)
+        self.model_.fit(X, y)
+        self.classes_ = self.model_.classes_
+        return self
+
+    def predict(self, X: pd.DataFrame) -> np.ndarray:
+        return np.asarray(self.model_.predict(X)).reshape(-1).astype(str)
+
+
 def make_models(eligible_classes: list[str], production_params: dict[str, Any] | None = None) -> dict[str, Any]:
     # Median imputation is fitted separately inside each fold to avoid validation leakage.
     return {
@@ -476,7 +493,7 @@ def make_models(eligible_classes: list[str], production_params: dict[str, Any] |
         **({
             "ProductionRecipeCatBoost": make_pipeline(
                 SimpleImputer(strategy="median", add_indicator=True),
-                CatBoostClassifier(**production_params),
+                ProductionRecipeCatBoostEstimator(production_params),
             )
         } if production_params is not None else {}),
         "LogisticRegression": make_pipeline(
