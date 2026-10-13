@@ -35,6 +35,10 @@ from sklearn.preprocessing import StandardScaler
 from audit_ogj2014_data_quality import TECHNIQUE_FAMILY, TECHNIQUE_PATTERNS
 
 ROOT = Path(__file__).resolve().parents[1]
+import sys
+sys.path.insert(0, str(ROOT / "src"))
+from ml.feature_builder import FEATURE_NAMES as PRODUCTION_FEATURE_NAMES  # noqa: E402
+
 DATASET = ROOT / "src" / "notebooks" / "ml_data" / "OGJ2014_extracted_vs_Table1.xlsx"
 SHEET = "OGJ2014_Extracted_Rows"
 OUTPUT_DIR = ROOT / "outputs" / "ml_research"
@@ -83,9 +87,24 @@ def build_features(frame: pd.DataFrame) -> pd.DataFrame:
 
     X["log10_perm_mid"] = np.log10(np.clip(X["perm_mid_md"], 1e-6, None))
     X["log10_visc_mid"] = np.log10(np.clip(X["visc_mid_cp"], 1e-6, None))
-    formation = frame["formation_category"].astype("string").fillna("Unknown").str.strip()
-    for category in ("Sandstone", "Carbonates", "Unconsolidated sands", "Unknown"):
+    formation = frame["formation_category"].astype("string").fillna("").str.strip()
+    allowed_formations = ("Sandstone", "Carbonates", "Unconsolidated sands")
+    invalid_formation = ~formation.isin(allowed_formations)
+    if invalid_formation.any():
+        values = sorted(formation[invalid_formation].dropna().astype(str).unique().tolist())
+        raise ValueError(
+            "Production feature schema does not accept unresolved formation categories: "
+            f"{values}. Resolve/quarantine these rows instead of silently one-hot encoding them."
+        )
+    for category in allowed_formations:
         X[f"formation_{category.lower().replace(' ', '_')}"] = formation.eq(category).astype(float)
+
+    # Use the exact deployed v1 feature names/order. This makes the research
+    # benchmark schema-compatible while not claiming the already-trained
+    # production artifact has been fairly evaluated on held-out rows.
+    X = X.reindex(columns=PRODUCTION_FEATURE_NAMES)
+    if list(X.columns) != PRODUCTION_FEATURE_NAMES:
+        raise AssertionError("Research feature schema diverged from the production v1 schema.")
 
     forbidden = [
         col for col in X.columns
