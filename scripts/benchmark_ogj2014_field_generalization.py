@@ -559,6 +559,196 @@ def decision_record(record_id: object, source_adj_by_id: pd.DataFrame) -> dict:
     }
 
 
+
+def feature_ready_mask(frame: pd.DataFrame) -> pd.Series:
+    """Rows whose ranges/formation satisfy the production input contract."""
+    mask = frame["formation_category"].astype("string").isin(
+        ["Sandstone", "Carbonates", "Unconsolidated sands"]
+    )
+    for _prefix, low_col, high_col, _unit in NUMERIC_RANGES:
+        low = pd.to_numeric(frame[low_col], errors="coerce")
+        high = pd.to_numeric(frame[high_col], errors="coerce")
+        mask &= low.notna() & high.notna() & np.isfinite(low) & np.isfinite(high) & high.ge(low)
+    return mask.fillna(False)
+
+
+def evaluate_production_on_genuinely_unseen_fields(frame: pd.DataFrame) -> dict[str, Any]:
+    """Compare the deployed artifact and retrained baselines only on fields absent from its training manifest."""
+    if not TRAINING_MANIFEST_PATH.is_file() or not TRAINING_MEMBERSHIP_REPORT_PATH.is_file():
+        return {
+            "status": "blocked_training_membership_manifest_missing",
+            "reason": "No verified production training-row manifest is available.",
+        }
+    manifest = pd.read_csv(TRAINING_MANIFEST_PATH, dtype={"record_id": "string"})
+    membership_report = json.loads(TRAINING_MEMBERSHIP_REPORT_PATH.read_text(encoding="utf-8"))
+    if membership_report.get("status") != "reconstructed_and_verified":
+        return {"status": "blocked_training_membership_unverified", "reason": membership_report.get("status", "unknown")}
+    if len(manifest) != 526 or manifest["record_id"].isna().any() or manifest["record_id"].duplicated().any():
+        raise ValueError("Production training manifest does not contain exactly 526 unique record IDs.")
+    current_artifact_sha256 = hashlib.sha256(PRODUCTION_MODEL_PATH.read_bytes()).hexdigest()
+    if current_artifact_sha256 != membership_report.get("current_model_artifact_sha256"):
+        raise ValueError("Production artifact hash differs from the training-membership provenance report.")
+
+    training_ids = set(manifest["record_id"].astype(str))
+    unknown_training_ids = training_ids - set(frame["record_id"].astype(str))
+    if unknown_training_ids:
+        raise ValueError(f"{len(unknown_training_ids)} manifest record IDs are absent from the current workbook.")
+
+    member_mask = frame["record_id"].astype(str).isin(training_ids)
+    confirmed_field = verified_field_mask(frame)
+    training_members = frame.loc[member_mask].copy()
+    unresolved_member_mask = ~verified_field_mask(training_members)
+    if unresolved_member_mask.any():
+        return {
+            "status": "blocked_training_member_identity_unresolved",
+            "training_rows": int(len(training_members)),
+            "training_rows_without_confirmed_field_identity": int(unresolved_member_mask.sum()),
+            "reason": "A genuine unseen-field holdout cannot be proven when a production training row has no confirmed field identity.",
+        }
+
+    training_fields = set(training_members["field_id"].astype(str))
+    ready = feature_ready_mask(frame)
+    target_valid = frame["technique"].astype("string").isin(PRODUCTION_CLASSES)
+    unseen_mask = confirmed_field & ready & target_valid & ~frame["field_id"].astype(str).isin(training_fields)
+    unseen = frame.loc[unseen_mask].copy().reset_index(drop=True)
+    if len(unseen) == 0:
+        return {
+            "status": "no_genuinely_unseen_confirmed_fields",
+            "training_rows": int(len(training_members)),
+            "training_field_groups": int(len(training_fields)),
+            "unseen_holdout_rows": 0,
+            "reason": "Every production-eligible confirmed field appears in at least one production training row, or remaining rows fail the production input contract.",
+        }
+    if set(unseen["field_id"].astype(str)) & training_fields:
+        raise AssertionError("Production training field IDs overlap the unseen-field holdout.")
+    if set(unseen["record_id"].astype(str)) & training_ids:
+        raise AssertionError("Production training record IDs overlap the unseen-field holdout.")
+
+    train_ready_mask = feature_ready_mask(training_members)
+    train_target_valid = training_members["technique"].astype("string").isin(PRODUCTION_CLASSES)
+    model_train = training_members.loc[
+        verified_field_mask(training_members) & train_ready_mask & train_target_valid
+    ].copy().reset_index(drop=True)
+    if model_train.empty:
+        return {
+            "status": "no_eligible_training_rows_after_source_adjudication",
+            "training_manifest_rows": int(len(manifest)),
+            "unseen_holdout_rows": int(len(unseen)),
+        }
+
+    y_train = model_train["technique"].astype(str).to_numpy()
+    y_test = unseen["technique"].astype(str).to_numpy()
+    X_train = build_features(model_train)
+    X_test = build_features(unseen)
+    training_classes = sorted(set(y_train))
+    test_classes = sorted(set(y_test))
+    evaluated_classes = sorted(set(training_classes) & set(test_classes))
+    test_field_support = {
+        label: int(unseen.loc[unseen["technique"].astype(str).eq(label), "field_id"].nunique())
+        for label in PRODUCTION_CLASSES
+    }
+    train_field_support = {
+        label: int(model_train.loc[model_train["technique"].astype(str).eq(label), "field_id"].nunique())
+        for label in PRODUCTION_CLASSES
+    }
+
+    # Direct artifact prediction uses the exact same untouched records as every
+    # fold-retrained comparator. The stored artifact itself is never refit.
+    deployed_model = joblib.load(PRODUCTION_MODEL_PATH)
+    label_encoder = joblib.load(PRODUCTION_LABEL_ENCODER_PATH)
+    raw_predictions = np.asarray(deployed_model.predict(X_test)).reshape(-1)
+    if np.issubdtype(raw_predictions.dtype, np.number):
+        predicted = label_encoder.inverse_transform(raw_predictions.astype(int))
+    else:
+        predicted = raw_predictions.astype(str)
+    if not set(predicted.astype(str)).issubset(set(PRODUCTION_CLASSES)):
+        raise ValueError("Deployed artifact emitted labels outside the v1 production class encoder.")
+
+    def metrics_for(y_true, y_pred) -> dict[str, Any]:
+        present = sorted(set(y_true.astype(str)))
+        return {
+            "macro_f1_observed_test_classes": float(f1_score(
+                y_true, y_pred, labels=present, average="macro", zero_division=0
+            )),
+            "macro_f1_all_nine_classes": float(f1_score(
+                y_true, y_pred, labels=PRODUCTION_CLASSES, average="macro", zero_division=0
+            )),
+            "balanced_accuracy": float(balanced_accuracy_score(y_true, y_pred)),
+            "accuracy": float(accuracy_score(y_true, y_pred)),
+            "confusion_matrix_all_nine_classes": confusion_matrix(
+                y_true, y_pred, labels=PRODUCTION_CLASSES
+            ).tolist(),
+        }
+
+    comparison = [{
+        "model": "DeployedCatBoostV1.0.0",
+        **metrics_for(y_test, predicted.astype(str)),
+    }]
+    try:
+        prod_params, recipe_meta = production_recipe_parameters(training_classes)
+        candidates = make_models(training_classes, prod_params)
+        for name, estimator in candidates.items():
+            model = clone(estimator)
+            model.fit(X_train, y_train)
+            candidate_predictions = model.predict(X_test).astype(str)
+            comparison.append({"model": name, **metrics_for(y_test, candidate_predictions)})
+    except Exception as exc:
+        recipe_meta = {
+            "status": "blocked",
+            "reason": f"{type(exc).__name__}: {exc}",
+        }
+
+    # Corrected labels are used for the source truth; the production artifact was
+    # trained on the original labels. This difference is intentional and recorded.
+    nine_classes_present = set(test_classes) == set(PRODUCTION_CLASSES)
+    every_class_has_holdout_support = all(
+        test_field_support.get(label, 0) >= MINIMUM_HOLDOUT_FIELDS_PER_CLASS
+        for label in PRODUCTION_CLASSES
+    )
+    return {
+        "status": (
+            "unseen_field_diagnostic_all_nine_classes_present"
+            if nine_classes_present and every_class_has_holdout_support
+            else "unseen_field_diagnostic_subset_only_full_nine_class_gate_blocked"
+        ),
+        "training_membership_source": str(TRAINING_MANIFEST_PATH.relative_to(ROOT)),
+        "training_membership_sha256": membership_report.get("training_membership_sha256_ordered_record_ids"),
+        "training_rows_in_manifest": int(len(manifest)),
+        "training_rows_used_for_retrained_candidates": int(len(model_train)),
+        "production_training_field_groups": int(len(training_fields)),
+        "unseen_field_holdout_rows": int(len(unseen)),
+        "unseen_field_holdout_field_groups": int(unseen["field_id"].nunique()),
+        "record_id_overlap": sorted(set(unseen["record_id"].astype(str)) & training_ids),
+        "field_id_overlap": sorted(set(unseen["field_id"].astype(str)) & training_fields),
+        "all_test_fields_absent_from_production_training": True,
+        "training_independent_fields_by_class": train_field_support,
+        "unseen_holdout_independent_fields_by_class": test_field_support,
+        "unseen_test_classes": test_classes,
+        "all_nine_classes_present_in_unseen_holdout": nine_classes_present,
+        "every_nine_class_has_at_least_two_unseen_fields": every_class_has_holdout_support,
+        "promotion_support_gate": (
+            "pass" if all(
+                sum(1 for field in frame.loc[
+                    confirmed_field & target_valid, "field_id"].astype(str).unique()
+                ) >= 0 for _label in []
+            ) and all(
+                int(frame.loc[confirmed_field & frame["technique"].astype("string").eq(label), "field_id"].nunique())
+                >= MINIMUM_FIELDS_PER_CLASS for label in PRODUCTION_CLASSES
+            ) else "blocked"
+        ),
+        "comparison_models": comparison,
+        "fold_retrained_production_recipe_metadata": recipe_meta,
+        "label_truth": "source-adjudicated OGJ technique labels; original structured labels are preserved separately",
+        "important_limitations": [
+            "The deployed artifact predictions are evaluated only on confirmed field groups with no record in the reconstructed production training manifest.",
+            "Rows with incomplete required inputs or source techniques outside the v1 nine-class taxonomy are excluded.",
+            "If one or more classes lack sufficient confirmed independent fields, scores are diagnostic subset evidence, not a full nine-class promotion result.",
+            "The deployed artifact was trained on original structured labels; this evaluation uses the source-adjudicated labels as reference truth.",
+            "This task predicts observed technique associations, not EOR success, recovery uplift, or economics.",
+        ],
+    }
+
+
 def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     if not dataset.is_file():
         raise FileNotFoundError(f"Canonical OGJ2014 workbook not found: {dataset}")
