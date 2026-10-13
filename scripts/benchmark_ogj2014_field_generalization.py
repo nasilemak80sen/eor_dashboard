@@ -405,6 +405,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         for label in sorted(df["technique"].astype(str).unique())
     }
 
+    identity_status = label_reviewed["field_id_status"].astype("string").fillna("").str.strip().str.casefold()
     verified_field = verified_field_mask(label_reviewed)
     # Provisional or unresolved identities remain in audit outputs, but cannot
     # increase class support or enter a field-generalisation benchmark.
