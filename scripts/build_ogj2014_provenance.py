@@ -259,6 +259,23 @@ def parse_project(raw):
 
 
 
+
+def table_e_identity_hold_reason(raw: str) -> str | None:
+    """Hold ambiguous same-name Table E field groups out of independent support."""
+    if raw.startswith("Brazil Petrobras Steam Estreito"):
+        return (
+            "Identity review hold: Table E also lists an Estreito row in Rio Grande do Norte; "
+            "the country-level Brazil context is not enough to prove whether these are the same field. "
+            "Keep the IDs separate and exclude this row from confirmed independent-field support pending review."
+        )
+    if raw.startswith("Rio Grande do Norte (RN) Petrobras Steam Estreito"):
+        return (
+            "Identity review hold: Table E also lists an Estreito row with only country-level Brazil context; "
+            "do not assume these are independent fields until the geography/alias question is resolved."
+        )
+    return None
+
+
 def parse_table_e_field(raw: str):
     """Extract the explicit Field cell from OGJ 2014 Table E source text.
 
@@ -470,11 +487,16 @@ def main():
                         else ("provisional" if field else "needs_review")
                     )
                     confidence = "High" if source_confirmed else ("Medium" if field else "Low")
+                    identity_hold = table_e_identity_hold_reason(raw or "")
+                    if field and identity_hold:
+                        field_status = "needs_review"
+                        confidence = "Low"
                     if field:
                         evidence = field_reason.removeprefix("source_verified: ").strip()
                         field_rationale = (
                             f"Field '{field}' parsed from the explicit Field column in OGJ 2014 Table E; "
                             f"source context '{geography}'. Parser evidence: {evidence} Source PDF: {PUBLICATION_URL}"
+                            + (f" {identity_hold}" if identity_hold else "")
                         )
                     else:
                         field_rationale = (
