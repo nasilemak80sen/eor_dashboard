@@ -278,6 +278,8 @@ def train_and_save(
         "parameters": params,
         "validation": validation,
         "training_readiness": readiness,
+        "independent_group_support_per_class": group_support,
+        "minimum_independent_fields_per_class": MINIMUM_INDEPENDENT_FIELDS_PER_CLASS,
         "training_source": str(dataset_path),
         "warning": (
             "Validation statistics are meaningful only when labels are reliable, "
