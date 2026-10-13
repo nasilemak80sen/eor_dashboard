@@ -160,14 +160,6 @@ def validate_hybrid_inputs(values: Mapping[str, Any]) -> dict[str, float]:
         if raw is None or (isinstance(raw, str) and not raw.strip()):
             continue
         _validated_number(values, key, minimum=minimum, maximum=maximum)
-    sorw_raw = values.get("sorw_pct")
-    if sorw_raw is not None and str(sorw_raw).strip():
-        sorw = _validated_number(values, "sorw_pct", minimum=0, maximum=100)
-        if sorw > validated["so_pct"]:
-            raise ValueError(
-                "Residual oil saturation (Sorw) cannot exceed current oil saturation (So); "
-                "check the reservoir inputs before requesting an ML score."
-            )
     return validated
 
 
