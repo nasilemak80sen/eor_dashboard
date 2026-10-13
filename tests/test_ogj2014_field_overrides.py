@@ -144,7 +144,7 @@ def test_eight_partial_field_fragments_match_only_reviewed_source_rows():
     assert provenance.reviewed_partial_field_override("L’Enfer S 40 999 999") is None
 
 
-\ndef test_table_e_source_detection_uses_source_context_not_row_position():
+def test_table_e_source_detection_uses_source_context_not_row_position():
     assert provenance.is_table_e_source_row(
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
     )
