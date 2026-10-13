@@ -40,7 +40,7 @@ jobs:
           # the ML research branch onto the OpenGlobus fix branch or vice versa.
           # Generated files under work/ survive reset and avoid binary merge conflicts.
           git fetch origin "${GITHUB_REF_NAME}"
-          git reset --hard "origin/${GITHUB_REF_NAME}"
+          git reset --hard FETCH_HEAD
 
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
