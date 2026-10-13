@@ -191,6 +191,10 @@ def main() -> None:
             break
     if mismatches:
         raise ValueError(f"Original 15 source columns are not cell-identical: {mismatches}")
+    historic_matrix_hash = matrix_sha256(historical_rows)
+    current_source_matrix_hash = matrix_sha256([row[:15] for row in current_rows])
+    if historic_matrix_hash != current_source_matrix_hash:
+        raise ValueError("Historical/current original source-matrix SHA-256 values do not match.")
 
     if len(kept_indices) != EXPECTED_TRAINING_ROWS:
         raise ValueError(
