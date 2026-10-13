@@ -232,6 +232,13 @@ def train_and_save(
         )
 
     group_column = choose_group_column(df)
+    if group_column != "field_id":
+        raise ValueError(
+            "Production-candidate training requires field_id grouping. "
+            f"The selected group column is {group_column!r}, which is weaker evidence "
+            "for field-level generalisation. Use an explicitly labelled research-only "
+            "benchmark for alternate grouping strategies; do not promote this model."
+        )
     groups = df[group_column].astype(str).to_numpy()
 
     # Row counts alone overstate evidence when many observations come from the
