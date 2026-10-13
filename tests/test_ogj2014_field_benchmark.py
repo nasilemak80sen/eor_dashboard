@@ -62,6 +62,8 @@ def test_production_recipe_parameters_are_recovered_from_artifact():
     estimator = benchmark.ProductionRecipeCatBoostEstimator(params)
     cloned = benchmark.clone(estimator)
     assert cloned.params == params
+    models = benchmark.make_models(["Combustion", "Miscible CO2"], params)
+    assert "ProductionRecipeCatBoost" in models
 
 
 def test_field_holdout_and_cv_keep_fields_disjoint():
