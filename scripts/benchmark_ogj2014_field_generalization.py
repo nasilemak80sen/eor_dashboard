@@ -538,7 +538,7 @@ def make_models(eligible_classes: list[str], production_params: dict[str, Any] |
 def clean_text(value: object) -> str:
     if pd.isna(value):
         return ""
-    return re.sub(r"\\s+", " ", str(value)).strip()
+    return re.sub(r"\s+", " ", str(value)).strip()
 
 
 def decision_record(record_id: object, source_adj_by_id: pd.DataFrame) -> dict:
