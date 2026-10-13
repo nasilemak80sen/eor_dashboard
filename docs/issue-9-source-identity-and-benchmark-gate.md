@@ -25,7 +25,7 @@ The corrected provenance build completed successfully in GitHub Actions:
 
 After label-conflict quarantine and the confirmed-identity gate, the restricted five-class pilot has 421 rows across Combustion, Miscible CO2, Miscible HC, Polymer, and Steam. Four other classes remain below the minimum six confirmed independent fields: Miscible acid gas (1), HC immiscible (2), Hot water (2), and Nitrogen immiscible (2).
 
-The feature matrix now uses the exact production v1 17-feature schema, with no provenance columns. On the current restricted research benchmark:
+The feature matrix now uses the exact production v1 17-feature schema, with no provenance columns. The research CatBoost baseline and the fold-retrained production-compatible CatBoost recipe were evaluated on identical field-grouped folds. On the current restricted research benchmark:
 
 | Model | 5-fold grouped CV macro-F1 (mean ± SD) |
 |---|---:|
@@ -38,7 +38,9 @@ The feature matrix now uses the exact production v1 17-feature schema, with no p
 
 Repeated field-isolated holdouts tell a less tidy story: CatBoost macro-F1 is 0.852 ± 0.072 and RandomForest is 0.842 ± 0.081. The selected RandomForest's single grouped holdout macro-F1 is 0.679 (balanced accuracy 0.689; accuracy 0.750). This split sensitivity is a reason to withhold promotion, not to cherry-pick the strongest score. These are technique-classification results, not EOR-success predictions.
 
-The production v1.0.0 artifact comparison remains blocked. Its config reports 526 training rows from this same workbook but does not provide training record IDs, a training-data hash, or a complete set of CatBoost hyperparameters. The production model also has nine classes while four classes fail the confirmed-field support gate. Directly scoring this already-trained artifact on workbook-derived holdouts cannot establish unseen-row performance. The report therefore records an explicit blocked status rather than fabricating a production comparison.
+A fold-retrained production-compatible CatBoost recipe has now been benchmarked on the same splits. Its settings were recovered from the serialized v1.0.0 artifact (400 iterations, depth 4, learning rate 0.1, MultiClass, seed 56, L2=1); class weights were restricted to the five eligible classes. It achieved grouped-CV macro-F1 0.902 ± 0.044 (balanced accuracy 0.890; accuracy 0.914), repeated-holdout macro-F1 0.828 ± 0.083 (balanced accuracy 0.821; accuracy 0.869), and untouched grouped-holdout macro-F1 0.659 (balanced accuracy 0.684; accuracy 0.736). This is a retrained recipe comparison, not a score for the deployed artifact.
+
+The direct production v1.0.0 artifact comparison remains blocked. Its config reports 526 training rows from this same workbook but does not provide training record IDs or a training-data hash to prove the held-out rows were unseen. The config also omitted key hyperparameters, though the serialized model supplied enough effective settings for the fold-retrained recipe. The production model has nine classes while four classes fail the confirmed-field support gate. Directly scoring the already-trained artifact on workbook-derived holdouts cannot establish unseen-row performance. The report explicitly distinguishes the fold-retrained recipe from the blocked deployed-artifact evaluation.
 
 ## What remains unresolved
 
