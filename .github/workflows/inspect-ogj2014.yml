@@ -7,6 +7,8 @@ on:
       - ml/field-aware-eor-research
     paths:
       - "scripts/build_ogj2014_provenance.py"
+      - "scripts/build_ogj2014_source_adjudications.py"
+      - "scripts/reconstruct_catboost_training_manifest.py"
       - "scripts/benchmark_ogj2014_field_generalization.py"
       - "tests/test_ogj2014_field_overrides.py"
       - ".github/workflows/inspect-ogj2014.yml"
