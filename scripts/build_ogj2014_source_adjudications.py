@@ -338,7 +338,7 @@ def main() -> None:
         "source_label_conflict_records": len(explicit_details) + len(section_details),
         "additional_partial_fragment_records_adjudicated": partial_count,
         "label_adjudication_records_total": len(adjud_df),
-        "in_taxonomy_records": int(adjud_df["model_class_mapping"].ne("").sum()),
+        "in_taxonomy_records": int(adjud_df["source_adjudicated_model_class"].ne("").sum()),
         "out_of_taxonomy_records": int(adjud_df["model_class_mapping"].eq("").sum()),
         "out_of_taxonomy_source_labels": sorted(adjud_df.loc[
             adjud_df["model_class_mapping"].eq(""), "source_adjudicated_technique"
