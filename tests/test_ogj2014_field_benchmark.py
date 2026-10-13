@@ -47,6 +47,20 @@ def test_features_exclude_ids_and_preserve_duplicate_numeric_profiles():
     assert not any("record" in name.casefold() or "case" in name.casefold() for name in features.columns)
 
 
+def test_production_recipe_parameters_are_recovered_from_artifact():
+    params, metadata = benchmark.production_recipe_parameters(["Combustion", "Miscible CO2"])
+    assert metadata["status"] == "available"
+    assert metadata["artifact_version"] == "1.0.0"
+    assert params["iterations"] > 0
+    assert params["depth"] > 0
+    assert params["learning_rate"] > 0
+    assert params["thread_count"] == 2
+    assert params["allow_writing_files"] is False
+    assert "classes_count" not in params
+    assert "class_names" not in params
+    assert "deployed artifact" in metadata["interpretation"]
+
+
 def test_field_holdout_and_cv_keep_fields_disjoint():
     labels = np.array(["Steam", "Polymer"] * 12)
     groups = np.repeat([f"FIELD-{i:02d}" for i in range(12)], 2)
