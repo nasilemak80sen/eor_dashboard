@@ -63,6 +63,14 @@ def test_field_holdout_and_cv_keep_fields_disjoint():
 
 
 
+def test_only_confirmed_field_ids_contribute_to_benchmark():
+    frame = pd.DataFrame({
+        "field_id": ["FIELD-A", "FIELD-B", "", "FIELD-D"],
+        "field_id_status": ["confirmed", "provisional", "needs_review", "confirmed"],
+    })
+    assert benchmark.verified_field_mask(frame).tolist() == [True, False, False, True]
+
+
 def test_label_semantic_conflicts_are_flagged_without_auto_relabel():
     frame = pd.DataFrame({
         "record_id": ["REC-1", "REC-2", "REC-3", "REC-4", "REC-5"],
