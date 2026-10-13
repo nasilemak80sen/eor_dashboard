@@ -41,6 +41,8 @@ def test_features_exclude_ids_and_preserve_duplicate_numeric_profiles():
 
     assert len(features) == len(frame)
     assert features.iloc[0].equals(features.iloc[1])
+    assert list(features.columns) == benchmark.PRODUCTION_FEATURE_NAMES
+    assert "formation_unknown" not in features.columns
     assert not any(name.endswith("_id") for name in features.columns)
     assert not any("record" in name.casefold() or "case" in name.casefold() for name in features.columns)
 
