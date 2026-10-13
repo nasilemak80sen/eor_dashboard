@@ -56,3 +56,57 @@ def test_feature_builder_keeps_schema_stable():
     result = build_hybrid_features(values, "Unconsolidated sands")
     assert result.shape == (1, len(FEATURE_NAMES))
     assert list(result.columns) == FEATURE_NAMES
+
+
+
+def test_feature_builder_rejects_missing_required_real_input():
+    import pytest
+
+    values = {
+        "depth_ft": 5000,
+        "temperature_c": 95,
+        "reservoir_pressure": 2500,
+        "porosity_pct": 20,
+        "perm_md": 100,
+        "api": 35,
+        "visc_cp": 2,
+        "so_pct": 55,
+    }
+    values["reservoir_pressure"] = None
+    with pytest.raises(ValueError, match="reservoir_pressure.*missing"):
+        build_hybrid_features(values, "Sandstone")
+
+
+def test_feature_builder_rejects_physically_invalid_real_input():
+    import pytest
+
+    values = {
+        "depth_ft": 5000,
+        "temperature_c": 95,
+        "reservoir_pressure": 2500,
+        "porosity_pct": 120,
+        "perm_md": 100,
+        "api": 35,
+        "visc_cp": 2,
+        "so_pct": 55,
+    }
+    with pytest.raises(ValueError, match="porosity_pct.*<= 100"):
+        build_hybrid_features(values, "Sandstone")
+
+
+def test_feature_builder_rejects_sorw_greater_than_current_oil_saturation():
+    import pytest
+
+    values = {
+        "depth_ft": 5000,
+        "temperature_c": 95,
+        "reservoir_pressure": 2500,
+        "porosity_pct": 20,
+        "perm_md": 100,
+        "api": 35,
+        "visc_cp": 2,
+        "so_pct": 25,
+        "sorw_pct": 35,
+    }
+    with pytest.raises(ValueError, match="Sorw cannot exceed current oil saturation"):
+        build_hybrid_features(values, "Sandstone")
