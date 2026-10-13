@@ -564,6 +564,33 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
         "study_type": "observed EOR technique classification",
         "not_a_prediction_of": "EOR success, recovery uplift, or economic value",
+        "production_model_comparison": {
+            "status": "blocked_pending_training_provenance_and_nine_class_support",
+            "artifact": "outputs/model_artifacts/eor_catboost_v1.0.0.joblib",
+            "artifact_config": "outputs/model_artifacts/config_catboost_v1.0.0.json",
+            "artifact_version": "1.0.0",
+            "artifact_class_count": 9,
+            "artifact_configured_training_rows": 526,
+            "source_workbook_rows": int(len(df)),
+            "training_record_ids_available": False,
+            "training_dataset_hash_available": False,
+            "production_hyperparameters_fully_recorded": False,
+            "reason": (
+                "The deployed artifact config says it was trained on 526 rows from this same OGJ2014 workbook, "
+                "but it provides no training-row manifest or training-data hash to prove the grouped holdout rows "
+                "were unseen. Its config also leaves key CatBoost parameters null. In addition, the nine-class "
+                "production target cannot pass the minimum confirmed-field support gate for every class; the "
+                "restricted research pilot covers only the eligible classes. Direct deployed-artifact metrics "
+                "would therefore be leakage-prone and not comparable to the restricted pilot."
+            ),
+            "allowed_next_step": (
+                "Recover the artifact's exact training-row manifest/hash and full training recipe, or report a "
+                "separately fold-retrained production-compatible recipe as a different experiment. Do not report "
+                "the current artifact as fairly benchmarked or promote a model until all nine classes meet the gate."
+            ),
+            "research_pilot_classes": eligible_classes,
+            "classes_below_minimum_confirmed_field_support": unsupported_classes,
+        },
         "row_preservation": {
             "source_rows": int(len(df)),
             "unique_record_ids": int(df["record_id"].nunique()),
@@ -680,13 +707,13 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "confusion_matrix": confusion_matrix(y_test, holdout_predictions, labels=labels_order).tolist(),
             "confusion_matrix_labels": labels_order,
         },
-        "promotion_status": "research_baseline_only_requires_engineering_review",
+        "promotion_status": "not_eligible_for_promotion_production_comparison_blocked",
         "limitations": [
-            "Field identifiers are provisional parser-derived candidates; no field groups are marked verified/confirmed, so true unseen-field generalization is not yet established.",
+            "Only source-confirmed field IDs are eligible for grouped evaluation. Eight partial source fragments and the ambiguous Estreito geography candidates remain excluded from confirmed independent-field support.",
             "The source table records observed techniques, not comparable outcomes or success labels.",
             "Rows with explicit source-text conflicts or source-table-section conflicts are quarantined until manually adjudicated; no automatic relabelling is performed.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
-            "Five low-support classes are excluded from this restricted pilot and require more independent fields before full multiclass evaluation.",
+            "Five low-support classes are excluded from this restricted pilot; full nine-class evaluation and a direct production-model comparison remain blocked until every class has sufficient confirmed independent fields and the deployed artifact training provenance is recovered.",
             "Repeated holdouts and grouped CV are preliminary internal estimates, not external validation.",
             "Repeated holdouts overlap in their training/test fields across repeats; score percentiles describe split variability, not formal confidence intervals.",
         ],
