@@ -21,7 +21,8 @@ TRAINING_COMMIT = "21a3f0aa18b9acfe5cb59e810015478a6e4c7fbb"
 HISTORICAL_WORKBOOK_PATH = "src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx"
 CURRENT_WORKBOOK = ROOT / HISTORICAL_WORKBOOK_PATH
 HISTORICAL_CONFIG_PATH = "outputs/model_artifacts/config_catboost_v1.0.0.json"
-ARTIFACT_PATH = "outputs/model_artifacts/eor_catboost_v1.0.0.joblib"
+ARTIFACT_GIT_PATH = "outputs/model_artifacts/eor_catboost_v1.0.0.joblib"
+ARTIFACT_PATH = ROOT / ARTIFACT_GIT_PATH
 MANIFEST_PATH = ROOT / "data" / "provenance" / "catboost_v1.0.0_training_manifest.csv"
 REPORT_PATH = ROOT / "data" / "provenance" / "catboost_v1.0.0_training_membership.json"
 EXPECTED_TRAINING_ROWS = 526
@@ -153,7 +154,7 @@ def main() -> None:
         raise FileNotFoundError(CURRENT_WORKBOOK)
     historic_workbook_bytes = git_bytes(f"{TRAINING_COMMIT}:{HISTORICAL_WORKBOOK_PATH}")
     historic_config_bytes = git_bytes(f"{TRAINING_COMMIT}:{HISTORICAL_CONFIG_PATH}")
-    historic_artifact_bytes = git_bytes(f"{TRAINING_COMMIT}:{ARTIFACT_PATH}")
+    historic_artifact_bytes = git_bytes(f"{TRAINING_COMMIT}:{ARTIFACT_GIT_PATH}")
     current_artifact_bytes = ARTIFACT_PATH.read_bytes()
     current_config_bytes = (ROOT / HISTORICAL_CONFIG_PATH).read_bytes()
 
@@ -260,10 +261,10 @@ def main() -> None:
         "historical_model_artifact_sha256": hashlib.sha256(historic_artifact_bytes).hexdigest(),
         "current_model_artifact_sha256": hashlib.sha256(current_artifact_bytes).hexdigest(),
         "historical_model_artifact_git_blob_sha": subprocess.check_output(
-            ["git", "rev-parse", f"{TRAINING_COMMIT}:{ARTIFACT_PATH}"], cwd=ROOT, text=True
+            ["git", "rev-parse", f"{TRAINING_COMMIT}:{ARTIFACT_GIT_PATH}"], cwd=ROOT, text=True
         ).strip(),
         "current_model_artifact_git_blob_sha": subprocess.check_output(
-            ["git", "rev-parse", f"HEAD:{ARTIFACT_PATH}"], cwd=ROOT, text=True
+            ["git", "rev-parse", f"HEAD:{ARTIFACT_GIT_PATH}"], cwd=ROOT, text=True
         ).strip(),
         "training_membership_sha256_ordered_record_ids": member_digest,
         "training_row_manifest_path": str(MANIFEST_PATH.relative_to(ROOT)),
