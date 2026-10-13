@@ -78,6 +78,24 @@ def test_table_e_projects_are_not_misclassified_as_fields():
         assert reason.startswith(("source_verified:", "source_project_span"))
 
 
+def test_table_e_field_parser_uses_explicit_pdf_field_column():
+    examples = {
+        "Bahia Petrobras CO2 immiscible Buracica 1991 1,670 7 Sergi S 22": "Buracica",
+        "Bahia Petrobras CO2 miscible Rio Pojuca 1999 1 Agua Grande S": "Rio Pojuca",
+        "Brazil Petrobras Microbial Carmopolis 6/02 45 10 Carmopolis S/Congl. 17": "Carmopolis",
+        "Espirito Santo Petrobras Steam Fazenda Alegre 2001 1,255 59 Urucutuca S 27": "Fazenda Alegre",
+        "Bentheim Wintershall Holding AG Steam Emlichheim, Block 1 7/07 55 8 1 Valanginian US 30": "Emlichheim, Block 1",
+        "miscible Magnus 10/02 10,700 16 4 150 S 20": "Magnus",
+        "Parrylands New Horizon Steam Block E 7/01 744 6 Forest Sands S 36": "Block E",
+        "Maturin, Campo Mulata PDVSA E&P HC miscible Carito Central 12/96 12,000 45 10 Naricual S": "Carito Central",
+    }
+    for raw_line, expected in examples.items():
+        field, context, reason = provenance.parse_table_e_field(raw_line)
+        assert field == expected, (raw_line, field, context, reason)
+        assert context
+        assert reason.startswith(("source_verified:", "source_project_span"))
+
+
 def test_table_e_source_detection_uses_source_context_not_row_position():
     assert provenance.is_table_e_source_row(
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"
