@@ -12,6 +12,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+import joblib
 
 import numpy as np
 import pandas as pd
@@ -38,6 +39,8 @@ ROOT = Path(__file__).resolve().parents[1]
 import sys
 sys.path.insert(0, str(ROOT / "src"))
 from ml.feature_builder import FEATURE_NAMES as PRODUCTION_FEATURE_NAMES  # noqa: E402
+PRODUCTION_MODEL_PATH = ROOT / "outputs" / "model_artifacts" / "eor_catboost_v1.0.0.joblib"
+PRODUCTION_CONFIG_PATH = ROOT / "outputs" / "model_artifacts" / "config_catboost_v1.0.0.json"
 
 DATASET = ROOT / "src" / "notebooks" / "ml_data" / "OGJ2014_extracted_vs_Table1.xlsx"
 SHEET = "OGJ2014_Extracted_Rows"
@@ -63,6 +66,127 @@ REQUIRED_SOURCE_COLUMNS = {
     "record_id", "technique", "formation_category", "field_id", "field_id_status", "raw_line",
     *(column for _, lo, hi, _ in NUMERIC_RANGES for column in (lo, hi)),
 }
+
+
+
+def production_recipe_parameters(
+    eligible_classes: list[str],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Recover the trained v1 CatBoost recipe and adapt only class-specific settings.
+
+    The loaded model's trees are never evaluated on the research holdout. Only its
+    training parameters are reused to fit a fresh model inside each grouped fold.
+    """
+    if not PRODUCTION_MODEL_PATH.is_file() or not PRODUCTION_CONFIG_PATH.is_file():
+        raise FileNotFoundError("Production v1 CatBoost artifact/config is missing.")
+    config = json.loads(PRODUCTION_CONFIG_PATH.read_text(encoding="utf-8"))
+    artifact = joblib.load(PRODUCTION_MODEL_PATH)
+    if hasattr(artifact, "named_steps"):
+        candidates = list(artifact.named_steps.values())
+        model = next((item for item in candidates if isinstance(item, CatBoostClassifier)), None)
+    else:
+        model = artifact if isinstance(artifact, CatBoostClassifier) else None
+    if model is None:
+        raise TypeError(
+            "Expected the production v1 artifact to contain a CatBoostClassifier; "
+            f"received {type(artifact).__name__}."
+        )
+
+    params = {key: value for key, value in model.get_params().items() if value is not None}
+    try:
+        effective = model.get_all_params()
+    except Exception:
+        effective = {}
+    # The artifact config omitted several hyperparameters; recover their effective
+    # values from the serialized model rather than guessing research defaults.
+    recoverable = (
+        "iterations", "depth", "learning_rate", "loss_function", "eval_metric",
+        "l2_leaf_reg", "random_seed", "random_strength", "border_count",
+        "auto_class_weights", "bootstrap_type", "bagging_temperature", "subsample",
+        "rsm", "one_hot_max_size", "min_data_in_leaf", "leaf_estimation_iterations",
+        "leaf_estimation_method", "grow_policy", "max_leaves", "model_size_reg",
+        "boosting_type", "score_function", "nan_mode", "task_type", "class_weights",
+    )
+    for key in recoverable:
+        if (key not in params or params[key] is None) and effective.get(key) is not None:
+            params[key] = effective[key]
+
+    config_classes = [str(value) for value in config.get("classes", [])]
+    adaptations = []
+    # The recipe is retrained only on the eligible research class subset. Remove
+    # fixed nine-class declarations and remap explicit weights by the source class
+    # order, preserving weights for the classes that remain in this pilot.
+    params.pop("classes_count", None)
+    params.pop("class_names", None)
+    params.pop("use_best_model", None)
+    params.pop("eval_set", None)
+    raw_weights = params.get("class_weights")
+    if raw_weights is not None:
+        if isinstance(raw_weights, dict):
+            weight_map = {}
+            for key, value in raw_weights.items():
+                if isinstance(key, (int, np.integer)) or str(key).isdigit():
+                    index = int(key)
+                    if 0 <= index < len(config_classes):
+                        weight_map[config_classes[index]] = float(value)
+                else:
+                    weight_map[str(key)] = float(value)
+        elif isinstance(raw_weights, (list, tuple)):
+            weight_map = {
+                label: float(value)
+                for label, value in zip(config_classes, raw_weights)
+            }
+        else:
+            raise ValueError("Unsupported production class_weights representation.")
+        if not all(label in weight_map for label in eligible_classes):
+            raise ValueError(
+                "Production artifact class weights cannot be mapped to every eligible class."
+            )
+        params["class_weights"] = {label: weight_map[label] for label in eligible_classes}
+        params.pop("auto_class_weights", None)
+        adaptations.append("restricted explicit class_weights to the eligible class subset")
+    if not params.get("loss_function"):
+        params["loss_function"] = "MultiClass"
+        adaptations.append("set MultiClass loss because the artifact did not expose a loss_function")
+
+    for required in ("iterations", "depth", "learning_rate"):
+        if params.get(required) is None:
+            raise ValueError(
+                f"Production artifact does not expose effective {required}; "
+                "cannot create a defensible fold-retrained recipe."
+            )
+    params["thread_count"] = 2
+    params["verbose"] = False
+    params["allow_writing_files"] = False
+    adaptations.append("retrained from scratch within each field-grouped split; deployed trees not reused")
+
+    report_params = {
+        key: params.get(key)
+        for key in (
+            "iterations", "depth", "learning_rate", "loss_function", "eval_metric",
+            "l2_leaf_reg", "random_seed", "random_strength", "border_count",
+            "auto_class_weights", "bootstrap_type", "bagging_temperature", "subsample",
+            "rsm", "one_hot_max_size", "min_data_in_leaf", "leaf_estimation_iterations",
+            "leaf_estimation_method", "grow_policy", "max_leaves", "model_size_reg",
+            "class_weights", "thread_count",
+        )
+        if params.get(key) is not None
+    }
+    metadata = {
+        "status": "available",
+        "artifact": str(PRODUCTION_MODEL_PATH.relative_to(ROOT)),
+        "config": str(PRODUCTION_CONFIG_PATH.relative_to(ROOT)),
+        "artifact_version": config.get("version"),
+        "source_class_count": len(config_classes),
+        "eligible_class_scope": list(eligible_classes),
+        "parameters_used": report_params,
+        "adaptations": adaptations,
+        "interpretation": (
+            "Fold-retrained production-compatible recipe comparison only; this does not score "
+            "the deployed artifact or establish its held-out performance."
+        ),
+    }
+    return params, metadata
 
 
 def _valid_ids(series: pd.Series) -> pd.Series:
@@ -325,7 +449,7 @@ def make_group_cv(
     )
 
 
-def make_models() -> dict[str, Any]:
+def make_models(eligible_classes: list[str], production_params: dict[str, Any] | None = None) -> dict[str, Any]:
     # Median imputation is fitted separately inside each fold to avoid validation leakage.
     return {
         "DummyPrior": make_pipeline(
@@ -349,6 +473,12 @@ def make_models() -> dict[str, Any]:
                 thread_count=2,
             ),
         ),
+        **({
+            "ProductionRecipeCatBoost": make_pipeline(
+                SimpleImputer(strategy="median", add_indicator=True),
+                CatBoostClassifier(**production_params),
+            )
+        } if production_params is not None else {}),
         "LogisticRegression": make_pipeline(
             SimpleImputer(strategy="median", add_indicator=True),
             StandardScaler(),
@@ -452,6 +582,18 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             for label in eligible_classes
         }
 
+    try:
+        production_params, production_recipe_metadata = production_recipe_parameters(eligible_classes)
+    except Exception as exc:
+        # Keep the research baseline available, but make a failed recipe recovery
+        # visible rather than silently substituting guessed production parameters.
+        production_params = None
+        production_recipe_metadata = {
+            "status": "blocked",
+            "reason": f"{type(exc).__name__}: {exc}",
+        }
+    model_factories = make_models(eligible_classes, production_params)
+
     X = build_features(scope)
     y = scope["technique"].astype(str).to_numpy()
     groups = scope["field_id"].astype(str).to_numpy()
@@ -465,7 +607,7 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
 
     cv_rows = []
     fitted_cv_models = {}
-    for model_name, estimator in make_models().items():
+    for model_name, estimator in model_factories.items()
         fold_scores = []
         for fold_index, (fold_train, fold_test) in enumerate(cv_splits, start=1):
             if not set(groups_train[fold_train]).isdisjoint(set(groups_train[fold_test])):
@@ -496,11 +638,10 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     # These overlapping resamples are a split-variability analysis, not independent
     # replications or a formal confidence interval.
     repeated_scores: dict[str, list[dict[str, float]]] = {
-        name: [] for name in make_models()
+        name: [] for name in model_factories
     }
     repeated_seeds: list[int] = []
     repeated_split_summaries: list[dict[str, Any]] = []
-    model_factories = make_models()
     for repeat_index in range(REPEATED_HOLDOUTS):
         split_train, split_test, split_seed = make_group_holdout(
             y, groups, seed_start=SEED_START + repeat_index * SEED_ATTEMPTS,
@@ -554,10 +695,20 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
     repeated_summary.sort(
         key=lambda row: (row["macro_f1_mean"], row["balanced_accuracy_mean"]), reverse=True
     )
-    selected = make_models()[selected_name]
+    selected = clone(model_factories[selected_name])
     selected.fit(X_train, y_train)
     holdout_predictions = selected.predict(X_test).astype(str)
     labels_order = eligible_classes
+    production_recipe_holdout = None
+    if "ProductionRecipeCatBoost" in model_factories:
+        recipe_model = clone(model_factories["ProductionRecipeCatBoost"])
+        recipe_model.fit(X_train, y_train)
+        recipe_predictions = recipe_model.predict(X_test).astype(str)
+        production_recipe_holdout = {
+            "macro_f1": float(f1_score(y_test, recipe_predictions, labels=labels_order, average="macro", zero_division=0)),
+            "balanced_accuracy": float(balanced_accuracy_score(y_test, recipe_predictions)),
+            "accuracy": float(accuracy_score(y_test, recipe_predictions)),
+        }
 
     report = {
         "dataset": str(dataset.relative_to(ROOT)),
@@ -591,6 +742,18 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             ),
             "research_pilot_classes": eligible_classes,
             "classes_below_minimum_confirmed_field_support": unsupported_classes,
+            "fold_retrained_recipe": {
+                **production_recipe_metadata,
+                "grouped_cv": next(
+                    (row for row in cv_rows if row["model"] == "ProductionRecipeCatBoost"),
+                    None,
+                ),
+                "repeated_field_holdouts": next(
+                    (row for row in repeated_summary if row["model"] == "ProductionRecipeCatBoost"),
+                    None,
+                ),
+                "untouched_grouped_holdout_metrics": production_recipe_holdout,
+            },
         },
         "row_preservation": {
             "source_rows": int(len(df)),
