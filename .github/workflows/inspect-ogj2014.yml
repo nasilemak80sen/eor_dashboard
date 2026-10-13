@@ -4,8 +4,10 @@ on:
   push:
     branches:
       - fix/openglobus-restore-after-revert
+      - ml/field-aware-eor-research
     paths:
       - "scripts/build_ogj2014_provenance.py"
+      - "tests/test_ogj2014_field_overrides.py"
       - ".github/workflows/inspect-ogj2014.yml"
   workflow_dispatch:
 
@@ -34,11 +36,11 @@ jobs:
 
       - name: Publish both validated workbook copies
         run: |
-          # Rebase by rebuilding the workbook commit on the latest branch tip.
-          # The generated outputs under work/ are untracked/ignored and survive
-          # reset; this avoids binary Excel merge conflicts with prior workbook builds.
-          git fetch origin fix/openglobus-restore-after-revert
-          git reset --hard origin/fix/openglobus-restore-after-revert
+          # Rebuild against the branch that triggered this workflow. Never reset
+          # the ML research branch onto the OpenGlobus fix branch or vice versa.
+          # Generated files under work/ survive reset and avoid binary merge conflicts.
+          git fetch origin "${GITHUB_REF_NAME}"
+          git reset --hard "origin/${GITHUB_REF_NAME}"
 
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance.xlsx src/notebooks/ml_data/OGJ2014_extracted_vs_Table1.xlsx
           cp work/ogj2014_provenance/OGJ2014_extracted_vs_Table1_provenance_mirror.xlsx data/OGJ2014_extracted_vs_Table1.xlsx
@@ -51,7 +53,7 @@ jobs:
             exit 0
           fi
           git commit -m "data: refresh OGJ2014 provenance IDs from source evidence"
-          git push origin HEAD:fix/openglobus-restore-after-revert
+          git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Audit field-level grouping and class support
         run: python scripts/audit_ogj2014_grouped_splits.py
