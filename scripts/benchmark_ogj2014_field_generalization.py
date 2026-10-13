@@ -1151,11 +1151,17 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "unique_record_ids": int(df["record_id"].nunique()),
             "rows_with_resolved_field_id_before_label_quarantine": int(source_valid_field.sum()),
             "rows_excluded_for_unresolved_field_id": int((~source_valid_field).sum()),
-            "rows_quarantined_for_label_semantic_review": int(label_conflict_mask.sum()),
-            "rows_quarantined_for_explicit_text_conflict": int(explicit_conflict_mask.sum()),
-            "rows_quarantined_for_source_section_conflict": int(source_section_conflict_mask.sum()),
+            "rows_quarantined_for_unresolved_label_conflicts": int(label_conflict_mask.sum()),
+            "source_label_conflicts_detected": int(detected_conflict_mask.sum()),
+            "source_label_conflicts_source_adjudicated": int(source_adjudication_summary["source_conflicts_adjudicated"]),
+            "source_adjudication_rows_outside_v1_taxonomy": int(target_is_out_of_taxonomy.sum()),
+            "rows_quarantined_for_explicit_text_conflict_unresolved": int(explicit_conflict_mask.sum()),
+            "explicit_text_conflict_rows_detected": int(explicit_detected_mask.sum()),
+            "rows_quarantined_for_source_section_conflict_unresolved": int(source_section_conflict_mask.sum()),
+            "source_section_conflict_rows_detected": int(section_detected_mask.sum()),
             "label_conflict_rows_also_missing_field_id": int((label_conflict_mask & ~source_valid_field).sum()),
-            "rows_remaining_after_label_quarantine": int(len(label_reviewed)),
+            "rows_remaining_after_unresolved_conflict_quarantine": int(len(label_reviewed)),
+            "rows_excluded_from_v1_target_as_out_of_taxonomy": int(target_is_out_of_taxonomy.sum()),
             "eligible_scope_rows": int(len(scope)),
             "feature_profile_deduplication": False,
             "source_rows_merged": False,
@@ -1176,10 +1182,13 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
         "verified_independent_field_support_all_classes_after_label_quarantine": verified_field_support_after_quarantine,
         "label_semantic_review": {
             "quarantined_rows_total": int(label_conflict_mask.sum()),
-            "explicit_text_conflict_rows": int(explicit_conflict_mask.sum()),
-            "source_section_conflict_rows": int(source_section_conflict_mask.sum()),
-            "quarantined_by_structured_label": {
-                str(k): int(v) for k, v in df.loc[label_conflict_mask, "technique"].value_counts().sort_index().items()
+            "explicit_text_conflicts_detected": int(explicit_detected_mask.sum()),
+            "source_section_conflicts_detected": int(section_detected_mask.sum()),
+            "source_conflicts_adjudicated": int(source_adjudication_summary["source_conflicts_adjudicated"]),
+            "unresolved_conflict_rows_quarantined": int(label_conflict_mask.sum()),
+            "adjudication_out_of_taxonomy_rows": int(source_adjudication_summary["conflict_records_excluded_as_out_of_taxonomy"]),
+            "quarantined_by_original_structured_label": {
+                str(k): int(v) for k, v in df.loc[label_conflict_mask, "structured_technique_label"].value_counts().sort_index().items()
             },
             "explicit_text_candidates": explicit_conflict_details,
             "source_section_candidates": source_section_conflict_details,
@@ -1187,9 +1196,9 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "policy": "Rows whose explicit source text or original table-section context conflicts with the structured label are excluded pending review. Technique labels are never automatically rewritten.",
         },
         "field_identity_verification_warning": (
-            "Only field IDs with explicit source-document evidence are marked confirmed; remaining parser-derived IDs "
-            "stay provisional. Scores are research-only field-isolation estimates, not validated EOR recommendations "
-            "or evidence of EOR success, recovery uplift, or economic value."
+            "Only source-confirmed identities enter grouped evaluation. The eight partial performance fragments have "
+            "explicit full-profile source matches; the four Estreito source records share a canonical Rio Grande do Norte "
+            "field ID but remain four distinct source rows. Salt Creek remains split by operator/geography."
         ),
         "minimum_independent_fields_per_class": MINIMUM_FIELDS_PER_CLASS,
         "minimum_holdout_fields_per_class": MINIMUM_HOLDOUT_FIELDS_PER_CLASS,
@@ -1262,13 +1271,17 @@ def audit_and_benchmark(dataset: Path = DATASET) -> dict[str, Any]:
             "confusion_matrix": confusion_matrix(y_test, holdout_predictions, labels=labels_order).tolist(),
             "confusion_matrix_labels": labels_order,
         },
-        "promotion_status": "not_eligible_for_promotion_production_comparison_blocked",
+        "promotion_status": (
+            "not_eligible_for_promotion_insufficient_confirmed_independent_field_support"
+            if not full_nine_class_gate_pass else
+            "research_only_requires_engineering_review_and_external_validation"
+        ),
         "limitations": [
-            "Only source-confirmed field IDs are eligible for grouped evaluation. Eight partial source fragments and the ambiguous Estreito geography candidates remain excluded from confirmed independent-field support.",
+            "Only source-confirmed field IDs are eligible for grouped evaluation. Eight partial fragments and four Estreito records were resolved from source table evidence without merging source rows; repeated rows still do not count as additional independent fields.",
             "The source table records observed techniques, not comparable outcomes or success labels.",
-            "Rows with explicit source-text conflicts or source-table-section conflicts are quarantined until manually adjudicated; no automatic relabelling is performed.",
+            "The 179 flagged source-label conflicts are captured in a separately versioned adjudication register. Source labels outside the v1 taxonomy remain excluded; original workbook labels are unchanged.",
             "Rows sharing a field remain in the same split; exact numeric profiles are not merged.",
-            "Four classes remain below the minimum confirmed-field support gate after quarantine; full nine-class evaluation and a direct production-artifact comparison remain blocked until every class has sufficient confirmed independent fields and the deployed artifact training provenance is recovered.",
+            "The production training manifest was reconstructed from the historical workbook and preprocessing rules. Four classes remain below the minimum confirmed-field support gate; a full nine-class promotion decision remains blocked even though a direct unseen-field diagnostic is now possible.",
             "Repeated holdouts and grouped CV are preliminary internal estimates, not external validation.",
             "Repeated holdouts overlap in their training/test fields across repeats; score percentiles describe split variability, not formal confidence intervals.",
         ],
