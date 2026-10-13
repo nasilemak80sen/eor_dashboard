@@ -78,3 +78,23 @@ def test_hybrid_feature_schema_is_stable():
     )
     assert list(df.columns) == FEATURE_NAMES
     assert df.shape == (1, len(FEATURE_NAMES))
+
+
+def test_hybrid_rejects_invalid_ml_probability_instead_of_silently_zeroing_it():
+    import pytest
+
+    with pytest.raises(ValueError, match="within \\[0, 1\\]"):
+        HybridDecisionService().fuse(
+            _screening_result(),
+            {"Miscible CO2": 1.2},
+        )
+
+
+def test_hybrid_rejects_non_finite_ml_probability():
+    import pytest
+
+    with pytest.raises(ValueError, match="must be finite"):
+        HybridDecisionService().fuse(
+            _screening_result(),
+            {"Miscible CO2": float("nan")},
+        )
