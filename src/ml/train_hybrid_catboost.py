@@ -130,8 +130,33 @@ def validate_independent_group_support(
     return support
 
 
+NEXTGEN_REQUIRED_INPUT_COLUMNS = (
+    "depth_ft",
+    "temperature_c",
+    "reservoir_pressure",
+    "porosity_pct",
+    "perm_md",
+    "api",
+    "visc_cp",
+    "so_pct",
+)
+
+
+def validate_nextgen_source_schema(df: pd.DataFrame) -> None:
+    """Block v2 training when the source does not contain measured core inputs."""
+    missing = sorted(set(NEXTGEN_REQUIRED_INPUT_COLUMNS).difference(df.columns))
+    if missing:
+        raise ValueError(
+            "Next-generation training is blocked: source-backed v2 core input "
+            f"columns are missing: {missing}. Do not synthesize or zero-fill these "
+            "values from the v1 ranges or default form values. Obtain source-backed "
+            "measurements or define and separately validate a versioned reduced-feature model."
+        )
+
+
 def build_training_matrix(df: pd.DataFrame) -> tuple[pd.DataFrame, np.ndarray, LabelEncoder]:
     _validate_columns(df)
+    validate_nextgen_source_schema(df)
 
     encoder = LabelEncoder()
     labels = encoder.fit_transform(df[TARGET_COLUMN].astype(str).str.strip())
