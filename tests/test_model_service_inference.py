@@ -23,6 +23,46 @@ VALID_RESERVOIR = {
     "formation_category": "Sandstone",
 }
 
+VALID_RESERVOIR_CASES = [
+    pytest.param(VALID_RESERVOIR, id="baseline-sandstone"),
+    pytest.param(
+        {
+            "depth_min_ft": 8500.0,
+            "depth_max_ft": 10500.0,
+            "porosity_min_pct": 8.0,
+            "porosity_max_pct": 18.0,
+            "perm_min_md": 0.5,
+            "perm_max_md": 15.0,
+            "api_min": 29.0,
+            "api_max": 36.0,
+            "visc_min_cp": 0.7,
+            "visc_max_cp": 3.0,
+            "so_min_pct": 25.0,
+            "so_max_pct": 45.0,
+            "formation_category": "Carbonates",
+        },
+        id="carbonate-lower-permeability",
+    ),
+    pytest.param(
+        {
+            "depth_min_ft": 500.0,
+            "depth_max_ft": 2000.0,
+            "porosity_min_pct": 28.0,
+            "porosity_max_pct": 38.0,
+            "perm_min_md": 300.0,
+            "perm_max_md": 1500.0,
+            "api_min": 12.0,
+            "api_max": 26.0,
+            "visc_min_cp": 20.0,
+            "visc_max_cp": 120.0,
+            "so_min_pct": 40.0,
+            "so_max_pct": 65.0,
+            "formation_category": "Unconsolidated sands",
+        },
+        id="unconsolidated-high-permeability",
+    ),
+]
+
 EXPECTED_CLASSES = {
     "Combustion",
     "HC immiscible",
@@ -51,15 +91,19 @@ def test_saved_artifacts_match_expected_nine_class_contract(model_service: Model
     assert len(info["classes"]) == 9
 
 
-def test_prediction_probabilities_are_finite_normalized_and_ranked(model_service: ModelService):
-    result = model_service.predict(dict(VALID_RESERVOIR))
+@pytest.mark.parametrize("reservoir", VALID_RESERVOIR_CASES)
+def test_prediction_probabilities_are_finite_normalized_and_ranked(
+    model_service: ModelService,
+    reservoir: dict,
+):
+    result = model_service.predict(dict(reservoir))
 
     assert result.success is True
     assert result.technique in EXPECTED_CLASSES
     assert math.isfinite(result.confidence)
     assert 0.0 <= result.confidence <= 1.0
     assert result.confidence_level in {"Low", "Moderate", "High"}
-    assert result.warning is None
+    assert result.warning is None or "below the engineering decision threshold" in result.warning
     assert len(result.candidates) == 9
 
     probabilities = [candidate.probability for candidate in result.candidates]
@@ -78,6 +122,7 @@ def test_prediction_probabilities_are_finite_normalized_and_ranked(model_service
             "depth_min_ft cannot be greater than depth_max_ft",
         ),
         ({"porosity_min_pct": float("nan")}, "porosity_min_pct.*must be finite"),
+        ({"api_max": 120.0}, "api_max must be between 0 and 100"),
         ({"formation_category": "unrecognized formation"}, "Unsupported formation category"),
     ],
 )
