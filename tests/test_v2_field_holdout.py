@@ -8,7 +8,11 @@ import pytest
 from openpyxl import Workbook
 
 from scripts.prepare_v2_field_holdout import prepare_field_holdout
-from scripts.reconstruct_v1_training_field_manifest import reconstruct_manifest
+from scripts.reconstruct_v1_training_field_manifest import (
+    DEFAULT_TRAINING_MANIFEST,
+    DEFAULT_WORKBOOK,
+    reconstruct_manifest,
+)
 
 
 CORE = {
@@ -167,3 +171,16 @@ def test_holdout_excludes_rows_with_incomplete_core_features_instead_of_imputing
     assert report["excluded_rows"] == 1
     assert "reservoir_pressure" in " ".join(report["excluded_record_blockers"]["V2-0"])
     assert report["v2_holdout_gate_passed"] is True
+
+
+
+def test_real_v1_training_membership_has_a_confirmed_field_manifest():
+    # This is the crucial leakage check for a fair v1-v2 comparison. If even
+    # one v1 training row lacks a source-confirmed field identity, an unseen
+    # field holdout cannot be proven.
+    manifest, report = reconstruct_manifest(DEFAULT_WORKBOOK, DEFAULT_TRAINING_MANIFEST)
+
+    assert len(manifest) == 526
+    assert report["matched_to_source_workbook_rows"] == 526
+    assert report["source_row_identity_mismatches"] == 0
+    assert report["holdout_overlap_check_ready"] is True, report["unconfirmed_record_ids"][:20]
