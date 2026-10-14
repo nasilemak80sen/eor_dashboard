@@ -28,7 +28,7 @@ In particular:
 
 The public dataset “Processed Field-Experience Dataset for Explainable Machine-Learning EOR-Family Screening” (DOI 10.17632/8wfntyb7v4.1; published 2026-09-22; CC BY 4.0) describes 36 source-verified field/project/reservoir observations with three labels (Chemical, Gas, Thermal) and six predictors (porosity, permeability, depth, temperature, API gravity, oil viscosity). It can be considered for a separate family-level research exercise once the raw files and Supplementary Table S1 have been downloaded and hashes/source identities recorded.
 
-It is not compatible with the current nine-class production target or the 46-feature engineering-aware training schema as published. Do not concatenate it directly with OGJ2014 rows or treat the dataset's excluded Niger Delta application cases as available holdout rows until the actual files and case-level Supplementary Table S1 have been inspected.
+It is not compatible with the current nine-class production target or the expanded 68-feature engineering-aware training schema as published. Do not concatenate it directly with OGJ2014 rows or treat the dataset's excluded Niger Delta application cases as available holdout rows until the actual files and case-level Supplementary Table S1 have been inspected.
 
 ## Next-generation training gate
 
