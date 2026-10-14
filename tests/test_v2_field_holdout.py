@@ -25,6 +25,7 @@ CORE = {
     "depth_ft": 5000.0,
     "temperature_c": 90.0,
     "reservoir_pressure": 2500.0,
+    "reservoir_pressure_unit": "psia",
     "porosity_pct": 20.0,
     "perm_md": 100.0,
     "api": 35.0,
@@ -190,3 +191,29 @@ def test_real_v1_training_membership_has_a_confirmed_field_manifest():
     assert report["matched_to_source_workbook_rows"] == 526
     assert report["source_row_identity_mismatches"] == 0
     assert report["holdout_overlap_check_ready"] is True, report["unconfirmed_record_ids"][:20]
+
+
+
+def test_holdout_rejects_unconverted_mixed_pressure_units(tmp_path):
+    v1_manifest_path = tmp_path / "v1-field-manifest.csv"
+    pd.DataFrame([
+        {"field_id": "KNOWN", "field_id_status": "confirmed", "field_identity_confirmed": True}
+    ]).to_csv(v1_manifest_path, index=False)
+
+    dataset_path = tmp_path / "v2.csv"
+    _write_candidate_dataset(dataset_path, ["FIELD-A", "FIELD-B", "FIELD-C"])
+    frame = pd.read_csv(dataset_path)
+    frame.loc[0, "reservoir_pressure_unit"] = "MPa"
+    frame.loc[0, "reservoir_pressure"] = 14.48
+    frame.to_csv(dataset_path, index=False)
+
+    assignments, report = prepare_field_holdout(
+        dataset_path,
+        v1_manifest_path,
+        holdout_fields_per_class=1,
+        minimum_train_fields_per_class=1,
+        required_classes=("Hot water",),
+    )
+
+    assert "V2-0" not in set(assignments["record_id"])
+    assert "reservoir_pressure_unit" in " ".join(report["excluded_record_blockers"]["V2-0"])
