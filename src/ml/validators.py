@@ -59,6 +59,12 @@ def validate_reservoir_input(reservoir: dict[str, Any]) -> None:
         if not 0 <= float(reservoir[field]) <= 100:
             raise ValueError(f"{field} must be between 0 and 100.")
 
+    # API gravity is a bounded engineering measurement, not an unconstrained
+    # numeric feature. Reject physically out-of-domain values before inference.
+    for field in ("api_min", "api_max"):
+        if not 0 <= float(reservoir[field]) <= 100:
+            raise ValueError(f"{field} must be between 0 and 100.")
+
     valid_formations = {"Sandstone", "Carbonates", "Unconsolidated sands"}
     formation = str(reservoir["formation_category"]).strip()
     if formation not in valid_formations:
