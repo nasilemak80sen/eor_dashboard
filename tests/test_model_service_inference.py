@@ -77,7 +77,7 @@ def test_prediction_probabilities_are_finite_normalized_and_ranked(model_service
             {"depth_min_ft": 7000.0, "depth_max_ft": 6000.0},
             "depth_min_ft cannot be greater than depth_max_ft",
         ),
-        ({"porosity_min_pct": float("nan")}, "porosity_min_pct must be finite"),
+        ({"porosity_min_pct": float("nan")}, "porosity_min_pct.*must be finite"),
         ({"formation_category": "unrecognized formation"}, "Unsupported formation category"),
     ],
 )
