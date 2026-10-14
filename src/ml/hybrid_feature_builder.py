@@ -64,6 +64,30 @@ FEATURE_NAMES = [
     "formation_sandstone",
     "formation_carbonates",
     "formation_unconsolidated_sands",
+    # Explicit availability indicators preserve optional context rather than
+    # making an imputed zero indistinguishable from a measured zero.
+    "salinity_provided",
+    "hardness_provided",
+    "net_pay_provided",
+    "water_cut_provided",
+    "bubble_point_provided",
+    "co2_availability_provided",
+    "mmp_satisfied_provided",
+    "waterflood_history_provided",
+    "water_injection_facilities_provided",
+    "gas_injection_facilities_provided",
+    "gas_injectivity_provided",
+    "water_injectivity_provided",
+    "mobility_ratio_provided",
+    "heterogeneity_provided",
+    "field_maturity_provided",
+    "adsorption_risk_provided",
+    "water_handling_provided",
+    "offshore_provided",
+    "gas_reinjectable_provided",
+    "hc_gas_availability_provided",
+    "gas_availability_provided",
+    "wag_ratio_provided",
 ]
 
 
@@ -71,7 +95,7 @@ CATEGORY_SCORES = {
     "injectivity": {"poor": 0.0, "fair": 0.5, "good": 1.0},
     "mobility": {"unfavorable": 0.0, "neutral": 0.5, "favorable": 1.0},
     "heterogeneity": {"high": 0.0, "moderate": 0.5, "low": 1.0},
-    "maturity": {"early": 0.0, "mature": 0.5, "late": 1.0},
+    "maturity": {"early": 0.0, "mid": 0.5, "mature": 0.5, "late": 1.0},
     "risk": {"high": 0.0, "medium": 0.5, "low": 1.0},
     "water_handling": {"high": 0.0, "medium": 0.5, "low": 1.0},
 }
@@ -93,6 +117,21 @@ def _number(values: Mapping[str, Any], key: str, default: float = 0.0) -> float:
 
 def _positive_log10(value: float) -> float:
     return math.log10(max(float(value), 1e-6))
+
+
+def _provided(values: Mapping[str, Any], key: str) -> float:
+    """Return 1 only when an optional value is explicitly available and known."""
+    raw = values.get(key)
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return 0.0
+    try:
+        if bool(pd.isna(raw)):
+            return 0.0
+    except (TypeError, ValueError):
+        pass
+    if _norm(raw) in {"unknown", "n/a", "na", "none", "null", "<na>"}:
+        return 0.0
+    return 1.0
 
 
 def _binary_yes(values: Mapping[str, Any], key: str) -> float:
@@ -121,6 +160,8 @@ def _validate_categorical_inputs(values: Mapping[str, Any]) -> None:
     )
     for key, family in categorical_fields.items():
         normalized = _norm(values.get(key))
+        if normalized in {"unknown", "n/a", "na", "none", "null", "<na>"}:
+            continue
         if normalized and normalized not in CATEGORY_SCORES[family]:
             allowed = ", ".join(sorted(CATEGORY_SCORES[family]))
             raise ValueError(
@@ -129,16 +170,21 @@ def _validate_categorical_inputs(values: Mapping[str, Any]) -> None:
             )
     for key in binary_fields:
         normalized = _norm(values.get(key))
+        # Unknown/unavailable is missingness, not an engineering "No".
+        if normalized in {"unknown", "n/a", "na", "none", "null", "<na>"}:
+            continue
         if normalized and normalized not in {"yes", "no"}:
             raise ValueError(
                 f"Unrecognized category for '{key}': {values.get(key)!r}. "
                 "Expected 'yes' or 'no'."
             )
-    wag = _norm(values.get("wag_ratio", "1:1"))
+    wag = _norm(values.get("wag_ratio"))
+    if wag in {"unknown", "n/a", "na", "none", "null", "<na>"}:
+        wag = ""
     if wag and wag not in {"1:1", "2:1", "1:2"}:
         raise ValueError(
             f"Unrecognized WAG ratio {values.get('wag_ratio')!r}. "
-            "Expected one of: 1:1, 2:1, 1:2."
+            "Expected one of: 1:1, 2:1, 1:2; use blank when unknown."
         )
 
 
@@ -246,7 +292,9 @@ def build_hybrid_features(values: Mapping[str, Any], formation: str) -> pd.DataF
     bubble_point = _number(values, "bubble_point_psi", 0.0)
     pressure_margin = pressure - bubble_point if bubble_point > 0 else 0.0
 
-    wag = _norm(values.get("wag_ratio", "1:1"))
+    wag = _norm(values.get("wag_ratio"))
+    if wag in {"unknown", "n/a", "na", "none", "null", "<na>"}:
+        wag = ""
     wag_map = {"1:1": 1.0, "2:1": 2.0, "1:2": 0.5}
 
     normalized_formation = _norm(formation)
@@ -293,11 +341,33 @@ def build_hybrid_features(values: Mapping[str, Any], formation: str) -> pd.DataF
         "gas_reinjectable": _binary_yes(values, "gas_reinjectable"),
         "hc_gas_available": _binary_yes(values, "hc_gas_availability"),
         "injection_gas_available": _binary_yes(values, "gas_availability"),
-        "wag_ratio_numeric": wag_map.get(wag, 1.0),
+        "wag_ratio_numeric": wag_map.get(wag, 0.0),
         "pressure_bubble_margin": pressure_margin,
         "formation_sandstone": 1.0 if normalized_formation == "sandstone" else 0.0,
         "formation_carbonates": 1.0 if "carbonate" in normalized_formation else 0.0,
         "formation_unconsolidated_sands": 1.0 if "unconsolidated" in normalized_formation else 0.0,
+        "salinity_provided": _provided(values, "salinity_ppm"),
+        "hardness_provided": _provided(values, "hardness_ppm"),
+        "net_pay_provided": _provided(values, "net_pay_m"),
+        "water_cut_provided": _provided(values, "water_cut_pct"),
+        "bubble_point_provided": _provided(values, "bubble_point_psi"),
+        "co2_availability_provided": _provided(values, "co2_availability"),
+        "mmp_satisfied_provided": _provided(values, "mmp_satisfied"),
+        "waterflood_history_provided": _provided(values, "waterflood_history"),
+        "water_injection_facilities_provided": _provided(values, "water_injection_facilities"),
+        "gas_injection_facilities_provided": _provided(values, "gas_injection_facilities"),
+        "gas_injectivity_provided": _provided(values, "gas_injectivity"),
+        "water_injectivity_provided": _provided(values, "water_injectivity"),
+        "mobility_ratio_provided": _provided(values, "mobility_ratio"),
+        "heterogeneity_provided": _provided(values, "heterogeneity"),
+        "field_maturity_provided": _provided(values, "field_maturity"),
+        "adsorption_risk_provided": _provided(values, "adsorption_risk"),
+        "water_handling_provided": _provided(values, "water_handling"),
+        "offshore_provided": _provided(values, "offshore"),
+        "gas_reinjectable_provided": _provided(values, "gas_reinjectable"),
+        "hc_gas_availability_provided": _provided(values, "hc_gas_availability"),
+        "gas_availability_provided": _provided(values, "gas_availability"),
+        "wag_ratio_provided": _provided(values, "wag_ratio"),
     }
 
     return pd.DataFrame([[row[name] for name in FEATURE_NAMES]], columns=FEATURE_NAMES)
