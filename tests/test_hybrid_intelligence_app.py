@@ -45,4 +45,17 @@ def test_hybrid_intelligence_page_submits_controlled_inputs_end_to_end(monkeypat
     assert len(result["ml_probabilities"]) == 9
     assert "screening" in result
     assert "hybrid" in result
+    hybrid = result["hybrid"]
+    ranking = hybrid["ranking"]
+    recommendation = hybrid["recommendation"]
+    if recommendation is None:
+        assert ranking == []
+    else:
+        assert ranking
+        assert ranking[0]["EOR Technique"] == recommendation["EOR Technique"]
+    assert all(
+        str(row.get("Engineering Status", "")).strip().upper()
+        not in {"FAIL", "FAIL (CRITICAL)"}
+        for row in ranking
+    )
     assert app.session_state["intelligence_last_run"]["reference"] == "TEST-EOR-000001"
