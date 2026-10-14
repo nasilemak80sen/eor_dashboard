@@ -41,6 +41,7 @@ REQUIRED_COLUMNS = {
     "source_record_id",
     "technique",
     "formation_category",
+    "reservoir_pressure_unit",
     *CORE_NUMERIC,
 }
 DEFAULT_CLASSES = (
@@ -78,7 +79,7 @@ def _row_blockers(row: pd.Series) -> list[str]:
     checks = (
         ("depth_ft", lambda x: x > 0.01, "must be > 0.01 ft"),
         ("temperature_c", lambda x: -20 <= x <= 400, "must be between -20 and 400 C"),
-        ("reservoir_pressure", lambda x: x > 0.01, "must be > 0.01 in the dataset's declared pressure unit"),
+        ("reservoir_pressure", lambda x: x > 0.01, "must be > 0.01 psia"),
         ("porosity_pct", lambda x: 0 <= x <= 100, "must be between 0 and 100%"),
         ("perm_md", lambda x: x >= 0, "must be >= 0 mD"),
         ("api", lambda x: 0 <= x <= 100, "must be between 0 and 100 API"),
@@ -89,6 +90,9 @@ def _row_blockers(row: pd.Series) -> list[str]:
         value = values[column]
         if value is not None and not predicate(value):
             blockers.append(f"{column}: {message}")
+    pressure_unit = _text(row.get("reservoir_pressure_unit")).casefold().replace(" ", "")
+    if pressure_unit != "psia":
+        blockers.append("reservoir_pressure_unit must be canonical psia; preserve raw source value/unit separately")
     if _text(row.get("field_id_status")).casefold() != "confirmed":
         blockers.append("field_id_status is not confirmed")
     if _text(row.get("source_review_status")).casefold() not in {"confirmed", "approved"}:
