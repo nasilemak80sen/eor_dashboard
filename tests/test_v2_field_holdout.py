@@ -144,7 +144,7 @@ def test_holdout_refuses_to_call_v1_used_fields_unseen(tmp_path):
         )
 
 
-def test_holdout_rejects_incomplete_core_features_instead_of_imputing(tmp_path):
+def test_holdout_excludes_rows_with_incomplete_core_features_instead_of_imputing(tmp_path):
     v1_manifest_path = tmp_path / "v1-field-manifest.csv"
     pd.DataFrame([
         {"field_id": "KNOWN", "field_id_status": "confirmed", "field_identity_confirmed": True}
@@ -155,11 +155,15 @@ def test_holdout_rejects_incomplete_core_features_instead_of_imputing(tmp_path):
     frame.loc[0, "reservoir_pressure"] = float("nan")
     frame.to_csv(dataset_path, index=False)
 
-    with pytest.raises(ValueError, match="No training rows passed source and feature gates"):
-        prepare_field_holdout(
-            dataset_path,
-            v1_manifest_path,
-            holdout_fields_per_class=1,
-            minimum_train_fields_per_class=1,
-            required_classes=("Hot water",),
-        )
+    assignments, report = prepare_field_holdout(
+        dataset_path,
+        v1_manifest_path,
+        holdout_fields_per_class=1,
+        minimum_train_fields_per_class=1,
+        required_classes=("Hot water",),
+    )
+
+    assert "V2-0" not in set(assignments["record_id"])
+    assert report["excluded_rows"] == 1
+    assert "reservoir_pressure" in " ".join(report["excluded_record_blockers"]["V2-0"])
+    assert report["v2_holdout_gate_passed"] is True
