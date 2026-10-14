@@ -163,3 +163,67 @@ def test_feature_builder_rejects_non_finite_core_measurement():
     }
     with pytest.raises(ValueError, match="temperature_c.*finite"):
         build_hybrid_features(values, "Sandstone")
+
+
+
+def test_feature_builder_preserves_missing_optional_context_with_flags():
+    values = {
+        "depth_ft": 5000,
+        "temperature_c": 95,
+        "reservoir_pressure": 2500,
+        "porosity_pct": 20,
+        "perm_md": 100,
+        "api": 35,
+        "visc_cp": 2,
+        "so_pct": 55,
+        "field_maturity": "Mid",
+        "gas_reinjectable": "Unknown",
+        "wag_ratio": "",
+    }
+    result = build_hybrid_features(values, "Sandstone")
+
+    assert result.loc[0, "field_maturity_score"] == 0.5
+    assert result.loc[0, "field_maturity_provided"] == 1.0
+    assert result.loc[0, "gas_reinjectable"] == 0.0
+    assert result.loc[0, "gas_reinjectable_provided"] == 0.0
+    assert result.loc[0, "wag_ratio_numeric"] == 0.0
+    assert result.loc[0, "wag_ratio_provided"] == 0.0
+    assert result.loc[0, "salinity_log10"] == -6.0
+    assert result.loc[0, "salinity_provided"] == 0.0
+    assert result.loc[0, "hardness_provided"] == 0.0
+    assert result.loc[0, "net_pay_provided"] == 0.0
+    assert result.loc[0, "water_cut_provided"] == 0.0
+    assert result.loc[0, "bubble_point_provided"] == 0.0
+    assert result.loc[0, "co2_availability_provided"] == 0.0
+
+
+def test_feature_builder_sets_availability_flags_for_supplied_optional_context():
+    values = {
+        "depth_ft": 5000,
+        "temperature_c": 95,
+        "reservoir_pressure": 2500,
+        "porosity_pct": 20,
+        "perm_md": 100,
+        "api": 35,
+        "visc_cp": 2,
+        "so_pct": 55,
+        "salinity_ppm": 50000,
+        "hardness_ppm": 300,
+        "net_pay_m": 30,
+        "water_cut_pct": 60,
+        "bubble_point_psi": 1800,
+        "co2_availability": "Yes",
+        "gas_injectivity": "Good",
+        "wag_ratio": "1:1",
+    }
+    result = build_hybrid_features(values, "Sandstone")
+
+    assert result.loc[0, "salinity_provided"] == 1.0
+    assert result.loc[0, "hardness_provided"] == 1.0
+    assert result.loc[0, "net_pay_provided"] == 1.0
+    assert result.loc[0, "water_cut_provided"] == 1.0
+    assert result.loc[0, "bubble_point_provided"] == 1.0
+    assert result.loc[0, "co2_availability_provided"] == 1.0
+    assert result.loc[0, "gas_injectivity_provided"] == 1.0
+    assert result.loc[0, "wag_ratio_provided"] == 1.0
+    assert result.loc[0, "wag_ratio_numeric"] == 1.0
