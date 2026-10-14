@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +10,7 @@ from ml.train_hybrid_catboost import (
     _validate_columns,
     validate_independent_group_support,
     build_training_matrix,
+    validate_nextgen_source_schema,
 )
 
 
@@ -69,3 +72,28 @@ def test_nextgen_training_blocks_v1_range_data_without_measured_core_inputs():
         match="Next-generation training is blocked.*source-backed v2 core input",
     ):
         build_training_matrix(frame)
+
+
+
+def test_current_ogj2014_workbook_lacks_required_nextgen_core_measurements():
+    project_root = Path(__file__).resolve().parents[1]
+    source_path = (
+        project_root
+        / "src"
+        / "notebooks"
+        / "ml_data"
+        / "OGJ2014_extracted_vs_Table1.xlsx"
+    )
+    assert source_path.is_file(), f"Expected checked-in source workbook at {source_path}"
+
+    source = pd.read_excel(
+        source_path,
+        sheet_name="OGJ2014_Extracted_Rows",
+        engine="openpyxl",
+    )
+    with pytest.raises(ValueError, match="Next-generation training is blocked") as exc_info:
+        validate_nextgen_source_schema(source)
+
+    message = str(exc_info.value)
+    assert "temperature_c" in message
+    assert "reservoir_pressure" in message
