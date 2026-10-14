@@ -32,6 +32,25 @@ CORE_NUMERIC = (
     "visc_cp",
     "so_pct",
 )
+SOURCE_TRACE_COLUMNS = (
+    "source_depth_value",
+    "source_depth_unit",
+    "source_temperature_value",
+    "source_temperature_unit",
+    "source_pressure_value",
+    "source_pressure_unit",
+    "source_porosity_value",
+    "source_permeability_value",
+    "source_api_value",
+    "source_viscosity_value",
+    "source_oil_saturation_value",
+    "feature_extraction_notes",
+    "field_identity_evidence",
+    "technique_label_evidence",
+    "reviewer",
+    "review_date",
+    "data_use_permission",
+)
 REQUIRED_COLUMNS = {
     "record_id",
     "field_id",
@@ -43,6 +62,7 @@ REQUIRED_COLUMNS = {
     "formation_category",
     "reservoir_pressure_unit",
     *CORE_NUMERIC,
+    *SOURCE_TRACE_COLUMNS,
 }
 DEFAULT_CLASSES = (
     "Combustion",
@@ -101,6 +121,10 @@ def _row_blockers(row: pd.Series) -> list[str]:
         blockers.append("source_url is missing")
     if not _text(row.get("source_record_id")):
         blockers.append("source_record_id is missing")
+    for column in SOURCE_TRACE_COLUMNS:
+        value = _text(row.get(column))
+        if not value or value.casefold() in {"unknown", "needs_review", "n/a", "na", "none", "null"}:
+            blockers.append(f"{column}: source provenance is missing or unresolved")
     if _text(row.get("field_id")).casefold() in {"", "nan", "none", "unknown", "needs_review"}:
         blockers.append("field_id is unresolved")
     if _text(row.get("technique")).casefold() in {"", "nan", "none", "unknown", "needs_review", "n/a"}:
@@ -180,6 +204,8 @@ def prepare_field_holdout(
     eligible_indexes: list[int] = []
     for idx, row in df.iterrows():
         blockers = _row_blockers(row)
+        if _text(row.get("technique")) not in required_classes:
+            blockers.append("technique is outside the selected model taxonomy")
         if blockers:
             blockers_by_row[str(row["record_id"])] = blockers
         else:
