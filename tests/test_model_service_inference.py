@@ -136,3 +136,20 @@ def test_prediction_fails_closed_on_invalid_reservoir_inputs(
 
     with pytest.raises(ValueError, match=error_pattern):
         model_service.predict(invalid)
+
+
+
+def test_v1_reference_profile_matches_recorded_smoke_prediction(model_service: ModelService):
+    """Golden regression for the controlled profile used during local validation."""
+    result = model_service.predict(dict(VALID_RESERVOIR))
+
+    assert result.technique == "Miscible HC"
+    assert result.confidence == pytest.approx(0.677060985423021, abs=1e-6)
+    assert [
+        candidate.technique
+        for candidate in result.candidates[:3]
+    ] == ["Miscible HC", "Miscible CO2", "Polymer"]
+    assert [
+        candidate.probability
+        for candidate in result.candidates[:3]
+    ] == pytest.approx([0.677060985423021, 0.1453, 0.0759], abs=1e-3)
