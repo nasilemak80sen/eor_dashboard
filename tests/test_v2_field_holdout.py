@@ -78,6 +78,23 @@ def _write_candidate_dataset(path: Path, field_ids: list[str]):
             "source_url": f"https://example.org/paper-{index}",
             "source_record_id": f"Table-{index}-row-{index}",
             "technique": "Hot water",
+            "source_depth_value": "5000",
+            "source_depth_unit": "ft",
+            "source_temperature_value": "90",
+            "source_temperature_unit": "C",
+            "source_pressure_value": "2500",
+            "source_pressure_unit": "psia",
+            "source_porosity_value": "20",
+            "source_permeability_value": "100",
+            "source_api_value": "35",
+            "source_viscosity_value": "2",
+            "source_oil_saturation_value": "55",
+            "feature_extraction_notes": "Controlled test fixture with explicit units",
+            "field_identity_evidence": "Unit test fixture has confirmed independent field IDs",
+            "technique_label_evidence": "Unit test fixture has reviewed hot-water label",
+            "reviewer": "test",
+            "review_date": "2026-10-14",
+            "data_use_permission": "Public test fixture",
             "formation_category": "Sandstone",
             "needs_review": False,
             **CORE,
@@ -217,3 +234,30 @@ def test_holdout_rejects_unconverted_mixed_pressure_units(tmp_path):
 
     assert "V2-0" not in set(assignments["record_id"])
     assert "reservoir_pressure_unit" in " ".join(report["excluded_record_blockers"]["V2-0"])
+
+
+
+def test_holdout_rejects_rows_outside_exact_technique_taxonomy(tmp_path):
+    v1_manifest_path = tmp_path / "v1-field-manifest.csv"
+    pd.DataFrame([
+        {"field_id": "KNOWN", "field_id_status": "confirmed", "field_identity_confirmed": True}
+    ]).to_csv(v1_manifest_path, index=False)
+
+    dataset_path = tmp_path / "v2.csv"
+    _write_candidate_dataset(dataset_path, ["FIELD-A", "FIELD-B", "FIELD-C"])
+    frame = pd.read_csv(dataset_path)
+    frame.loc[0, "technique"] = "Nitrogen foam"
+    frame.to_csv(dataset_path, index=False)
+
+    assignments, report = prepare_field_holdout(
+        dataset_path,
+        v1_manifest_path,
+        holdout_fields_per_class=1,
+        minimum_train_fields_per_class=1,
+        required_classes=("Hot water",),
+    )
+
+    assert "V2-0" not in set(assignments["record_id"])
+    assert "outside the selected model taxonomy" in " ".join(
+        report["excluded_record_blockers"]["V2-0"]
+    )
