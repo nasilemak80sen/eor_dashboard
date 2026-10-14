@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from openpyxl import Workbook
 
-from scripts.prepare_v2_field_holdout import prepare_field_holdout
-from scripts.reconstruct_v1_training_field_manifest import (
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from prepare_v2_field_holdout import prepare_field_holdout
+from reconstruct_v1_training_field_manifest import (
     DEFAULT_TRAINING_MANIFEST,
     DEFAULT_WORKBOOK,
     reconstruct_manifest,
