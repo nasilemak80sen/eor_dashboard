@@ -70,3 +70,8 @@ The held-out set is configured for at least **two entire independent fields per 
 ## Current decision
 
 The exact-class, feature-complete, v1-unseen record count from this source-review pass is **zero**. The four original deficits therefore remain: HC immiscible (2/6; gap 4), Hot water (2/6; gap 4), Miscible acid gas (1/6; gap 5), Nitrogen immiscible (2/6; gap 4). These counts are the baseline confirmed support; provisional candidates do not increase the counts. No v2 benchmark has been run, and no candidate model has been trained or promoted.
+
+
+### Source-value and canonical-unit contract for v2 records
+
+Use `data/ml_research/v2_source_reviewed_training_rows.template.csv` as the column template. Model-facing canonical units are depth in ft, temperature in °C, reservoir pressure in **psia**, porosity in percent, permeability in mD, API gravity in °API, viscosity in cP, and oil saturation in percent. The holdout preparation gate requires `reservoir_pressure_unit=psia`; a record in MPa or kg/cm² is not converted silently. Preserve raw source values/units in the associated provenance columns, record the conversion method, and independently validate conversions before marking canonical units. Each row must include a source-record identifier and URL, confirmed canonical field ID, and source-review approval. Multiple pools or papers from one field still count as one independent field group.
