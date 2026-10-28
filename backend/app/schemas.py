@@ -66,11 +66,11 @@ class HistoryRecord(BaseModel):
     so_pct: float | None = None
     data_quality_status: str | None = None
     data_readiness_pct: float | None = None
-    input_payload: dict[str, Any] | list[Any] | None = None
-    rule_trace: dict[str, Any] | list[Any] | None = None
-    assumptions: dict[str, Any] | list[Any] | None = None
+    input_payload: Any | None = None
+    rule_trace: Any | None = None
+    assumptions: Any | None = None
     workbook_version: str | None = None
     rule_version: str | None = None
     fuzzy_model_version: str | None = None
     model_version: str | None = None
-    evidence_summary: dict[str, Any] | list[Any] | None = None
+    evidence_summary: Any | None = None
