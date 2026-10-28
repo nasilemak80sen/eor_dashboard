@@ -62,3 +62,12 @@ The adapter introduced in this migration branch deliberately isolates API routes
 3. A local smoke test with approved assets confirms the adapter imports and initializes.
 4. Golden-case parity is documented and any differences are resolved.
 5. Database authority and repository asset classification are signed off.
+
+
+## Phase 2 extraction update (2026-10-28)
+
+- Deterministic engineering screening now lives in `src/services/engineering_screening.py`; the Streamlit page imports this shared class.
+- CatBoost v1 input mapping/inference and hybrid decision-fusion orchestration now live in `src/services/hybrid_evaluation.py`, which has no Streamlit import. The existing Streamlit execution function is a compatibility wrapper around the shared service.
+- FastAPI imports the shared service layer directly rather than importing `hybrid_app` or `app_2`.
+- Automated parity smoke tests use the existing default form values. These verify direct-service and FastAPI serialization parity but are **not** approved real-reservoir cases.
+- The real-case parity gate remains **BLOCKED**: no approved reservoir golden-case fixture was found in the repository tree. Add provenance and approval metadata to `tests/fixtures/approved_reservoir_cases.json`, then execute those same cases through both paths before claiming the gate passed.
