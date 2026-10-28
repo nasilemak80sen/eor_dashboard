@@ -1,63 +1,45 @@
-# EOR Atlas API (migration scaffold)
+# EOR Atlas API
 
-This package establishes the API boundary for the Vue migration while reusing
-the current Python engineering and hybrid services. It does not change model
-training, rules, or the existing Streamlit UI.
+Versioned FastAPI boundary for the Vue 3 + TypeScript client. Engineering screening, CatBoost inference and hybrid fusion remain server-side in shared Python services.
 
-## Setup
-
-From the repository root, use the project's approved Python environment and
-install the API extras:
-
+## Setup (PowerShell)
 ```powershell
 python -m pip install -e .\backend[test]
 $env:PYTHONPATH = (Join-Path (Get-Location) "src")
 python -m uvicorn app.main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-The current execution modules still import Streamlit, so the existing
-repository requirements must be installed for the compatibility adapter to
-initialize. This is transitional; the domain/service layer should be extracted
-from Streamlit before the API is considered fully independent.
-
 ## Endpoints
+- `GET /api/v1/health/live` (minimal liveness, public)
+- `GET /api/v1/health/ready` (identity required)
+- `POST /api/v1/screening/evaluate` (identity required)
+- `POST /api/v1/intelligence/evaluate` (identity required)
+- `GET /api/v1/history?limit=50&offset=0` (identity required)
+- `GET /api/v1/history/health` (identity required)
+- `GET /api/v1/history/{run_id}` (identity required)
+- `GET /docs` (development only; disabled in production)
 
-- `GET /api/v1/health/live`
-- `GET /api/v1/health/ready`
-- `POST /api/v1/screening/evaluate`
-- `POST /api/v1/intelligence/evaluate`
-- `GET /api/v1/history?limit=50&offset=0`
-- `GET /api/v1/history/{run_id}`
-- `GET /docs` (interactive OpenAPI documentation)
+## Identity and Phase 3
+Configure corporate OIDC values through the approved deployment configuration system:
+- `EOR_ENV=production`
+- `EOR_OIDC_ISSUER`: exact issuer URI
+- `EOR_OIDC_AUDIENCE`: registered API audience
+- `EOR_OIDC_JWKS_URL`: trusted HTTPS JWKS endpoint
+- `EOR_OIDC_REQUIRED_SCOPE`: required API scope
+- `EOR_ALLOWED_ORIGINS`: exact comma-separated Vue origins
 
-The evaluation request requires `formation` and an `inputs` object containing
-the core numerical values. Optional ScreenTool context values are passed through
-unchanged. The browser cannot set engineering eligibility or override gate
-failures.
+Bearer tokens are verified with RS256, issuer, audience, expiry, issued-at and subject checks. Production fails closed if identity configuration is missing, issuer/JWKS URLs are not HTTPS, or required scope is absent. CORS is not authentication. Identity-provider registration, TLS, network controls, role policy, secret rotation and security review remain deployment-owner tasks.
 
-## History safety
+## History and Phase 4
+Set `EOR_HISTORY_DB_PATH` to an existing database approved by the data owner. SQLite opens in `mode=ro`; the reader validates required summary columns, returns optional evidence/version fields when present, decodes JSON evidence, and reports health without exposing the local path.
 
-History access is read-only and disabled unless `EOR_HISTORY_DB_PATH` points
-to an existing, approved database file with the supported `screening_runs`
-columns. The API does not create a DB, run migrations or write report cards.
-This is intentional until the database owner confirms the authoritative source
-and a migration/back-up/restore plan is approved.
+No history writes, migrations, DB creation or tracked database replacement are enabled. The data owner must confirm the authoritative source, retention/access rules, backup/restore plan and migration approval before write support is designed.
 
-## Internal deployment
-
-Set `EOR_ENV`, `EOR_ALLOWED_ORIGINS`, `EOR_HISTORY_DB_PATH` and model/workbook
-configuration using the company's approved deployment and secret-management
-systems. The CORS setting is not authentication. Do not expose the API directly
-to untrusted networks. Corporate SSO, backend authorization, TLS, logging,
-dependency scanning, and approved storage must be completed before production.
-
-## Tests
-
-From `backend/` after installing the optional test dependencies:
+## Safety and tests
+The browser cannot override engineering eligibility. API responses include correlation IDs, no-store and browser security headers, and safe error envelopes. Classify tracked workbook/database artifacts before internal deployment.
 
 ```powershell
-python -m pytest
+python -m pip install -e .\backend[test]
+$env:PYTHONPATH = (Join-Path (Get-Location) "src")
+python -m pytest backend/tests
 ```
-
-The tests use injected fake services and temporary SQLite fixtures. They do not
-load company data or modify the repository's tracked database.
