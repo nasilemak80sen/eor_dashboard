@@ -18,3 +18,10 @@ The live end-to-end workflow boots the Vue dev server and the repository's FastA
 - The OIDC server exists only for CI integration testing. It uses HTTP loopback and an ephemeral signing key, not a production IdP. It must never be deployed.
 - Real field/asset cases must be provided through `tests/fixtures/approved_reservoir_cases.json` with `id`, `approved_by`, `approved_on`, `source`, `formation` and `inputs`; use an authorized, approved dataset. Do not add restricted reservoir data to a public repository without data-owner approval.
 - Production still requires corporate OIDC registration and policy, HTTPS/TLS, approved hosting/network controls, repository artifact classification, and resolution of the known scikit-learn serialized-artifact/runtime mismatch.
+
+
+## Form-to-legacy parity extension
+- The Vue form mirrors the full current Streamlit v3 input schema, including numeric context, categorical choices and derived drive/maturity factors.
+- Optional Sorw and numeric produced GOR remain null unless the user explicitly marks them available. They are not fabricated.
+- CI can generate temporary legacy expected outputs from `tests/fixtures/approved_reservoir_cases.json`, then drive those cases through the Vue browser and compare the full engineering result, hybrid fusion and model metadata.
+- If the approved fixture is absent, the real-case browser parity check is explicitly skipped and remains blocked; the ordinary browser integration smoke still uses illustrative defaults.
