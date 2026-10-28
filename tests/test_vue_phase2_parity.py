@@ -42,3 +42,36 @@ def test_default_ui_smoke_case_hybrid_matches_fastapi():
  assert body["screening"]==direct["screening"]
  assert body["hybrid"]==direct["hybrid"]
  assert body["model"]==direct["model_info"]
+
+import json
+import pytest
+
+def test_approved_real_reservoir_cases_match_direct_service_and_fastapi():
+    fixture = ROOT / "tests" / "fixtures" / "approved_reservoir_cases.json"
+    if not fixture.is_file():
+        pytest.skip("Approved real-reservoir fixture not supplied; real-case parity gate remains BLOCKED.")
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    cases = payload.get("cases", [])
+    assert cases, "Approved-case fixture must contain at least one approved case."
+    for case in cases:
+        assert case.get("approved_by"), f"{case.get('id', '<unnamed>')}: missing approval owner"
+        assert case.get("approved_on"), f"{case.get('id', '<unnamed>')}: missing approval date"
+        assert case.get("source"), f"{case.get('id', '<unnamed>')}: missing source/provenance"
+        formation = case["formation"]
+        inputs = case["inputs"]
+        execution = EORAtlasExecutionService()
+        direct_screen = execution.screen(inputs, formation)
+        direct_hybrid = execution.hybrid(inputs, formation)
+        api = TestClient(create_app(engine=EORAtlasEngine(execution), history=FakeHistory()))
+        screening_response = api.post("/api/v1/screening/evaluate", json={
+            "field_id": case.get("field_id"), "formation": formation, "inputs": inputs
+        })
+        hybrid_response = api.post("/api/v1/intelligence/evaluate", json={
+            "field_id": case.get("field_id"), "formation": formation, "inputs": inputs
+        })
+        assert screening_response.status_code == 200, f"{case['id']}: {screening_response.text}"
+        assert hybrid_response.status_code == 200, f"{case['id']}: {hybrid_response.text}"
+        assert screening_response.json()["screening"] == direct_screen, case["id"]
+        assert hybrid_response.json()["screening"] == direct_hybrid["screening"], case["id"]
+        assert hybrid_response.json()["hybrid"] == direct_hybrid["hybrid"], case["id"]
+        assert hybrid_response.json()["model"] == direct_hybrid["model_info"], case["id"]
