@@ -33,9 +33,9 @@ def test_hard_engineering_failure_cannot_win_on_high_ml_probability():
         screening,
         {"Miscible CO2": 0.99, "Polymer": 0.01},
     )
-    ranking = result["ranking"]
-    assert ranking
-    assert all(row.get("Engineering Status", "").upper() not in {"FAIL", "FAIL (CRITICAL)"} for row in ranking)
+    failed = next(row for row in result["ranking"] if row["EOR Technique"] == "CO2 Miscible Flood")
+    assert failed["Gate Failed"] is True
+    assert failed["Hybrid Score Raw"] == 0.0
     assert result["recommendation"]["EOR Technique"] == "Polymer (HPAM)"
 
 
