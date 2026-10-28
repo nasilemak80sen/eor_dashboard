@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -29,7 +30,7 @@ def create_app(*, engine: Any | None = None, history: Any | None = None) -> Fast
     async def correlation_id(request: Request, call_next):
         response = await call_next(request)
         supplied = request.headers.get("x-correlation-id", "").strip()
-        correlation = supplied[:128] if supplied else "generated"
+        correlation = supplied[:128] if supplied else str(uuid4())
         response.headers["X-Correlation-ID"] = correlation
         return response
 
@@ -45,6 +46,20 @@ def create_app(*, engine: Any | None = None, history: Any | None = None) -> Fast
                         {"location": [str(p) for p in item.get("loc", [])], "type": item.get("type")}
                         for item in exc.errors()
                     ],
+                }
+            },
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_error_handler(request: Request, exc: HTTPException):
+        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        return JSONResponse(
+            status_code=exc.status_code,
+            headers=exc.headers,
+            content={
+                "error": {
+                    "code": str(detail.get("code", "http_error")),
+                    "message": str(detail.get("message", "The request could not be completed.")),
                 }
             },
         )
