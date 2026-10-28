@@ -33,7 +33,7 @@ class EvaluationRequest(BaseModel):
 class TechniqueResult(BaseModel):
     model_config = ConfigDict(extra="allow")
     technique: str
-    status: str | None = None
+    status: str |    input_payload: Any |    rule_trace: Any |    assumptions: Any |    evidence_summary: Any | None = None
     score: float | None = None
     eligible: bool | None = None
     reasons: list[str] = Field(default_factory=list)
