@@ -1,6 +1,13 @@
 export type Formation = "Sandstone" | "Carbonate" | "Carbonates" | "Unconsolidated sands";
 export type EvaluationMode = "engineering" | "hybrid";
-export interface ReservoirInputs { depth_ft:number; reservoir_pressure:number; temperature_c:number; visc_cp:number; api:number; perm_md:number; porosity_frac:number; porosity_pct:number; so_pct:number }
+export interface ReservoirInputs {
+ depth_ft:number; reservoir_pressure:number; temperature_c:number; visc_cp:number; api:number; perm_md:number; porosity_frac:number; porosity_pct:number; so_pct:number;
+ salinity_ppm:number; hardness_ppm:number; rock_type:string; net_pay_m:number; heterogeneity:string; gas_availability:string; oxygen_present:string;
+ ooip_mmstb:number; base_rf_pct:number; drive_mechanism:string; drive_multiplier:number; co2_availability:string; mmp_satisfied:string; waterflood_history:string;
+ water_cut_pct:number; field_maturity:string; maturity_factor:number; mobility_ratio:string; adsorption_risk:string; water_handling:string; offshore:string;
+ water_injection_facilities:string; gas_injection_facilities:string; wag_ratio:string; gas_injectivity:string; water_injectivity:string; gravity_override_risk:string;
+ hc_gas_availability:string; produced_gor_category:string; gas_reinjectable:string; produced_gor_scf_stb:number|null; sorw_pct:number|null
+}
 export interface EvaluationRequest { field_id?:string; formation:Formation; inputs:ReservoirInputs; include_probabilities:boolean }
 export interface EvaluationResponse { run_id:string; mode:EvaluationMode; field_id?:string|null; formation:string; screening:Record<string,unknown>; hybrid?:Record<string,unknown>|null; model?:Record<string,unknown>|null; history?:Record<string,unknown>|null }
 export interface HistoryRecord { id:number; timestamp?:string|null; formation?:string|null; status?:string|null; recommended_technique?:string|null; recommendation_status?:string|null; recommendation_score?:number|null; recommendation_mode?:string|null; user?:string|null }

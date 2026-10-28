@@ -31,6 +31,7 @@ env:
   EOR_FRONTEND_URL: http://127.0.0.1:5173
   EOR_API_URL: http://127.0.0.1:8000
   EOR_TEST_OIDC_URL: http://127.0.0.1:8081
+  EOR_APPROVED_EXPECTED_PATH: /tmp/eor-approved-legacy-results.json
 
 jobs:
   live-browser-api:
@@ -53,6 +54,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
           python -m pip install -e "backend[test]"
+      - name: Export legacy expectations for approved-case parity (if supplied)
+        run: python tests/e2e_support/export_legacy_parity.py --output /tmp/eor-approved-legacy-results.json
       - name: Install frontend and browser-test dependencies
         working-directory: frontend
         run: |
