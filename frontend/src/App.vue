@@ -146,7 +146,7 @@ function toggleGor(available:boolean){if(available){if(inputs.produced_gor_scf_s
       <div class="formfoot"><label class="check"><input v-model="includeProbabilities" type="checkbox"/> Show illustrative model details</label><button class="button primary" type="submit" :disabled="busy">{{busy?'Evaluating…':view==='hybrid'?'Run hybrid evaluation':'Run engineering screening'}} ↗</button></div>
      </form><p class="disclaimer">Prefilled values are illustrative test inputs, not approved reservoir data or validated golden cases.</p>
     </section>
-    <div v-if="errorMessage" class="notice error" role="alert"><b>Evaluation could not be completed</b><p>{{errorMessage}}</p><small v-if="correlationId">Correlation ID: {{correlationId}}</small></div>
+    <div v-if="errorMessage" class="notice error" role="alert"><b>Could not continue</b><p>{{errorMessage}}</p></div>
     <template v-if="result">
      <div class="notice info mock-output-note" role="status"><b>Demonstration output only</b><p>Every score, status, ranking and model detail below is synthetic UI data. No engineering rules or ML model ran, and these values must not be used for reservoir decisions.</p></div>
      <div class="summary"><div><small>RUN ID</small><b class="mono">{{result.run_id}}</b></div><div><small>MODE</small><b>{{result.mode}}</b></div><div><small>FORMATION</small><b>{{result.formation}}</b></div><div><small>PERSISTENCE</small><b>Not saved</b></div></div>
