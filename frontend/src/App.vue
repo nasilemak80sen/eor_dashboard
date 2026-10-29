@@ -162,7 +162,7 @@ function toggleGor(available:boolean){if(available){if(inputs.produced_gor_scf_s
     <div v-if="historyError" class="notice warning">{{historyError}}</div><p v-else-if="historyBusy" class="empty">Loading history…</p><p v-else-if="!historyRows.length" class="empty">No example rows are loaded. Refresh to show the synthetic history fixtures.</p>
     <div v-else class="tablewrap"><table><thead><tr><th>Run</th><th>Timestamp</th><th>Formation</th><th>Technique</th><th>Status</th><th>Score</th><th>Mode</th></tr></thead><tbody><tr v-for="r in historyRows" :key="r.id"><td class="mono">#{{r.id}}</td><td>{{r.timestamp||'Not recorded'}}</td><td>{{r.formation||'—'}}</td><td>{{r.recommended_technique||'—'}}</td><td>{{r.recommendation_status||r.status||'—'}}</td><td>{{typeof r.recommendation_score==='number'?r.recommendation_score.toFixed(1)+'%':'—'}}</td><td>{{r.recommendation_mode||'—'}}</td></tr></tbody></table></div>
    </section>
-   <footer><span>ENGINEERING-FIRST DECISION SUPPORT</span><span>Vue 3 · TypeScript · FastAPI</span></footer>
+   <footer><span>ENGINEERING-FIRST WORKFLOW CONCEPT</span><span>Vue 3 · TypeScript · Local POC · No API</span></footer>
   </main>
  </div>
 </div>
