@@ -61,6 +61,7 @@ def main() -> None:
     services = atlas._safe_services()
     page = atlas.select_page(atlas._system_state(services))
     atlas.render_shell_header()
+    st.info("UI/UX POC · Local account login · Streamlit uses the existing Python services on submit; new screening and hybrid results remain in session memory and are not written to the engineering history database.", icon="🧪")
     kicker, title, subtitle = atlas.PAGE_META.get(page, atlas.PAGE_META["overview"])
     atlas.render_page_intro(kicker, title, subtitle)
     if page == "historical":
