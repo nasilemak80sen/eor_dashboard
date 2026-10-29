@@ -164,6 +164,15 @@ def render_auth_gate() -> str | None:
     users = list_local_users()
     st.markdown(
         """
+        <style>
+          .poc-login-hero{max-width:760px;padding:2.1rem 2.2rem;margin:0 0 1.25rem;border:1px solid #d8e7e8;border-radius:22px;background:linear-gradient(130deg,#fff 0%,#eef8f6 68%,#f5f8fc 100%);box-shadow:0 14px 40px rgba(16,44,54,.06)}
+          .poc-login-mark{display:grid;place-items:center;width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#00a19c,#bfd730);color:#fff;font-weight:800;font-size:1.2rem;box-shadow:0 8px 22px rgba(0,161,156,.2)}
+          .poc-login-kicker{margin:1.1rem 0 .45rem;color:#087e7a;font-size:.68rem;font-weight:800;letter-spacing:.13em}
+          .poc-login-hero h1{margin:0;color:#142d35;font-size:clamp(1.8rem,4vw,2.7rem);line-height:1.08;letter-spacing:-.04em}
+          .poc-login-hero p:last-child{max-width:570px;margin:.8rem 0 0;color:#61727b;line-height:1.6}
+          div[data-testid="stForm"]{padding:1rem;border:1px solid #e2e9ed;border-radius:15px;background:#fff}
+          @media(max-width:700px){.poc-login-hero{padding:1.4rem;border-radius:16px}}
+        </style>
         <div class="poc-login-hero">
           <div class="poc-login-mark">EA</div>
           <p class="poc-login-kicker">EOR ATLAS · UI/UX PROOF OF CONCEPT</p>
