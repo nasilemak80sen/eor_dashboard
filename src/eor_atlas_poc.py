@@ -18,6 +18,24 @@ from auth.local_auth import logout_local_user, render_auth_gate
 from config.settings import settings
 
 
+def _render_poc_history() -> None:
+    """Show sample history without opening or migrating the engineering database."""
+    st.subheader("Example run history")
+    st.caption("Synthetic records are shown to design the read-only history experience. This page does not query or write the engineering history database.")
+    st.info("Sample data only · not real reservoir cases · no new records are created.")
+    st.dataframe(
+        [
+            {"Run ID": "POC-1001", "Timestamp": "2026-10-20 09:15", "Formation": "Sandstone", "Mode": "Engineering", "Example technique": "Polymer", "Status": "SYNTHETIC"},
+            {"Run ID": "POC-1002", "Timestamp": "2026-10-18 14:40", "Formation": "Carbonate", "Mode": "Hybrid", "Example technique": "Miscible CO2", "Status": "SYNTHETIC"},
+            {"Run ID": "POC-1003", "Timestamp": "2026-10-14 11:05", "Formation": "Unconsolidated sands", "Mode": "Engineering", "Example technique": "Steam", "Status": "SYNTHETIC"},
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
+    with st.expander("History workflow notes"):
+        st.markdown("- Existing records are viewed only.\n- New screening submissions remain in session memory.\n- Enterprise history/API integration is intentionally out of scope for this POC.")
+
+
 def main() -> None:
     st.set_page_config(
         page_title="EOR Atlas · UI/UX POC",
@@ -45,7 +63,10 @@ def main() -> None:
     atlas.render_shell_header()
     kicker, title, subtitle = atlas.PAGE_META.get(page, atlas.PAGE_META["overview"])
     atlas.render_page_intro(kicker, title, subtitle)
-    atlas._render_page(page, services)
+    if page == "historical":
+        _render_poc_history()
+    else:
+        atlas._render_page(page, services)
 
 
 if __name__ == "__main__":
