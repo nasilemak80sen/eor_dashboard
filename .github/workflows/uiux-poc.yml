@@ -17,6 +17,7 @@ on:
       - "src/pages_ui/intelligence.py"
       - "src/pages_ui/historical.py"
       - "tests/test_local_auth_poc.py"
+      - "tests/test_uiux_poc_boundaries.py"
       - ".github/workflows/uiux-poc.yml"
   workflow_dispatch:
 
@@ -38,7 +39,7 @@ jobs:
       - name: Test local SQLite POC authentication and Streamlit UI boundaries
         env:
           PYTHONPATH: src
-        run: python -m pytest -q tests/test_local_auth_poc.py tests/test_ui_shell.py
+        run: python -m pytest -q tests/test_local_auth_poc.py tests/test_uiux_poc_boundaries.py tests/test_ui_shell.py
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
