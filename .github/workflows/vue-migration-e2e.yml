@@ -60,7 +60,7 @@ jobs:
         working-directory: frontend
         run: |
           npm install --no-audit --no-fund
-          npx playwright install --with-deps chromium
+          node ./node_modules/playwright/cli.js install --with-deps chromium
       - name: Start ephemeral OIDC issuer, FastAPI and Vue dev server
         run: |
           nohup python tests/e2e_support/mock_oidc.py >/tmp/eor-oidc.log 2>&1 &
