@@ -31,7 +31,7 @@ test("Hybrid Intelligence and history are clearly labelled as synthetic", async 
   await page.getByRole("button", { name: /Run history/ }).click();
   await expect(page.getByRole("heading", { name: "Example run history" })).toBeVisible();
   await expect(page.getByText("synthetic fixtures", { exact: false })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "POC-1001" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "#1001" })).toBeVisible();
 });
 
 test("Advanced reservoir context remains available on narrow screens", async ({ page }) => {
