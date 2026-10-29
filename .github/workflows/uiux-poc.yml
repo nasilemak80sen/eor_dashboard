@@ -6,6 +6,7 @@ on:
       - feat/uiux-poc-streamlit-vue
   pull_request:
     branches:
+      - feat/vue-migration-phases-0-4
       - fix/openglobus-restore-after-revert
       - main
     paths:
