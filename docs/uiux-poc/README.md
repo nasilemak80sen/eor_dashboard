@@ -2,7 +2,7 @@
 
 ## Decision and scope
 
-This branch (`feat/uiux-poc-streamlit-vue`) prioritises interface design and workflow discovery. FastAPI is not part of the POC run path: Vue has no HTTP client, and the POC run instructions and CI do not start or install the API. The pre-existing `backend/` files are parked as inactive reference only; the separate migration branch preserves the API work for a future Enterprise Digital Team handoff.
+This branch (`feat/uiux-poc-streamlit-vue`) prioritises interface design and workflow discovery. FastAPI is removed from this POC branch: Vue has no HTTP client, and the POC run instructions and CI do not start or install the API. The original API implementation remains intact on `feat/vue-migration-phases-0-4` for the Enterprise Digital Team handoff.
 
 The POC contains two intentionally different experiences:
 
