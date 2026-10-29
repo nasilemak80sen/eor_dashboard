@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any, Dict
 
 import pandas as pd
@@ -219,7 +220,10 @@ def _render_historical_eor_reference_section() -> None:
         "TITLE: YEAR 2000 IOR/EOR SCREENING FOR MALAYSIA'S OIL PRODUCING FIELDS · YEAR: 2001."
     )
     st.link_button("📄 ACCESS PAPER HERE", PAPER_URL, use_container_width=True)
-    _render_manual_study_entry()
+    if os.environ.get("EOR_POC_MODE") == "1":
+        st.caption("In the UI/UX POC, historical references are read-only. New engineering records and manual entries are disabled.")
+    else:
+        _render_manual_study_entry()
 
 
 def _render_register(records: list[Dict[str, Any]]) -> int | None:
