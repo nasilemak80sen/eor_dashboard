@@ -21,6 +21,7 @@ import streamlit as st
 
 import app_2 as _app
 from ml.hybrid_intelligence import HybridDecisionService, build_opportunity_context
+from services.hybrid_evaluation import EORAtlasExecutionService, _build_legacy_catboost_input
 
 logger = logging.getLogger("hybrid_app")
 
@@ -318,107 +319,9 @@ def render_eor_input_form(prefix: str) -> Tuple[Dict[str, Any], str]:
 # Hybrid decision execution and result rendering
 # -----------------------------------------------------------------------------
 
-def _build_legacy_catboost_input(values: Dict[str, Any], formation: str) -> Dict[str, Any]:
-    """Build the exact range-based input expected by the current v1 CatBoost artifact."""
-    formation_map = {
-        "Sandstone": "Sandstone",
-        "Carbonate": "Carbonates",
-        "Carbonates": "Carbonates",
-        "Unconsolidated sands": "Unconsolidated sands",
-    }
-    mapped = formation_map.get(formation)
-    if mapped is None:
-        raise ValueError(f"Unsupported formation: {formation}")
-
-    required = ["depth_ft", "porosity_pct", "perm_md", "api", "visc_cp", "so_pct"]
-    missing = [key for key in required if values.get(key) is None]
-    if missing:
-        raise KeyError(f"Missing CatBoost inputs: {missing}")
-
-    def positive(key: str) -> float:
-        value = float(values[key])
-        if value <= 0:
-            raise ValueError(f"{key} must be greater than zero.")
-        return value
-
-    depth = positive("depth_ft")
-    porosity = float(values["porosity_pct"])
-    permeability = positive("perm_md")
-    api = float(values["api"])
-    viscosity = positive("visc_cp")
-    oil_saturation = float(values["so_pct"])
-
-    if not 0 <= porosity <= 100:
-        raise ValueError("Porosity must be between 0 and 100%.")
-    if not 0 <= api <= 100:
-        raise ValueError("API gravity must be between 0 and 100°.")
-    if not 0 <= oil_saturation <= 100:
-        raise ValueError("Oil saturation must be between 0 and 100%.")
-
-    return {
-        "depth_min_ft": depth,
-        "depth_max_ft": depth,
-        "porosity_min_pct": porosity,
-        "porosity_max_pct": porosity,
-        "perm_min_md": permeability,
-        "perm_max_md": permeability,
-        "api_min": api,
-        "api_max": api,
-        "visc_min_cp": viscosity,
-        "visc_max_cp": viscosity,
-        "so_min_pct": oil_saturation,
-        "so_max_pct": oil_saturation,
-        "formation_category": mapped,
-    }
-
-
 def run_eor_intelligence(services: Dict[str, Any], values: Dict[str, Any], formation: str) -> Dict[str, Any]:
-    """Run Excel Gate -> CatBoost -> Decision Fusion."""
-    screening_result = _app.ExcelScreeningService().screen(values, formation)
-    model_service = services.get("model_service")
-    if model_service is None:
-        raise RuntimeError("CatBoost model service is unavailable.")
-
-    ml_available = False
-    ml_probabilities: Dict[str, float] = {}
-    ml_top3 = []
-    model_info: Dict[str, Any] = {}
-    ml_error: Optional[str] = None
-
-    try:
-        ml_available = bool(model_service.is_loaded())
-        if ml_available:
-            prediction = model_service.predict(_build_legacy_catboost_input(values, formation))
-            if not prediction.success:
-                raise RuntimeError(prediction.warning or "CatBoost prediction failed.")
-            ml_top3 = list(prediction.top_n(3))
-            ml_probabilities = {
-                str(candidate.technique): float(candidate.probability)
-                for candidate in prediction.candidates
-            }
-            model_info = model_service.get_model_info()
-    except Exception as exc:
-        ml_available = False
-        ml_error = str(exc)
-
-    hybrid = HybridDecisionService().fuse(
-        screening_result,
-        ml_probabilities,
-        top_n=3,
-        opportunity_context=build_opportunity_context(values),
-    )
-
-    return {
-        "formation": formation,
-        "inputs": values,
-        "screening": screening_result,
-        "ml_available": ml_available,
-        "ml_probabilities": ml_probabilities,
-        "ml_top3": ml_top3,
-        "ml_error": ml_error,
-        "model_info": model_info,
-        "hybrid": hybrid,
-    }
+    """Compatibility wrapper around the shared UI-independent execution service."""
+    return EORAtlasExecutionService(model_service=services.get("model_service")).hybrid(dict(values), formation)
 
 
 def _run_intelligence_from_current_inputs(services: Dict[str, Any], inputs: Dict[str, Any], formation: str) -> None:
