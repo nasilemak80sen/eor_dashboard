@@ -2,7 +2,7 @@
 
 ## Decision and scope
 
-This branch (`feat/uiux-poc-streamlit-vue`) prioritises interface design and workflow discovery. FastAPI is not part of the POC run path. The earlier FastAPI implementation is left on the separate migration branch for a future Enterprise Digital Team handoff.
+This branch (`feat/uiux-poc-streamlit-vue`) prioritises interface design and workflow discovery. FastAPI is not part of the POC run path: Vue has no HTTP client, and the POC run instructions and CI do not start or install the API. The pre-existing `backend/` files are parked as inactive reference only; the separate migration branch preserves the API work for a future Enterprise Digital Team handoff.
 
 The POC contains two intentionally different experiences:
 
@@ -68,7 +68,7 @@ Python auth and UI-shell checks from the repository root:
 
 ```powershell
 $env:PYTHONPATH = (Join-Path (Get-Location) "src")
-python -m pytest -q tests/test_local_auth_poc.py tests/test_ui_shell.py
+python -m pytest -q tests/test_local_auth_poc.py tests/test_uiux_poc_boundaries.py tests/test_ui_shell.py
 ```
 
 On a company network, use the approved proxy/CA configuration if Chromium download fails due to TLS certificate trust. Do not disable TLS verification.
