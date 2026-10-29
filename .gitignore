@@ -1,0 +1,17 @@
+# Local-only proof-of-concept credentials and scratch data
+.local/
+*.sqlite3
+*.sqlite
+*.db-wal
+*.db-shm
+
+# JavaScript build artefacts
+frontend/dist/
+frontend/node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/

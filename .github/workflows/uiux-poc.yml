@@ -1,0 +1,66 @@
+name: EOR Atlas UIUX proof of concept
+
+on:
+  push:
+    branches:
+      - feat/uiux-poc-streamlit-vue
+  pull_request:
+    branches:
+      - feat/vue-migration-phases-0-4
+      - fix/openglobus-restore-after-revert
+      - main
+    paths:
+      - "frontend/**"
+      - "src/auth/**"
+      - "src/eor_atlas_poc.py"
+      - "src/pages_ui/screening.py"
+      - "src/pages_ui/intelligence.py"
+      - "src/pages_ui/historical.py"
+      - "tests/test_local_auth_poc.py"
+      - "tests/test_uiux_poc_boundaries.py"
+      - ".github/workflows/uiux-poc.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  uiux-poc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install lightweight test runner
+        run: python -m pip install pytest
+      - name: Compile the Streamlit POC entrypoint and guarded UI pages
+        run: |
+          python -m py_compile \
+            src/auth/local_auth.py \
+            src/eor_atlas_poc.py \
+            src/pages_ui/screening.py \
+            src/pages_ui/intelligence.py \
+            src/pages_ui/historical.py
+      - name: Test local SQLite POC authentication and Streamlit UI boundaries
+        env:
+          PYTHONPATH: src
+        run: python -m pytest -q tests/test_local_auth_poc.py tests/test_uiux_poc_boundaries.py tests/test_ui_shell.py
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Type-check and build Vue
+        working-directory: frontend
+        run: npm run build
+      - name: Install Chromium for UI-only browser tests
+        working-directory: frontend
+        run: node ./node_modules/playwright/cli.js install --with-deps chromium
+      - name: Verify Vue workflows without FastAPI
+        working-directory: frontend
+        run: npm run test:e2e

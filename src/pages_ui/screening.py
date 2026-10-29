@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import streamlit as st
 
 from data.screening_history import persist_engineering_run
@@ -26,13 +28,14 @@ def _screening_summary(result: dict | None) -> tuple[str, str, list[tuple[str, o
 
 
 def render() -> None:
+    poc_mode = os.environ.get("EOR_POC_MODE") == "1"
     import app_2 as _app
     import hybrid_app as _hybrid
 
     insight_cards([
         ("01 · INPUT", "Define the reservoir", "Enter the complete ScreenTool v3 reservoir and operating context."),
         ("02 · GATE", "Test feasibility", "Submit the completed form once; the deterministic gate evaluates every EOR technique."),
-        ("03 · RECORD", "Create a report card", "Every submitted screening is saved with its exact inputs and engineering decision trace."),
+        ("03 · POC" if poc_mode else "03 · RECORD", "Session-only result" if poc_mode else "Create a report card", "No engineering records are written in the UI/UX POC." if poc_mode else "Every submitted screening is saved with its exact inputs and engineering decision trace."),
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
@@ -43,7 +46,7 @@ def render() -> None:
         ("Workflow", status, "Current page state"),
         ("Primary input", "Current So", "Core screening parameter"),
         ("Decision rule", "Excel Gate", "Deterministic engineering layer"),
-        ("Report Card", last_run.get("reference", "Not saved") if last_run else "Not saved", "Persistent screening record"),
+        ("Run storage", "Session only" if poc_mode else (last_run.get("reference", "Not saved") if last_run else "Not saved"), "No history writes in POC" if poc_mode else "Persistent screening record"),
     ])
 
     inputs_tab, result_tab = st.tabs(["Reservoir Inputs", "Engineering Gate"])
@@ -63,7 +66,7 @@ def render() -> None:
         )
         with st.form("screening_reservoir_form", clear_on_submit=False):
             inputs, formation = _hybrid.render_eor_input_form("screening")
-            st.caption("Complete the form, then submit once to run and save the Engineering Gate.")
+            st.caption("Complete the form, then submit once to preview the Engineering Gate. " + ("This POC does not write the result to the history database." if poc_mode else "The result is saved to history."))
             submitted = st.form_submit_button(
                 "🚀 Run EOR Screening",
                 type="primary",
@@ -73,14 +76,18 @@ def render() -> None:
             try:
                 result = _app.ExcelScreeningService().screen(inputs, formation)
                 st.session_state["excel_screening_result"] = result
-                st.session_state["screening_last_run"] = persist_engineering_run(inputs, formation, result)
-                st.toast(
-                    f"Screening saved as {st.session_state['screening_last_run']['reference']}",
-                    icon="✅",
-                )
+                if poc_mode:
+                    st.session_state["screening_last_run"] = None
+                    st.toast("POC result is held in this session only; no history database was written.", icon="🧪")
+                else:
+                    st.session_state["screening_last_run"] = persist_engineering_run(inputs, formation, result)
+                    st.toast(
+                        f"Screening saved as {st.session_state['screening_last_run']['reference']}",
+                        icon="✅",
+                    )
             except Exception:
                 _app.logger.exception("EOR Screening failed.")
-                st.error("The engineering screening could not be completed or saved. Check the entered values.")
+                st.error("The engineering screening could not be completed. Check the entered values.")
 
     result = st.session_state.get("excel_screening_result")
     with result_tab:
@@ -96,12 +103,12 @@ def render() -> None:
         )
         section_title(
             "Engineering Gate Result",
-            "This deterministic result is the engineering anchor for the downstream hybrid decision path and is now persisted for audit/history.",
+            ("This is a deterministic engineering result held in the current session. It is not persisted in the UI/UX POC." if poc_mode else "This deterministic result is the engineering anchor for the downstream hybrid decision path and is now persisted for audit/history."),
         )
         if last_run := st.session_state.get("screening_last_run"):
             st.caption(f"Saved report card: **{last_run['reference']}**")
         with st.expander("Re-run / change inputs", expanded=False):
-            st.caption("Return to Reservoir Inputs, change the reservoir context, and submit the gate again. A new report card will be created.")
+            st.caption("Return to Reservoir Inputs, change the reservoir context, and submit the gate again. " + ("The result remains session-only." if poc_mode else "A new report card will be created."))
         try:
             _app.render_excel_screening_result(result)
         except Exception as exc:
