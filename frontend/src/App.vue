@@ -102,29 +102,38 @@ onMounted(()=>{void checkApi();});
  <header class="topbar"><a class="brand" href="#" @click.prevent="choose('screening')"><span class="mark">EA</span><span><b>EOR Atlas</b><small>ENGINEERING DECISION SUPPORT</small></span></a><div class="topright"><span class="pill" :class="apiLive"><i></i>API {{apiLive}}</span><span class="environment">VUE PREVIEW</span></div></header>
  <div class="layout">
   <aside class="sidebar"><p class="eyebrow">WORKSPACE</p>
-   <button class="nav" :class="{active:view==='screening'}" @click="choose('screening')">01&nbsp; Engineering screening</button>
-   <button class="nav" :class="{active:view==='hybrid'}" @click="choose('hybrid')">02&nbsp; Hybrid intelligence</button>
-   <button class="nav" :class="{active:view==='history'}" @click="choose('history')">03&nbsp; Run history</button>
+   <button class="nav" :class="{active:view==='screening'}" :aria-current="view==='screening'?'page':undefined" @click="choose('screening')">01&nbsp; Engineering screening</button>
+   <button class="nav" :class="{active:view==='hybrid'}" :aria-current="view==='hybrid'?'page':undefined" @click="choose('hybrid')">02&nbsp; Hybrid intelligence</button>
+   <button class="nav" :class="{active:view==='history'}" :aria-current="view==='history'?'page':undefined" @click="choose('history')">03&nbsp; Run history</button>
    <div class="guardrail"><b>Engineering-first</b><p>Hard engineering exclusions remain authoritative. ML confidence cannot reverse a failed engineering gate.</p></div>
    <div class="connection"><label for="apiurl">API base URL</label><input id="apiurl" :value="defaultApiBase" readonly/><label for="token">Bearer token <small>optional in development</small></label><textarea id="token" v-model="token" rows="3" autocomplete="off" spellcheck="false" placeholder="Paste a development token if required"></textarea><p>Token remains in page memory only and is not saved to browser storage.</p><button class="button quiet full" @click="checkApi">Check connection</button></div>
   </aside>
   <main class="content">
    <div class="heading"><div><p class="eyebrow">EOR ATLAS / {{view.toUpperCase()}}</p><h1>{{title}}</h1><p class="subtitle">{{subtitle}}</p></div><span class="phase">PHASES 5–6</span></div>
+   <section class="workspace-overview" aria-label="Workflow principles">
+    <div class="overview-item"><span class="overview-mark">01</span><div><b>Engineering gate first</b><p>Hard exclusions stay authoritative.</p></div></div>
+    <div class="overview-item"><span class="overview-mark">02</span><div><b>Evidence, not autopilot</b><p>Review returned evidence before acting.</p></div></div>
+    <div class="overview-item"><span class="overview-mark">03</span><div><b>Read-only pilot</b><p>This migration does not save new runs.</p></div></div>
+   </section>
    <div v-if="apiLive==='offline'" class="notice warning"><b>API unreachable</b><p>Start FastAPI and confirm the backend URL and CORS allow-list.</p></div>
    <div v-if="apiLive==='online'&&!health" class="notice info">The API responds, but readiness could not be confirmed. Protected endpoints may require a valid bearer token.</div>
    <div v-if="health?.ready" class="readiness">● Engine ready <span>Workbook {{health.workbook_ready?'ready':'not confirmed'}}</span><span>Model {{health.model_ready?'ready':'not confirmed'}}</span></div>
    <template v-if="view!=='history'">
     <section class="panel"><div class="panelhead"><div><h2>Reservoir profile</h2><p>Evaluate a profile through the existing Python API.</p></div><small>INPUTS / 01</small></div>
+     <div class="profile-banner"><span class="banner-icon">i</span><div><b>Illustrative starter profile</b><p>These prefilled values are for interface exploration only. Replace them with approved inputs for controlled testing.</p></div><span class="banner-tag">EDITABLE</span></div>
      <form novalidate @submit.prevent="evaluate(view==='hybrid'?'hybrid':'engineering')">
       <div class="field wide"><label for="fieldid">Field / asset identifier <small>optional</small></label><input id="fieldid" v-model="fieldId" maxlength="200" placeholder="Internal asset reference"/></div>
       <div class="field formation"><label for="formation">Formation</label><select id="formation" v-model="formation"><option>Sandstone</option><option>Carbonate</option><option>Carbonates</option><option>Unconsolidated sands</option></select></div>
+      <div class="section-title"><span>01</span><div><h3>Reservoir fundamentals</h3><p>Core rock, fluid and saturation properties used by screening.</p></div></div>
       <div class="fields"><div v-for="f in fields" :key="f.key" class="field"><label :for="f.key">{{f.label}} <small>{{f.unit}}</small></label><input :id="f.key" v-model.number="inputs[f.key]" type="number" :min="f.min" :max="f.max" :step="f.step" required @input="f.key==='porosity_frac'&&syncPorosityPercent()"/></div></div>
       <p class="field-help">Porosity percentage is calculated from the fraction. The API receives both fields to maintain the existing contract.</p>
       <details class="advanced-panel">
        <summary>Engineering context, recovery and injection conditions</summary>
        <p class="field-help">These inputs mirror the existing Streamlit v3 form. Drive multiplier and maturity factor are derived from the selected categories.</p>
        <div class="fields advanced-fields">
+        <div class="advanced-group-label"><span>Fluid, recovery and water quality</span><small>NUMERIC INPUTS</small></div>
         <div v-for="f in advancedNumericFields" :key="f.key" class="field"><label :for="f.key">{{f.label}} <small>{{f.unit}}</small></label><input :id="f.key" v-model.number="inputs[f.key]" type="number" :min="f.min" :max="f.max" :step="f.step"/></div>
+        <div class="advanced-group-label"><span>Reservoir setting and injection facilities</span><small>SCREENING CONTEXT</small></div>
         <div v-for="f in advancedSelectFields" :key="f.key" class="field"><label :for="f.key">{{f.label}}</label><select :id="f.key" v-model="inputs[f.key]"><option v-for="option in f.options" :key="option" :value="option">{{option}}</option></select></div>
        </div>
        <div class="derived-factors"><span>Drive multiplier <b>{{inputs.drive_multiplier.toFixed(2)}}</b></span><span>Maturity factor <b>{{inputs.maturity_factor.toFixed(2)}}</b></span></div>
