@@ -38,6 +38,6 @@ test("Advanced reservoir context remains available on narrow screens", async ({ 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByText("Engineering context, recovery and injection conditions").click();
-  await expect(page.getByLabel("Salinity (TDS)")).toBeVisible();
+  await expect(page.getByLabel(/Salinity \(TDS\)/)).toBeVisible();
   await expect(page.getByRole("button", { name: /Run engineering screening/ })).toBeVisible();
 });
