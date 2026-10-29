@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import streamlit as st
 
 from data.screening_history import persist_hybrid_run
@@ -26,12 +28,13 @@ def _hybrid_summary(result: dict | None) -> tuple[str, str, list[tuple[str, obje
 
 
 def render(services: dict) -> None:
+    poc_mode = os.environ.get("EOR_POC_MODE") == "1"
     import hybrid_app as _hybrid
 
     insight_cards([
         ("01 · GATE", "Engineering anchor", "Hard engineering failures remain excluded before ML contributes to the recommendation."),
         ("02 · MODEL", "CatBoost signal", "The active model contributes a data-driven technique probability after the form is submitted."),
-        ("03 · RECORD", "Decision history", "Engineering, CatBoost and Hybrid recommendations are stored together as an auditable report card."),
+        ("03 · POC" if poc_mode else "03 · RECORD", "Session-only result" if poc_mode else "Decision history", "The POC does not write engineering, model or hybrid results to the history database." if poc_mode else "Engineering, CatBoost and Hybrid recommendations are stored together as an auditable report card."),
     ])
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
@@ -41,7 +44,7 @@ def render(services: dict) -> None:
         ("Workflow", "Result available" if result else "Awaiting run", "Current page state"),
         ("Engineering", "Excel Gate", "Deterministic anchor"),
         ("Model", "CatBoost", "Data-driven signal"),
-        ("Report Card", last_run.get("reference", "Not saved") if last_run else "Not saved", "Persistent hybrid record"),
+        ("Run storage", "Session only" if poc_mode else (last_run.get("reference", "Not saved") if last_run else "Not saved"), "No history writes in POC" if poc_mode else "Persistent hybrid record"),
     ])
 
     input_tab, decision_tab = st.tabs(["Reservoir Inputs", "Hybrid Decision"])
@@ -61,7 +64,7 @@ def render(services: dict) -> None:
         )
         with st.form("hybrid_reservoir_form", clear_on_submit=False):
             inputs, formation = _hybrid.render_eor_input_form("intel")
-            st.caption("Complete the reservoir context, then submit once to run and save Excel Gate → CatBoost → Decision Fusion.")
+            st.caption("Complete the reservoir context, then submit once to preview Excel Gate → CatBoost → Decision Fusion. " + ("No result is written to history in the UI/UX POC." if poc_mode else "The decision is saved as a report card."))
             submitted = st.form_submit_button(
                 "🧠 Run Hybrid Intelligence",
                 type="primary",
@@ -72,13 +75,17 @@ def render(services: dict) -> None:
                 _hybrid._run_intelligence_from_current_inputs(services, inputs, formation)
                 result = st.session_state.get("eor_intelligence_result")
                 if result:
-                    st.session_state["intelligence_last_run"] = persist_hybrid_run(result)
-                    st.toast(
-                        f"Hybrid screening saved as {st.session_state['intelligence_last_run']['reference']}",
-                        icon="🧠",
-                    )
+                    if poc_mode:
+                        st.session_state["intelligence_last_run"] = None
+                        st.toast("POC result is held in this session only; no history database was written.", icon="🧪")
+                    else:
+                        st.session_state["intelligence_last_run"] = persist_hybrid_run(result)
+                        st.toast(
+                            f"Hybrid screening saved as {st.session_state['intelligence_last_run']['reference']}",
+                            icon="🧠",
+                        )
             except Exception as exc:
-                st.error(f"Hybrid intelligence could not be completed or saved: {exc}")
+                st.error(f"Hybrid intelligence could not be completed: {exc}")
 
     result = st.session_state.get("eor_intelligence_result")
     with decision_tab:
@@ -94,7 +101,7 @@ def render(services: dict) -> None:
         )
         section_title(
             "Decision Result",
-            "Read the recommendation together with the gate status and model context — not as a standalone ML prediction.",
+            ("Read the recommendation together with the gate status and model context. This session-only POC is not a validated production recommendation." if poc_mode else "Read the recommendation together with the gate status and model context — not as a standalone ML prediction."),
         )
         if last_run := st.session_state.get("intelligence_last_run"):
             st.caption(f"Saved report card: **{last_run['reference']}**")
