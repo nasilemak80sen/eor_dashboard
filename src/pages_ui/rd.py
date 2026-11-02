@@ -142,7 +142,7 @@ def _render_phase_diagram(df: pd.DataFrame) -> None:
     with col1:
         formulation = st.selectbox("Formulation", formulations, index=formulations.index("7") if "7" in formulations else 0, key="rd_phase_formulation")
     with col2:
-        validated_only = st.checkbox("Validated points only", value=True, key="rd_phase_validated")
+        validated_only = st.checkbox("Validated points only", value=False, key="rd_phase_validated")
     work = df[df["Formulation"] == formulation].copy()
     if validated_only:
         work = work[work["Validated"].str.upper() == "Y"]
