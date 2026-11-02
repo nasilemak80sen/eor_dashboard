@@ -109,15 +109,15 @@ def test_ceor_page_uses_repository_loader_not_legacy_app_renderer():
 
 
 def test_r_and_d_page_defines_separate_ceor_and_wag_sources():
-    source = (Path(__file__).resolve().parents[1] / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
     assert "St_Jos CEOR (Shared) (1).xlsx" in source
     assert "Baronia_WAG_Data_EOR_ATLAS 1.xlsx" in source
     assert 'options=["CEOR", "WAG"]' in source
-    assert 'st.tabs(["Fluid–Fluid", "Fluid–Rock"])' in source
+    assert 'options=["Fluid–Fluid", "Fluid–Rock"]' in source
 
 
 def test_ceor_page_has_compact_render_entrypoint():
-    source = (Path(__file__).resolve().parents[1] / "pages_ui" / "ceor.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "src" / "pages_ui" / "ceor.py").read_text(encoding="utf-8")
     assert "def render_compact()" in source
     assert 'st.tabs(["Rheology", "Phase behaviour", "IFT"])' in source
     assert 'st.tabs(["Adsorption", "Core flood", "Sor reduction"])' in source
