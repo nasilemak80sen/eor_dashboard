@@ -244,7 +244,16 @@ def load_ceor_evidence() -> dict[str, Any]:
     project_root = _safe_project_root()
     workbook_path = project_root / WORKBOOK_NAME
     if not workbook_path.is_file():
-        raise FileNotFoundError(f"Repository CEOR workbook not found: {workbook_path}")
+        # Support deployments that retain the legacy laboratory workbook only
+        # in the data directory while the root-level workbook is unavailable.
+        fallback = project_root / "data" / "EOR_Screening_Tool_2026.xlsx"
+        if fallback.is_file():
+            workbook_path = fallback
+        else:
+            raise FileNotFoundError(
+                f"Repository CEOR workbook not found at {workbook_path} "
+                f"or fallback {fallback}"
+            )
 
     xlsx = pd.ExcelFile(workbook_path, engine="openpyxl")
     sheets = list(xlsx.sheet_names)
