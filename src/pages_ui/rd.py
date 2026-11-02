@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from pages_ui.ceor import render as render_legacy_ceor
+from pages_ui.ceor import render as render_legacy_ceor, render_compact
 
 CEOR_WORKBOOK = "data/St_Jos CEOR (Shared) (1).xlsx"
 WAG_WORKBOOK = "data/Baronia_WAG_Data_EOR_ATLAS 1.xlsx"
@@ -62,7 +62,7 @@ def _render_ceor() -> None:
             "The pre-existing CEOR workbook remains available here during the "
             "St. Joseph schema-integration step."
         )
-        render_legacy_ceor()
+        render_compact()
 
 
 def _render_wag() -> None:
