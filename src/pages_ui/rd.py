@@ -1,8 +1,6 @@
 """R&D laboratory page: St. Joseph CEOR and Baronia WAG."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -140,7 +138,7 @@ def _render_phase_diagram(df: pd.DataFrame) -> None:
     formulations = sorted(df["Formulation"].dropna().unique().tolist(), key=str)
     col1, col2 = st.columns([2, 1])
     with col1:
-        formulation = st.selectbox("Formulation", formulations, index=0, key="rd_phase_formulation")
+        formulation = st.selectbox("Formulation", formulations, index=formulations.index("7") if "7" in formulations else 0, key="rd_phase_formulation")
     with col2:
         validated_only = st.checkbox("Validated points only", value=True, key="rd_phase_validated")
     work = df[df["Formulation"] == formulation].copy()
@@ -265,15 +263,15 @@ def _render_adsorption(df: pd.DataFrame) -> None:
         ("Test duration", f"{df['Days'].dropna().iloc[0]:g} days" if df["Days"].notna().any() else "Not stated", "Duration recorded in the source"),
     ])
     fig = px.bar(
-        df, x="Surfactant", y="Adsorption (%)", color="Surfactant",
-        text=df["Adsorption (%)"].map(lambda x: f"{x:.0f}%"),
+        df, y="Surfactant", x="Adsorption (%)", color="Surfactant",
+        orientation="h", text=df["Adsorption (%)"].map(lambda x: f"{x:.0f}%"),
         hover_data=["Sample", "Year", "Days", "Adsorption (mg/g, source note)", "Source note"],
         labels={"Adsorption (%)": "Adsorption ratio (%)"},
         color_discrete_sequence=["#0F9D91", "#D97706"],
     )
     fig.update_layout(
-        height=300, showlegend=False,
-        margin=dict(l=20, r=12, t=18, b=55), template="plotly_white",
+        height=260, showlegend=False,
+        margin=dict(l=20, r=12, t=18, b=42), template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.caption("Only two St. Joseph static-adsorption tests are present. Avoid generalising these results beyond the tested formulations and conditions.")
