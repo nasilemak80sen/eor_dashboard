@@ -121,15 +121,17 @@ class HybridDecisionService:
                     "FAIL (CRITICAL)",
                 }
 
+                # A failed deterministic engineering gate is a hard exclusion,
+                # not merely a zero score that can still appear as the top result.
                 if gate_failed:
-                    hybrid_raw = 0.0
-                else:
-                    hybrid_raw = (
-                        self.weights.ml * probability
-                        + self.weights.engineering * engineering
-                    )
-                    if conditional:
-                        hybrid_raw *= self.weights.conditional_penalty
+                    continue
+
+                hybrid_raw = (
+                    self.weights.ml * probability
+                    + self.weights.engineering * engineering
+                )
+                if conditional:
+                    hybrid_raw *= self.weights.conditional_penalty
 
                 candidates.append(
                     {
@@ -139,7 +141,7 @@ class HybridDecisionService:
                         "Engineering Score": engineering,
                         "Engineering Status": screen_row.get("Status", ""),
                         "Hybrid Score Raw": float(hybrid_raw),
-                        "Gate Failed": gate_failed,
+                        "Gate Failed": False,
                         "Conditional": conditional,
                         "Engineering Reason": screen_row.get("Cause of Fail/Pass", ""),
                     }

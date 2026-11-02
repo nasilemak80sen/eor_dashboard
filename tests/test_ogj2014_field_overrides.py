@@ -78,6 +78,72 @@ def test_table_e_projects_are_not_misclassified_as_fields():
         assert reason.startswith(("source_verified:", "source_project_span"))
 
 
+def test_table_e_field_parser_uses_explicit_pdf_field_column():
+    examples = {
+        "Bahia Petrobras CO2 immiscible Buracica 1991 1,670 7 Sergi S 22": "Buracica",
+        "Bahia Petrobras CO2 miscible Rio Pojuca 1999 1 Agua Grande S": "Rio Pojuca",
+        "Brazil Petrobras Microbial Carmopolis 6/02 45 10 Carmopolis S/Congl. 17": "Carmopolis",
+        "Espirito Santo Petrobras Steam Fazenda Alegre 2001 1,255 59 Urucutuca S 27": "Fazenda Alegre",
+        "Bentheim Wintershall Holding AG Steam Emlichheim, Block 1 7/07 55 8 1 Valanginian US 30": "Emlichheim, Block 1",
+        "miscible Magnus 10/02 10,700 16 4 150 S 20": "Magnus",
+        "Parrylands New Horizon Steam Block E 7/01 744 6 Forest Sands S 36": "Block E",
+        "Maturin, Campo Mulata PDVSA E&P HC miscible Carito Central 12/96 12,000 45 10 Naricual S": "Carito Central",
+    }
+    for raw_line, expected in examples.items():
+        field, context, reason = provenance.parse_table_e_field(raw_line)
+        assert field == expected, (raw_line, field, context, reason)
+        assert context
+        assert reason.startswith(("source_verified:", "source_project_span"))
+
+
+def test_salt_creek_same_name_is_not_merged_across_operator_and_geography():
+    anadarko, anadarko_reason, anadarko_geo = provenance.parse_field(
+        "Anadarko Salt Creek Wyo. Natrona 10/05 5 4 1 Wall Creek 1 (Frontier) S 17"
+    )
+    occidental, occidental_reason, occidental_geo = provenance.parse_field(
+        "Occidental Salt Creek Tex. Kent 10/93 12,000 168 145 Canyon LS 20"
+    )
+    assert anadarko == occidental == "Salt Creek"
+    assert anadarko_geo == "Wyo."
+    assert occidental_geo == "Tex."
+    anadarko_id = provenance.hid("FIELD", provenance.nk(anadarko) + "|" + provenance.nk(anadarko_geo))
+    occidental_id = provenance.hid("FIELD", provenance.nk(occidental) + "|" + provenance.nk(occidental_geo))
+    assert anadarko_id != occidental_id
+    assert anadarko_reason.startswith("organization_field_span")
+    assert occidental_reason.startswith("organization_field_span")
+
+
+def test_estreito_rows_share_source_confirmed_canonical_field_without_row_merge():
+    generic = "Brazil Petrobras Steam Estreito 12/09 176 48 Acu S 25"
+    explicit_rn = "Rio Grande do Norte (RN) Petrobras Steam Estreito 1984 700 Acu S 25"
+    a = provenance.parse_table_e_field(generic)
+    b = provenance.parse_table_e_field(explicit_rn)
+    assert a[0] == b[0] == "Estreito"
+    assert a[1] == b[1] == "Rio Grande do Norte, Brazil"
+    assert a[2].startswith("source_verified:")
+    assert b[2].startswith("source_verified:")
+    assert provenance.hid("FIELD", provenance.nk(a[0]) + "|" + provenance.nk(a[1])) == provenance.hid(
+        "FIELD", provenance.nk(b[0]) + "|" + provenance.nk(b[1])
+    )
+    assert provenance.table_e_identity_hold_reason(generic) is None
+    assert provenance.table_e_identity_hold_reason(explicit_rn) is None
+
+
+def test_eight_partial_field_fragments_match_only_reviewed_source_rows():
+    examples = {
+        "Carmopolis S/Congl. 22 200 2,460 21 500 122 NC 3,860 3,860 Succ. Yes FW": ("Carmopolis", "Sergipe, Brazil"),
+        "L’Enfer S 33 250 1,000 21.6 18 103 S 73 45 NC 280 280 Succ. Yes Exp. UL": ("Bennett Village", "Trinidad and Tobago"),
+        "L’Enfer S 29 250 2,800 19.2 120 100 S 72 51 NC 330 330 Succ. Yes Exp. UL": ("Antilles Quarry", "Trinidad and Tobago"),
+        "L’Enfer S 33 260 1,200 15 500 100 C 71 35 NC 1,132 1,132 Succ. Yes Exp. LW": ("North Palo Seco", "Trinidad and Tobago"),
+    }
+    for raw, expected in examples.items():
+        override = provenance.reviewed_partial_field_override(raw)
+        assert override is not None
+        assert override[:2] == expected
+        assert override[2].startswith("OGJ 2014 Table E")
+    assert provenance.reviewed_partial_field_override("L’Enfer S 40 999 999") is None
+
+
 def test_table_e_source_detection_uses_source_context_not_row_position():
     assert provenance.is_table_e_source_row(
         "Bahia Petrobras CO2 miscible Miranga 12/09 27 10 Catu-1 S 20"

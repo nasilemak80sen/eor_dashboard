@@ -41,8 +41,29 @@ def test_features_exclude_ids_and_preserve_duplicate_numeric_profiles():
 
     assert len(features) == len(frame)
     assert features.iloc[0].equals(features.iloc[1])
+    assert list(features.columns) == benchmark.PRODUCTION_FEATURE_NAMES
+    assert "formation_unknown" not in features.columns
     assert not any(name.endswith("_id") for name in features.columns)
     assert not any("record" in name.casefold() or "case" in name.casefold() for name in features.columns)
+
+
+def test_production_recipe_parameters_are_recovered_from_artifact():
+    params, metadata = benchmark.production_recipe_parameters(["Combustion", "Miscible CO2"])
+    assert metadata["status"] == "available"
+    assert metadata["artifact_version"] == "1.0.0"
+    assert params["iterations"] > 0
+    assert params["depth"] > 0
+    assert params["learning_rate"] > 0
+    assert params["thread_count"] == 2
+    assert params["allow_writing_files"] is False
+    assert "classes_count" not in params
+    assert "class_names" not in params
+    assert "deployed artifact" in metadata["interpretation"]
+    estimator = benchmark.ProductionRecipeCatBoostEstimator(params)
+    cloned = benchmark.clone(estimator)
+    assert cloned.params == params
+    models = benchmark.make_models(["Combustion", "Miscible CO2"], params)
+    assert "ProductionRecipeCatBoost" in models
 
 
 def test_field_holdout_and_cv_keep_fields_disjoint():
@@ -61,6 +82,14 @@ def test_field_holdout_and_cv_keep_fields_disjoint():
     for train_idx, test_idx in splits:
         assert set(groups[train][train_idx]).isdisjoint(set(groups[train][test_idx]))
 
+
+
+def test_only_confirmed_field_ids_contribute_to_benchmark():
+    frame = pd.DataFrame({
+        "field_id": ["FIELD-A", "FIELD-B", "", "FIELD-D"],
+        "field_id_status": ["confirmed", "provisional", "needs_review", "confirmed"],
+    })
+    assert benchmark.verified_field_mask(frame).tolist() == [True, False, False, True]
 
 
 def test_label_semantic_conflicts_are_flagged_without_auto_relabel():

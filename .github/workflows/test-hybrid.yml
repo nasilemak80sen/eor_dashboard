@@ -2,7 +2,7 @@ name: EOR Atlas Hybrid Tests
 
 on:
   push:
-    branches: [main, fix/openglobus-restore-after-revert]
+    branches: [main, fix/openglobus-restore-after-revert, ml/field-aware-eor-research]
   pull_request:
     branches: [main]
 

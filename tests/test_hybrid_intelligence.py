@@ -98,3 +98,23 @@ def test_hybrid_rejects_non_finite_ml_probability():
             _screening_result(),
             {"Miscible CO2": float("nan")},
         )
+
+
+
+def test_hybrid_returns_no_recommendation_when_all_mapped_techniques_fail_gate():
+    result = HybridDecisionService().fuse(
+        {
+            "results": [
+                {
+                    "EOR Technique": "CO2 Miscible Flood",
+                    "Status": "FAIL (critical)",
+                    "Score (%)": 0.0,
+                    "Cause of Fail/Pass": "Critical engineering constraint failed",
+                }
+            ]
+        },
+        {"Miscible CO2": 0.99},
+    )
+    assert result["recommendation"] is None
+    assert result["ranking"] == []
+    assert result["eligible_count"] == 0

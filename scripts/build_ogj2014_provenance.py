@@ -258,6 +258,60 @@ def parse_project(raw):
     return project_name, project_context, "source_project_span"
 
 
+
+
+def table_e_identity_hold_reason(raw: str) -> str | None:
+    """Estreito is source-resolved to Rio Grande do Norte; no hold remains."""
+    return None
+
+
+
+def reviewed_partial_field_override(raw: str):
+    """Resolve a partial performance line only when its full metric signature matches Table E."""
+    text = ns(raw)
+    if text.startswith("Carmopolis S/Congl. 22 200 2,460"):
+        return ("Carmopolis", "Sergipe, Brazil",
+                "OGJ 2014 Table E, printed p. 9, Sergipe / Petrobras / Steam / Carmopolis. "
+                "Carmopolis S/Congl. 22, porosity 21, permeability 500 mD and depth 2,460 ft match the source row.")
+    if text.startswith("L’Enfer S 33 250 1,000 21.6 18 103"):
+        return ("Bennett Village", "Trinidad and Tobago",
+                "OGJ 2014 Table E, printed p. 10, Palo Seco / Petrotrin / Water (Steam Scavenging) / Bennett Village. "
+                "Exact L’Enfer S 33, porosity 21.6, permeability 18 mD, depth 1,000 ft signature.")
+    if text.startswith("L’Enfer S 29 250 2,800 19.2 120 100"):
+        return ("Antilles Quarry", "Trinidad and Tobago",
+                "OGJ 2014 Table E, printed p. 10, Quarry / Petrotrin / Water (Steam Scavenging) / Antilles Quarry. "
+                "Exact L’Enfer S 29, porosity 19.2, permeability 120 mD, depth 2,800 ft signature.")
+    if text.startswith("L’Enfer S 33 260 1,200 15 500 100"):
+        return ("North Palo Seco", "Trinidad and Tobago",
+                "OGJ 2014 Table E, printed p. 10, North Palo Seco / Petrotrin / Steam / North Palo Seco. "
+                "Exact L’Enfer S 33, porosity 15, permeability 500 mD, depth 1,200 ft signature.")
+    return None
+
+
+def parse_table_e_field(raw: str):
+    """Extract the explicit Field cell from OGJ 2014 Table E source text."""
+    text = ns(raw)
+    if text.startswith(("Brazil Petrobras Steam Estreito",
+                        "Rio Grande do Norte (RN) Petrobras Steam Estreito")):
+        return (
+            "Estreito", "Rio Grande do Norte, Brazil",
+            "source_verified: OGJ Table E prints both Petrobras Steam Estreito entries, one with country-only Brazil "
+            "context and one with Rio Grande do Norte (RN). Brazil Decree 92.274 of 7 Jan 1986 identifies Petrobras's "
+            "Estreito oil-collection region in Carnaubais, Alto do Rodrigues, and Açu, Rio Grande do Norte. "
+            "Canonicalized field identity; source rows are not merged. OGJ PDF: " + PUBLICATION_URL +
+            " Government source: https://www4.planalto.gov.br/legislacao/portal-legis/legislacao-1/decretos1/1986-decretos-1",
+        )
+    parsed_field, context, reason = parse_project(text)
+    if parsed_field and nk(parsed_field) == "estreito":
+        return (
+            "Estreito", "Rio Grande do Norte, Brazil",
+            "source_verified: OGJ Table E Estreito field identity canonicalized to Rio Grande do Norte using "
+            "the source table and Decree 92.274 (1986); source rows remain distinct. OGJ PDF: " + PUBLICATION_URL +
+            " Government source: https://www4.planalto.gov.br/legislacao/portal-legis/legislacao-1/decretos1/1986-decretos-1",
+        )
+    return parsed_field, context, reason
+
+
 def matrix(path):
     wb=load_workbook(path,data_only=False,read_only=False)
     return wb,{ws.title:[[c.value for c in row] for row in ws.iter_rows()] for ws in wb.worksheets}
@@ -439,57 +493,95 @@ def main():
                     "Table E" if table_e_row
                     else ("Ambiguous source fragment" if ambiguous_fragment else "Tables A-D")
                 )
-                if table_e_row or ambiguous_fragment:
-                    # OGJ Table E has distinct Project and Field columns. In the
-                    # source rows represented here the Field cell is blank; do not
-                    # mislabel the project name or pay zone as a field.
-                    project_name, project_context, project_reason = (
-                        parse_project(raw or "") if table_e_row else (None, "", "unresolved")
+                if table_e_row:
+                    # The OGJ PDF's Table E header is "Type/project | Field | Start date".
+                    # The existing extractor had mistaken the explicit Field cell for a
+                    # project name and then marked the field unknown. Parse that field
+                    # cell conservatively; do not create a separate project_id from the
+                    # technique/type column.
+                    field, field_context, field_reason = parse_table_e_field(raw or "")
+                    geography = field_context
+                    project_name = ""
+                    project_context = ""
+                    project_id = ""
+                    field_id = hid("FIELD", nk(field) + "|" + nk(geography)) if field else ""
+                    source_confirmed = bool(field) and field_reason.startswith(
+                        ("source_verified:", "source_project_span")
                     )
-                    project_id = (
-                        hid("PROJ", nk(project_context) + "|" + nk(project_name))
-                        if project_name else ""
+                    field_status = (
+                        "confirmed" if source_confirmed
+                        else ("provisional" if field else "needs_review")
                     )
-                    field = None
-                    geography = ""
-                    field_id = ""
-                    field_status = "unknown"
-                    confidence = "High" if project_id else "Low"
-                    field_rationale = (
-                        "OGJ Table E separates Project and Field. The source Field cell is blank for this row; "
-                        "field_id is intentionally blank rather than reusing the project name or pay-zone text."
-                        if table_e_row else
-                        "raw_line is an ambiguous pay-zone/reservoir fragment without enough source-row context to identify a field; "
-                        "field_id is intentionally blank."
-                    )
-                    if project_id:
-                        if project_reason.startswith("source_verified:"):
-                            evidence = project_reason.removeprefix("source_verified: ").strip()
-                        else:
-                            evidence = (
-                                f"Project '{project_name}' is the explicit text between the source technique and start-date "
-                                f"columns in OGJ Table E; source context '{project_context}'."
-                            )
-                        project_rationale = (
-                            f"Project identity confirmed from the original OGJ source document: {evidence} "
-                            f"Source PDF: {PUBLICATION_URL}"
-                        )
-                        case_id = hid("CASE", raw_normalized) if raw_normalized else ""
-                        case_status = "provisional" if case_id else "needs_review"
-                        case_rationale = (
-                            "case_id is a deterministic hash of the exact normalized source fragment; repeated fragments share a group."
-                            if case_id else
-                            "No reliable source fragment for a case identifier."
+                    confidence = "High" if source_confirmed else ("Medium" if field else "Low")
+                    identity_hold = table_e_identity_hold_reason(raw or "")
+                    if field and identity_hold:
+                        field_status = "needs_review"
+                        confidence = "Low"
+                    if field:
+                        evidence = field_reason.removeprefix("source_verified: ").strip()
+                        field_rationale = (
+                            f"Field '{field}' parsed from the explicit Field column in OGJ 2014 Table E; "
+                            f"source context '{geography}'. Parser evidence: {evidence} Source PDF: {PUBLICATION_URL}"
+                            + (f" {identity_hold}" if identity_hold else "")
                         )
                     else:
+                        field_rationale = (
+                            "OGJ Table E field could not be extracted unambiguously from the source fragment; "
+                            "field_id remains blank pending source review."
+                        )
+                    project_rationale = (
+                        "The OGJ Table E 'Type/project' column carries the technique/type label in these extracted rows; "
+                        "no distinct project identifier is established, so project_id is intentionally blank. "
+                        f"Source PDF: {PUBLICATION_URL}"
+                    )
+                    case_id = hid("CASE", raw_normalized) if raw_normalized else ""
+                    case_status = "provisional" if case_id else "needs_review"
+                    case_rationale = (
+                        "case_id is a deterministic hash of the exact normalized source fragment; repeated fragments share a group."
+                        if case_id else
+                        "No reliable source fragment for a case identifier."
+                    )
+                elif ambiguous_fragment:
+                    # Explicitly reviewed partial fragments are resolved only when
+                    # their complete metric signature matches a named Table E row.
+                    # All other fragments remain quarantined; no adjacent-row guessing.
+                    partial_override = reviewed_partial_field_override(raw or "")
+                    project_name = ""
+                    project_context = ""
+                    project_id = ""
+                    if partial_override:
+                        field, geography, partial_evidence = partial_override
+                        field_id = hid("FIELD", nk(field) + "|" + nk(geography))
+                        field_status = "confirmed"
+                        confidence = "High"
+                        field_rationale = (
+                            "Field identity source-confirmed by exact OGJ Table E row/profile match: "
+                            + partial_evidence + " Source PDF: " + PUBLICATION_URL
+                        )
+                        case_id = hid("CASE", raw_normalized) if raw_normalized else ""
+                        case_status = "provisional" if raw_normalized else "needs_review"
+                        case_rationale = (
+                            "Partial source line is matched to a named Table E field by its complete metric profile; "
+                            "source row and record ID remain separate."
+                        )
+                        project_rationale = "No independent project identifier was inferred from the partial performance fragment."
+                    else:
+                        field = None
+                        geography = ""
+                        field_id = ""
+                        field_status = "needs_review"
+                        confidence = "Low"
+                        field_rationale = (
+                            "raw_line is an ambiguous pay-zone/reservoir fragment without a unique source-table row/profile match; "
+                            "field_id is intentionally blank."
+                        )
                         case_id = ""
                         case_status = "needs_review"
                         project_rationale = (
-                            "Project identity unresolved because raw_line is a partial source fragment that does not uniquely "
-                            "identify a project; no project_id was guessed."
+                            "Project identity unresolved because the partial source fragment does not uniquely map to a Table E row."
                         )
                         case_rationale = (
-                            "case_id withheld because the partial source fragment may represent multiple projects."
+                            "case_id withheld because the partial source fragment may represent multiple source cases."
                         )
                 else:
                     field, parse_reason, geography = parse_field(raw or "")
@@ -799,13 +891,13 @@ def main():
             "The mirror's source_report header and cell values are preserved and never interpreted as raw_line; source_report_group_id remains blank.",
             "All provenance IDs are grouping/audit metadata, not model features.",
             "Publication identity is confirmed against the official Oil & Gas Journal 2014 worldwide EOR survey PDF, with a stable publication_id and source URL recorded in tagging_rationale.",
-            "Twenty-one previously unresolved rows were reviewed against the original PDF: eight have source-confirmed field identities; the remaining rows are project/pay-zone text or ambiguous fragments and are not forced into field_id.",
-            "Table E rows are identified from source-text context, not Excel row position. Its source schema separates Project and Field; where the Field cell is blank, project IDs are recorded separately and field_id remains blank. Ambiguous fragments without unique project context are left without case_id as well.",
+            "The source PDF was used to resolve explicit field cells and a narrow set of previously ambiguous field names; remaining partial pay-zone/reservoir fragments are not forced into field_id.",
+            "Table E rows are identified from source-text context, not Excel row position. The PDF heading is Type/project | Field | Start date; explicit Field values populate field_id. The Type/project technique label is not treated as a separate project identifier. Ambiguous partial fragments remain without field_id or case_id.",
             "Field IDs extracted from explicit operator-to-field spans, manually reviewed rules, or source-document overrides are marked confirmed; standalone candidates without enough source context remain provisional.",
             "Only narrow source-supported field aliases are canonicalized; same-name fields with different geography remain separate.",
             "Salt Creek remains split because source rows explicitly identify different Texas/Kent/Canyon and Wyoming/Natrona/Wall Creek contexts.",
             "Any field candidate not established by source evidence remains blank and needs review.",
-            "Project IDs are assigned only from the source Table E Project column or unique source-backed fragments; no project is inferred from numeric features or publication identity alone.",
+            "project_id is left blank unless an independent project identity is explicitly established; technique labels, numeric features, and publication identity are not used as project IDs.",
         ],
     }
     (OUT / "ogj2014_provenance_summary.json").write_text(

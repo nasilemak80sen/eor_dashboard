@@ -1,0 +1,31 @@
+{
+  "source_rows":624,
+  "source_unique_record_ids":624,
+  "explicit_text_conflicts_adjudicated":109,
+  "source_section_conflicts_adjudicated":70,
+  "source_label_conflict_records":179,
+  "additional_partial_fragment_records_adjudicated":8,
+  "label_adjudication_records_total":187,
+  "in_taxonomy_records":164,
+  "out_of_taxonomy_records":23,
+  "out_of_taxonomy_source_labels":[
+    "CO2 immiscible",
+    "Chemical, polymer, surfactant (subtype unspecified)",
+    "Microbial",
+    "Surfactant",
+    "Water (Steam Scavenging)"
+  ],
+  "identity_records_resolved":12,
+  "identity_field_groups_resolved":5,
+  "identity_rows_by_field":{
+    "Estreito":4,
+    "Antilles Quarry":2,
+    "Bennett Village":2,
+    "Carmopolis":2,
+    "North Palo Seco":2
+  },
+  "original_structured_labels_modified":false,
+  "original_raw_source_text_modified":false,
+  "source_pdf_url":"https:\/\/img.ogj.com\/files\/base\/ebm\/ogj\/document\/2014\/05\/content_dam_ogj_en_downloadables_survey_downloads_worldwide_eor_2014_leftcolumn_downloadable_140505ogj_world_eor_corrected_79_91.pdf?dl=content_dam_ogj_en_downloadables_survey_downloads_worldwide_eor_2014_leftcolumn_downloadable_140505ogj_world_eor_corrected_79_91.pdf",
+  "government_estreito_source_url":"https:\/\/www4.planalto.gov.br\/legislacao\/portal-legis\/legislacao-1\/decretos1\/1986-decretos-1"
+}

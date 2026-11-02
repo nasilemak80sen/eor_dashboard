@@ -103,6 +103,45 @@ def _score(values: Mapping[str, Any], key: str, family: str) -> float:
     return float(CATEGORY_SCORES[family].get(_norm(values.get(key)), 0.0))
 
 
+def _validate_categorical_inputs(values: Mapping[str, Any]) -> None:
+    """Reject unfamiliar non-empty categories rather than silently scoring them as zero."""
+    categorical_fields = {
+        "gas_injectivity": "injectivity",
+        "water_injectivity": "injectivity",
+        "mobility_ratio": "mobility",
+        "heterogeneity": "heterogeneity",
+        "field_maturity": "maturity",
+        "adsorption_risk": "risk",
+        "water_handling": "water_handling",
+    }
+    binary_fields = (
+        "co2_availability", "mmp_satisfied", "waterflood_history",
+        "water_injection_facilities", "gas_injection_facilities", "offshore",
+        "gas_reinjectable", "hc_gas_availability", "gas_availability",
+    )
+    for key, family in categorical_fields.items():
+        normalized = _norm(values.get(key))
+        if normalized and normalized not in CATEGORY_SCORES[family]:
+            allowed = ", ".join(sorted(CATEGORY_SCORES[family]))
+            raise ValueError(
+                f"Unrecognized category for '{key}': {values.get(key)!r}. "
+                f"Expected one of: {allowed}."
+            )
+    for key in binary_fields:
+        normalized = _norm(values.get(key))
+        if normalized and normalized not in {"yes", "no"}:
+            raise ValueError(
+                f"Unrecognized category for '{key}': {values.get(key)!r}. "
+                "Expected 'yes' or 'no'."
+            )
+    wag = _norm(values.get("wag_ratio", "1:1"))
+    if wag and wag not in {"1:1", "2:1", "1:2"}:
+        raise ValueError(
+            f"Unrecognized WAG ratio {values.get('wag_ratio')!r}. "
+            "Expected one of: 1:1, 2:1, 1:2."
+        )
+
+
 def _gor_category(gor: float | None) -> str:
     if gor is None:
         return ""
@@ -166,6 +205,7 @@ def validate_hybrid_inputs(values: Mapping[str, Any]) -> dict[str, float]:
 def build_hybrid_features(values: Mapping[str, Any], formation: str) -> pd.DataFrame:
     """Build the versioned engineering-aware feature vector from validated inputs."""
     validate_hybrid_inputs(values)
+    _validate_categorical_inputs(values)
     depth = _number(values, "depth_ft")
     temperature = _number(values, "temperature_c")
     pressure = _number(values, "reservoir_pressure")
