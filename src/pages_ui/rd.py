@@ -406,7 +406,7 @@ def _render_fluid_rock(data: dict) -> None:
 
 def _render_wag_locked() -> None:
     st.markdown("### Baronia · Water Alternating Gas")
-    st.caption("WAG source workbook is registered separately from the CEOR evidence.")
+    st.caption("Source workbook: Baronia_WAG_Data_EOR_ATLAS 1.xlsx · registered separately from the CEOR evidence.")
     st.warning(
         "The Baronia workbook supplied in this conversation is an encrypted Excel "
         "container. Its worksheets and measurements cannot be read yet, so no WAG "
