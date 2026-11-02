@@ -90,3 +90,11 @@ def test_top_navigation_uses_buttons_not_radio():
 def test_sidebar_starts_collapsed():
     settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
     assert '"initial_sidebar_state": "collapsed"' in settings
+
+
+def test_r_and_d_navigation_routes_to_new_page():
+    navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
+    app = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    assert 'NavItem("ceor", "R&D", "🧪")' in navigation
+    assert "from pages_ui import challenges, ceor, rd," in app
+    assert '"ceor": rd.render' in app
