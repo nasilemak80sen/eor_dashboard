@@ -1,6 +1,8 @@
 """R&D laboratory page: St. Joseph CEOR and Baronia WAG."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -323,6 +325,25 @@ def _render_coreflood(data: dict) -> None:
             "and Polymer (P) chemical-stage recovery columns are included here. The "
             "AS,P recovery-factor column is not treated as an incremental recovery value."
         )
+
+    factors = data["recovery_factors"]
+    if not factors.empty:
+        st.markdown("**Reported recovery factor**")
+        factor_fig = px.scatter(
+            factors, x="Core sample", y="Recovery factor (%)",
+            color="Method", symbol="Method", hover_data=["Year"],
+            labels={"Recovery factor (%)": "Recovery factor (%)"},
+        )
+        factor_fig.update_layout(
+            height=280, margin=dict(l=25, r=12, t=18, b=45),
+            template="plotly_white", legend_title="Reported method",
+        )
+        st.plotly_chart(factor_fig, use_container_width=True, config={"displayModeBar": False})
+        st.caption(
+            "Recovery factor is kept separate from the reported chemical-stage recovery "
+            "(% OOIP); the two source metrics are not added together."
+        )
+
     with st.expander("View core-flood sample and formulation records"):
         st.dataframe(data["coreflood_summary"], use_container_width=True, hide_index=True)
         st.dataframe(water, use_container_width=True, hide_index=True)
@@ -443,11 +464,23 @@ def render() -> None:
         _render_fluid_fluid(data)
 
     with st.expander("Legacy CEOR evidence from the EOR Screening Tool workbook"):
-        st.caption(
-            "This preserves the pre-existing CEOR panels as a separate legacy source. "
-            "It is not blended into St. Joseph field-level statistics."
+        legacy_root = Path(__file__).resolve().parents[2]
+        legacy_paths = (
+            legacy_root / "EOR_Screening_Tool_2026.xlsx",
+            legacy_root / "data" / "EOR_Screening_Tool_2026.xlsx",
         )
-        render_legacy_ceor()
+        legacy_exists = any(path.is_file() for path in legacy_paths)
+        if legacy_exists:
+            st.caption(
+                "This preserves the pre-existing CEOR panels as a separate legacy source. "
+                "It is not blended into St. Joseph field-level statistics."
+            )
+            render_legacy_ceor()
+        else:
+            st.info(
+                "The legacy EOR_Screening_Tool_2026.xlsx workbook is not present in this "
+                "branch. St. Joseph evidence above remains available independently."
+            )
 
     meta = data["metadata"]
     with st.expander("Workbook and data-quality notes"):
