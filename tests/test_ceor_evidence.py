@@ -121,3 +121,32 @@ def test_ceor_page_has_compact_render_entrypoint():
     assert "def render_compact()" in source
     assert 'st.tabs(["Rheology", "Phase behaviour", "IFT"])' in source
     assert 'st.tabs(["Adsorption", "Core flood", "Sor reduction"])' in source
+
+
+def test_st_jos_ceor_workbook_loads_field_specific_laboratory_evidence():
+    from data.rd_lab_evidence import load_st_jos_ceor
+
+    data = load_st_jos_ceor()
+    meta = data["metadata"]
+
+    assert meta["rheology_plot_rows"] == 366
+    assert meta["rheology_source_rows"] == 377
+    assert meta["phase_point_rows"] == 290
+    assert meta["phase_formulations"] == 26
+    assert meta["phase_validated_rows"] == 262
+    assert meta["phase_test_rows"] == 67
+    assert meta["ift_rows"] == 21
+    assert meta["adsorption_rows"] == 2
+    assert meta["coreflood_samples"] == 16
+    assert meta["sor_records"] == 16
+    assert meta["ift_polymer_reversed_bounds"] == 14
+
+
+def test_st_jos_source_labels_are_preserved_when_ift_bounds_are_reversed():
+    from data.rd_lab_evidence import load_st_jos_ceor
+
+    data = load_st_jos_ceor()
+    polymer_ift = data["ift_polymer"]
+
+    assert (polymer_ift["IFT low (source)"] > polymer_ift["IFT high (source)"]).sum() == 14
+    assert set(polymer_ift["IFT high raw"].dropna().astype(str)) == {"0.01"}
