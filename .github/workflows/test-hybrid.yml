@@ -25,35 +25,7 @@ jobs:
 
       - name: Compile production, hybrid and UI modules
         run: |
-          python -m py_compile \
-            src/app_2.py \
-            src/hybrid_app.py \
-            src/eor_atlas.py \
-            src/data/screening_history.py \
-            src/data/historical_studies.py \
-            src/data/challenges.py \
-            src/data/ceor_evidence.py \\\n            src/data/rd_lab_evidence.py \\
-            src/ui/openglobus.py \
-            src/ui/theme.py \
-            src/ui/components.py \
-            src/ui/navigation.py \
-            src/ui/app_shell.py \
-            src/pages_ui/overview.py \
-            src/pages_ui/candidates.py \
-            src/pages_ui/screening.py \
-            src/pages_ui/intelligence.py \
-            src/pages_ui/insights.py \
-            src/pages_ui/historical.py \
-            src/pages_ui/ceor.py \\\n            src/pages_ui/rd.py \\
-            src/pages_ui/challenges.py \
-            src/pages_ui/system.py \
-            src/candidate_analytics/ui.py \
-            src/ml/hybrid_intelligence.py \
-            src/ml/hybrid_feature_builder.py \
-            src/ml/hybrid_model_assessment.py \
-            src/ml/grouped_validation.py \
-            src/ml/train_hybrid_catboost.py \
-            eor_ml_research_layer/notebooks/notebook_utils.py
+          python -m py_compile src/app_2.py src/hybrid_app.py src/eor_atlas.py src/data/screening_history.py src/data/historical_studies.py src/data/challenges.py src/data/ceor_evidence.py src/data/rd_lab_evidence.py src/ui/openglobus.py src/ui/theme.py src/ui/components.py src/ui/navigation.py src/ui/app_shell.py src/pages_ui/overview.py src/pages_ui/candidates.py src/pages_ui/screening.py src/pages_ui/intelligence.py src/pages_ui/insights.py src/pages_ui/historical.py src/pages_ui/ceor.py src/pages_ui/rd.py src/pages_ui/challenges.py src/pages_ui/system.py src/candidate_analytics/ui.py src/ml/hybrid_intelligence.py src/ml/hybrid_feature_builder.py src/ml/hybrid_model_assessment.py src/ml/grouped_validation.py src/ml/train_hybrid_catboost.py eor_ml_research_layer/notebooks/notebook_utils.py
 
       - name: Import UI and history modules
         env:
