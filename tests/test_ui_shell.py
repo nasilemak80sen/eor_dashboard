@@ -90,3 +90,27 @@ def test_top_navigation_uses_buttons_not_radio():
 def test_sidebar_starts_collapsed():
     settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
     assert '"initial_sidebar_state": "collapsed"' in settings
+
+
+def test_r_and_d_navigation_routes_to_new_page():
+    navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
+    app = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    assert 'NavItem("ceor", "R&D", "🧪")' in navigation
+    assert "from pages_ui import challenges, ceor, rd," in app
+    assert '"ceor": rd.render' in app
+
+
+def test_r_and_d_page_has_separate_fluid_fluid_and_fluid_rock_views():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert 'options=["CEOR", "WAG"]' in page
+    assert 'options=["Fluid–Fluid", "Fluid–Rock"]' in page
+    assert "load_st_jos_ceor" in page
+    assert "Baronia workbook supplied" in page
+    assert "render_legacy_ceor()" in page
+
+
+def test_r_and_d_data_loader_preserves_source_ift_bounds():
+    loader = (ROOT / "src" / "data" / "rd_lab_evidence.py").read_text(encoding="utf-8")
+    assert '"IFT low (source)"' in loader
+    assert '"IFT high (source)"' in loader
+    assert "ift_polymer_reversed_bounds" in loader

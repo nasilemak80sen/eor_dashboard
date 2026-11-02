@@ -22,7 +22,7 @@ NAV_ITEMS = (
     NavItem("insights", "Insights", "📊"),
     NavItem("historical", "Historical", "📚"),
     NavItem("challenges", "Challenges", "⚠️"),
-    NavItem("ceor", "CEOR Lab", "🧪"),
+    NavItem("ceor", "R&D", "🧪"),
     NavItem("system", "System", "⚙"),
 )
 
