@@ -115,7 +115,7 @@ def _adsorption(xlsx: pd.ExcelFile) -> pd.DataFrame:
     }).dropna(subset=["Adsorption ratio"]).reset_index(drop=True)
 
 
-def _coreflood(xlsx: pd.ExcelFile) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def _coreflood(xlsx: pd.ExcelFile) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     summary = _clean(pd.read_excel(xlsx, sheet_name="Coreflood Summary (St_Jos)"))
     core = _clean(pd.read_excel(xlsx, sheet_name="Coreflood (St_Jos)"))
     sor_wide = _clean(pd.read_excel(xlsx, sheet_name="Sor_f (StJoseph)"))
