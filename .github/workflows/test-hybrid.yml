@@ -2,9 +2,9 @@ name: EOR Atlas Hybrid Tests
 
 on:
   push:
-    branches: [main, fix/openglobus-restore-after-revert, ml/field-aware-eor-research, feat/rd-lab-layout]
+    branches: [main, fix/openglobus-restore-after-revert, ml/field-aware-eor-research, feat/rd-lab-layout, feat/baronia-wag-integration]
   pull_request:
-    branches: [main]
+    branches: [main, fix/openglobus-restore-after-revert]
 
 jobs:
   test-hybrid:
@@ -25,15 +25,15 @@ jobs:
 
       - name: Compile production, hybrid and UI modules
         run: |
-          python -m py_compile src/app_2.py src/hybrid_app.py src/eor_atlas.py src/data/screening_history.py src/data/historical_studies.py src/data/challenges.py src/data/ceor_evidence.py src/data/rd_lab_evidence.py src/ui/openglobus.py src/ui/theme.py src/ui/components.py src/ui/navigation.py src/ui/app_shell.py src/pages_ui/overview.py src/pages_ui/candidates.py src/pages_ui/screening.py src/pages_ui/intelligence.py src/pages_ui/insights.py src/pages_ui/historical.py src/pages_ui/ceor.py src/pages_ui/rd.py src/pages_ui/challenges.py src/pages_ui/system.py src/candidate_analytics/ui.py src/ml/hybrid_intelligence.py src/ml/hybrid_feature_builder.py src/ml/hybrid_model_assessment.py src/ml/grouped_validation.py src/ml/train_hybrid_catboost.py eor_ml_research_layer/notebooks/notebook_utils.py
+          python -m py_compile src/app_2.py src/hybrid_app.py src/eor_atlas.py src/data/screening_history.py src/data/historical_studies.py src/data/challenges.py src/data/ceor_evidence.py src/data/rd_lab_evidence.py src/data/baronia_wag_evidence.py src/ui/openglobus.py src/ui/theme.py src/ui/components.py src/ui/navigation.py src/ui/app_shell.py src/pages_ui/overview.py src/pages_ui/candidates.py src/pages_ui/screening.py src/pages_ui/intelligence.py src/pages_ui/insights.py src/pages_ui/historical.py src/pages_ui/ceor.py src/pages_ui/rd.py src/pages_ui/challenges.py src/pages_ui/system.py src/candidate_analytics/ui.py src/ml/hybrid_intelligence.py src/ml/hybrid_feature_builder.py src/ml/hybrid_model_assessment.py src/ml/grouped_validation.py src/ml/train_hybrid_catboost.py eor_ml_research_layer/notebooks/notebook_utils.py
 
       - name: Import UI and history modules
         env:
           PYTHONPATH: src
         run: |
-          python -c "import eor_atlas; import data.screening_history; import data.historical_studies; import data.challenges; import data.ceor_evidence; import data.rd_lab_evidence; import ui.openglobus; import ui.theme; import ui.components; import ui.navigation; import ui.app_shell; import pages_ui.overview; import pages_ui.candidates; import pages_ui.screening; import pages_ui.intelligence; import pages_ui.insights; import pages_ui.historical; import pages_ui.ceor; import pages_ui.rd; import pages_ui.challenges; import pages_ui.system"
+          python -c "import eor_atlas; import data.screening_history; import data.historical_studies; import data.challenges; import data.ceor_evidence; import data.rd_lab_evidence; import data.baronia_wag_evidence; import ui.openglobus; import ui.theme; import ui.components; import ui.navigation; import ui.app_shell; import pages_ui.overview; import pages_ui.candidates; import pages_ui.screening; import pages_ui.intelligence; import pages_ui.insights; import pages_ui.historical; import pages_ui.ceor; import pages_ui.rd; import pages_ui.challenges; import pages_ui.system"
 
       - name: Run hybrid, CEOR and UI regression tests
         env:
           PYTHONPATH: src
-        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_training_readiness.py tests/test_hybrid_model_assessment.py tests/test_grouped_validation.py tests/test_notebook_grouped_validation.py tests/test_ml_research_pipeline.py tests/test_ogj2014_field_overrides.py tests/test_ogj2014_field_benchmark.py tests/test_ogj2014_data_quality.py tests/test_screening_history.py tests/test_historical_studies.py tests/test_challenges.py tests/test_ceor_evidence.py tests/test_openglobus.py tests/test_ui_shell.py
+        run: pytest -q tests/test_hybrid_intelligence.py tests/test_hybrid_feature_builder.py tests/test_hybrid_training_readiness.py tests/test_hybrid_model_assessment.py tests/test_grouped_validation.py tests/test_notebook_grouped_validation.py tests/test_ml_research_pipeline.py tests/test_ogj2014_field_overrides.py tests/test_ogj2014_field_benchmark.py tests/test_ogj2014_data_quality.py tests/test_screening_history.py tests/test_historical_studies.py tests/test_challenges.py tests/test_ceor_evidence.py tests/test_baronia_wag_evidence.py tests/test_openglobus.py tests/test_ui_shell.py

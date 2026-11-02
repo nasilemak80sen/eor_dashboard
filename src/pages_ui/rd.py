@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from data.rd_lab_evidence import load_st_jos_ceor
+from data.baronia_wag_evidence import load_baronia_wag
 from pages_ui.ceor import render_compact as render_legacy_ceor
 
 
@@ -404,21 +405,241 @@ def _render_fluid_rock(data: dict) -> None:
         _render_sor(data)
 
 
-def _render_wag_locked() -> None:
-    st.markdown("### Baronia · Water Alternating Gas")
-    st.caption("Source workbook: Baronia_WAG_Data_EOR_ATLAS 1.xlsx · registered separately from the CEOR evidence.")
-    st.warning(
-        "The Baronia workbook supplied in this conversation is an encrypted Excel "
-        "container. Its worksheets and measurements cannot be read yet, so no WAG "
-        "charts or values have been inferred. Please provide an unencrypted .xlsx "
-        "copy or the workbook-open password."
-    )
-    st.info(
-        "Once readable, the WAG analysis will be mapped to the actual sheet schema, "
-        "including injection sequence/cycle, water and gas slug volumes, rates, "
-        "pressure response and recovery metrics only where those fields exist."
-    )
 
+
+def _wag_lookup(frame: pd.DataFrame, key: str, *, key_col: str, value_col: str):
+    if frame.empty or key_col not in frame.columns or value_col not in frame.columns:
+        return None
+    rows = frame.loc[frame[key_col].astype(str).str.strip().str.casefold() == key.casefold()]
+    return rows.iloc[0][value_col] if not rows.empty else None
+
+
+def _wag_display(value, unit: str = "") -> str:
+    if value is None or pd.isna(value):
+        return "Not reported"
+    if isinstance(value, (int, float)):
+        body = f"{value:,.2f}".rstrip("0").rstrip(".")
+    else:
+        body = str(value)
+    return f"{body} {unit}".strip()
+
+
+def _render_wag_performance(data: dict) -> None:
+    recovery = data["recovery_curve"]
+    cycles = data["cycle_recovery"]
+    production = data["production_curve"]
+
+    st.markdown("#### Coreflood recovery performance")
+    if recovery.empty:
+        st.info("No oil-recovery-versus-PV records were found.")
+    else:
+        fig = px.line(
+            recovery.sort_values("PV Injected"),
+            x="PV Injected", y="Oil Recovery (%)", markers=True,
+            hover_data=["Oil Recovery (Fraction)", "Injection Phase"],
+            labels={"PV Injected": "Pore volumes injected (PV)", "Oil Recovery (%)": "Oil recovery (% OOIP)"},
+        )
+        fig.add_hline(y=64, line_dash="dot", annotation_text="Summary waterflood: 64%")
+        fig.add_hline(y=87, line_dash="dash", annotation_text="Reported final recovery: 87%")
+        fig.update_layout(height=370, template="plotly_white", margin=dict(l=35, r=15, t=30, b=40))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.caption("The source curve marks 65% at the end of primary waterflood, while the summary reports 64%. Both are retained.")
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### Incremental recovery by injection stage")
+        if not cycles.empty:
+            post_wf = cycles.loc[~cycles["Injection Cycle"].astype(str).str.casefold().eq("primary waterflood")]
+            cycle_fig = px.bar(
+                post_wf, x="Injection Cycle", y="Incremental Recovery (%)",
+                color="Injection Cycle", hover_data=["PV Start", "PV End", "Recovery at End (%)"],
+                labels={"Incremental Recovery (%)": "Incremental recovery (percentage points)"},
+            )
+            cycle_fig.update_layout(height=340, template="plotly_white", showlegend=False, margin=dict(l=20, r=10, t=25, b=70))
+            cycle_fig.update_xaxes(tickangle=-25)
+            st.plotly_chart(cycle_fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No injection-cycle recovery table was found.")
+    with right:
+        st.markdown("#### Cumulative production")
+        if not production.empty:
+            long = production.melt(
+                id_vars=["PV Injected", "Injection Phase"],
+                value_vars=["Cumulative Oil (cc)", "Cumulative Gas (cc)", "Cumulative Water (cc)"],
+                var_name="Produced phase", value_name="Cumulative volume (cc)",
+            )
+            fig = px.line(long, x="PV Injected", y="Cumulative volume (cc)", color="Produced phase", markers=True)
+            fig.update_layout(height=340, template="plotly_white", margin=dict(l=20, r=10, t=25, b=40))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.info("No cumulative production records were found.")
+
+    with st.expander("View recovery and production source records"):
+        st.dataframe(recovery, use_container_width=True, hide_index=True)
+        st.dataframe(cycles, use_container_width=True, hide_index=True)
+        st.dataframe(production, use_container_width=True, hide_index=True)
+
+
+def _render_wag_injection_model(data: dict) -> None:
+    design = data["design_parameters"]
+    st.markdown("#### Injection design")
+    cards = [
+        ("Injection rate", "Injection Rate", "cc/min"),
+        ("Initial waterflood", "First Waterflood", "PV"),
+        ("Gas slug / cycle", "Gas Slug Size", "PV"),
+        ("Water slug / cycle", "Water Slug Size", "PV"),
+        ("WAG cycles", "Number of WAG Cycles", "cycles"),
+        ("System temperature", "System Temperature", "°C"),
+        ("Pore pressure / BPR", "Pore Pressure / BPR", "psig"),
+        ("Watercut at WAG start", "Watercut at WAG Start", "%"),
+    ]
+    cols = st.columns(4)
+    for i, (label, key, unit) in enumerate(cards):
+        value = _wag_lookup(design, key, key_col="Parameter", value_col="Value")
+        cols[i % 4].metric(label, _wag_display(value, unit))
+
+    st.caption("Equal 0.2 PV gas and water slugs imply a 1:1 per-cycle slug-size ratio. The separate WAG Ratio cell is time-formatted and is withheld pending source confirmation.")
+
+    gas = data["gas_composition"]
+    if not gas.empty:
+        st.markdown("#### Baronia export-gas composition")
+        fig = px.bar(gas.sort_values("Mol%"), x="Mol%", y="Component", orientation="h", hover_data=["Notes"])
+        fig.update_layout(height=430, template="plotly_white", margin=dict(l=25, r=15, t=20, b=35))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.caption(f"{len(gas)} components total {data['metadata']['gas_composition_total_mol_pct']:.2f} mol% excluding the explicit Total row.")
+
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### WAGHYSTR hysteresis parameters")
+        st.dataframe(data["hysteresis_model"], use_container_width=True, hide_index=True)
+        st.markdown("#### Land trapped-gas correlation")
+        st.dataframe(data["trapped_gas"], use_container_width=True, hide_index=True)
+    with right:
+        st.markdown("#### Corey relative-permeability parameters")
+        st.dataframe(data["corey_parameters"], use_container_width=True, hide_index=True)
+        st.markdown("#### Simulation model properties")
+        st.dataframe(data["simulation_properties"], use_container_width=True, hide_index=True)
+
+
+def _render_wag_field_core(data: dict) -> None:
+    left, right = st.columns(2)
+    with left:
+        st.markdown("#### Reservoir properties · RV2")
+        st.dataframe(data["reservoir_properties"], use_container_width=True, hide_index=True)
+        st.markdown("#### Composite core properties")
+        st.dataframe(data["composite_core"], use_container_width=True, hide_index=True)
+    with right:
+        st.markdown("#### Fluid properties · RV2")
+        st.dataframe(data["fluid_properties"], use_container_width=True, hide_index=True)
+        st.markdown("#### Special core analysis (SCAL)")
+        st.dataframe(data["scal_summary"], use_container_width=True, hide_index=True)
+
+    cores = data["core_samples"]
+    if not cores.empty:
+        st.markdown("#### BN-69 RV2 routine core analysis")
+        fig = px.scatter(
+            cores, x="Kh (md)", y="Porosity (%)", color="Facies", symbol="Selected",
+            hover_data=["Sample", "Depth (ft)", "Kv (md)", "Kv/Kh"],
+            labels={"Kh (md)": "Horizontal permeability (mD)"},
+        )
+        fig.update_layout(height=360, template="plotly_white", margin=dict(l=25, r=15, t=20, b=40))
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        selected = cores.loc[cores["Selected"].astype(str).str.strip().str.casefold().eq("yes")]
+        st.caption(f"{len(cores)} core samples listed; {len(selected)} selected plugs are identified for the composite experiment.")
+    with st.expander("View core samples and facies descriptions"):
+        st.dataframe(cores, use_container_width=True, hide_index=True)
+        st.dataframe(data["facies"], use_container_width=True, hide_index=True)
+
+
+def _render_wag_quality(data: dict) -> None:
+    issues = data["quality_issues"]
+    if not issues.empty:
+        high = int(issues["Severity"].eq("High").sum())
+        review = int(issues["Severity"].eq("Review").sum())
+        st.warning(f"Workbook QA identified {len(issues)} issues: {high} high-priority and {review} requiring review. Source values are preserved, not silently corrected.")
+        st.dataframe(issues, use_container_width=True, hide_index=True)
+    else:
+        st.success("No automated workbook consistency flags were triggered.")
+
+    with st.expander("Recovery values reported by each workbook section"):
+        st.markdown("**Coreflood recovery summary**")
+        st.dataframe(data["recovery_summary"], use_container_width=True, hide_index=True)
+        st.markdown("**IWAG Results sheet**")
+        st.dataframe(data["iwag_recovery"], use_container_width=True, hide_index=True)
+        st.markdown("**EOR ATLAS Summary sheet**")
+        st.dataframe(data["summary_metrics"], use_container_width=True, hide_index=True)
+
+    with st.expander("Raw saturation values · not suitable as a physical profile"):
+        st.caption("Out-of-range saturation values are retained for audit but are not plotted as saturation evolution.")
+        st.dataframe(
+            data["recovery_curve"][["PV Injected", "Oil Saturation (%)", "Water Saturation (%)", "Gas Saturation (%)"]],
+            use_container_width=True, hide_index=True,
+        )
+    with st.expander("Material balance and source details"):
+        st.dataframe(data["material_balance"], use_container_width=True, hide_index=True)
+        st.write({
+            "Workbook": data["metadata"]["workbook_name"],
+            "Source report": data["metadata"]["source_report"],
+            "Worksheets": data["metadata"]["sheets"],
+            "Gas composition total (excluding Total row)": data["metadata"]["gas_composition_total_mol_pct"],
+        })
+
+
+def _render_wag() -> None:
+    st.markdown("### Baronia · Water Alternating Gas (IWAG)")
+    st.caption("Baronia workbook supplied: WAG_Copy.xlsx · Original workbook reference: Baronia_WAG_Data_EOR_ATLAS 1.xlsx")
+    try:
+        data = load_baronia_wag()
+    except FileNotFoundError:
+        st.info("The unlocked workbook is not stored in this public repository. Upload your working copy below, or place it at data/WAG_Copy.xlsx locally.")
+        uploaded = st.file_uploader(
+            "Upload the unlocked Baronia WAG workbook",
+            type=["xlsx"],
+            key="rd_baronia_wag_upload",
+            help="The workbook is read for this session and is not committed to GitHub.",
+        )
+        if uploaded is None:
+            return
+        try:
+            data = load_baronia_wag(workbook_bytes=uploaded.getvalue(), workbook_name=uploaded.name)
+        except Exception as exc:
+            st.error("The uploaded Baronia workbook could not be parsed.")
+            with st.expander("Technical detail"):
+                st.exception(exc)
+            return
+    except Exception as exc:
+        st.error("Baronia WAG evidence could not be loaded.")
+        with st.expander("Technical detail"):
+            st.exception(exc)
+        return
+
+    field_name = _wag_lookup(data["summary_field"], "Field Name", key_col="Item", value_col="Value")
+    target = _wag_lookup(data["summary_metrics"], "Target Reservoir", key_col="Metric", value_col="Value")
+    stoiip = _wag_lookup(data["summary_metrics"], "STOIIP (RV2)", key_col="Metric", value_col="Value")
+    wf = _wag_lookup(data["recovery_summary"], "Waterflood Recovery", key_col="Recovery Stage", value_col="Value")
+    final = _wag_lookup(data["recovery_summary"], "IWAG Recovery (Total)", key_col="Recovery Stage", value_col="Value")
+    increment = _wag_lookup(data["recovery_summary"], "IWAG Incremental Recovery", key_col="Recovery Stage", value_col="Value")
+
+    st.caption(f"{field_name or 'Baronia'} · {target or 'RV2'} reservoir · Source: {data['metadata']['source_report']}")
+    kpis = st.columns(5)
+    kpis[0].metric("STOIIP", _wag_display(stoiip))
+    kpis[1].metric("Waterflood recovery", _wag_display(wf, "% OOIP"))
+    kpis[2].metric("WF + IWAG recovery", _wag_display(final, "% OOIP"))
+    kpis[3].metric("IWAG increment · summary", _wag_display(increment, "pp"))
+    kpis[4].metric("Core samples", str(data["metadata"]["core_samples"]))
+
+    if not data["quality_issues"].empty:
+        st.caption(f"Source QA: {data['metadata']['quality_issue_count']} issues. Review the Data Quality tab before relying on recovery values.")
+
+    performance, injection, field_core, quality = st.tabs(["IWAG Performance", "Injection & Model", "Field & Core", "Data Quality"])
+    with performance:
+        _render_wag_performance(data)
+    with injection:
+        _render_wag_injection_model(data)
+    with field_core:
+        _render_wag_field_core(data)
+    with quality:
+        _render_wag_quality(data)
 
 def render() -> None:
     st.markdown("## R&D Laboratory")
@@ -437,7 +658,7 @@ def render() -> None:
         ),
     )
     if method == "WAG":
-        _render_wag_locked()
+        _render_wag()
         return
 
     data = None
