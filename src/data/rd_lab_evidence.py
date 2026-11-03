@@ -271,9 +271,12 @@ def load_st_jos_ceor() -> dict[str, Any]:
     field_values = set(thermal["Field"].dropna().astype(str).str.strip()) if not thermal.empty else set()
     field_values.update(adsorption["Field"].dropna().astype(str).str.strip())
     field_names = sorted(
-        ("St. Joseph" if value.casefold().replace(".", "").strip() == "st joseph" else value)
-        for value in field_values
-    , key=str.casefold)
+        [
+            "St. Joseph" if value.casefold().replace(".", "").strip() == "st joseph" else value
+            for value in field_values
+        ],
+        key=str.casefold,
+    )
 
     meta = {
         "fields": field_names,
