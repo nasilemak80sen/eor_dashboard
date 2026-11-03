@@ -78,23 +78,32 @@ def _render_rheology(df: pd.DataFrame) -> None:
         st.info("No rheology records match the selected experimental conditions.")
         return
 
-    line_group = [
+    group_columns = [
         column for column in (
             "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
         ) if column in work.columns
     ]
+    work["_Experimental series"] = (
+        work[group_columns].astype("string").fillna("Unknown").agg(" | ".join, axis=1)
+    )
     hover_columns = [
         column for column in (
             "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
         ) if column in work.columns
     ]
+    sort_columns = [
+        column for column in (
+            "Polymer", "Year", "Salinity (mg/L TDS)",
+            "Concentration (ppm)", "Shear Rate"
+        ) if column in work.columns
+    ]
     fig = px.line(
-        work.sort_values(["Polymer", "Shear Rate"]),
+        work.sort_values(sort_columns),
         x="Shear Rate",
         y="Apparent Viscosity",
         color="Polymer",
         line_dash="Concentration (ppm)" if "Concentration (ppm)" in work.columns else None,
-        line_group=line_group or None,
+        line_group="_Experimental series",
         markers=True,
         hover_data=hover_columns,
         labels={"Shear Rate": "Shear Rate (1/sec)", "Apparent Viscosity": "Apparent Viscosity"},
