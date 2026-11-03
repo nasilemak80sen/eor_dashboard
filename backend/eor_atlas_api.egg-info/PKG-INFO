@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: eor-atlas-api
+Version: 0.2.0
+Summary: Versioned API boundary for EOR Atlas Vue migration
+Requires-Python: >=3.11
+Requires-Dist: fastapi<1,>=0.115
+Requires-Dist: uvicorn[standard]<1,>=0.30
+Requires-Dist: pydantic<3,>=2.8
+Requires-Dist: numpy<3,>=2.1
+Requires-Dist: pandas==2.2.3
+Requires-Dist: joblib<2,>=1.4
+Requires-Dist: PyJWT[crypto]<3,>=2.9
+Provides-Extra: test
+Requires-Dist: pytest<9,>=8.3; extra == "test"
+Requires-Dist: httpx<1,>=0.27; extra == "test"

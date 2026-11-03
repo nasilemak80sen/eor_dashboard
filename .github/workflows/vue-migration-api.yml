@@ -1,0 +1,40 @@
+name: Vue migration API tests
+
+on:
+  push:
+    branches:
+      - feat/vue-migration-phases-0-4
+  pull_request:
+    branches:
+      - fix/openglobus-restore-after-revert
+      - main
+    paths:
+      - "backend/**"
+      - "docs/vue-migration/**"
+      - ".github/workflows/vue-migration-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+      - name: Install API and test dependencies
+        run: python -m pip install -e ".[test]"
+      - name: Compile API modules
+        run: python -m compileall -q app tests
+      - name: Run API and history tests
+        run: python -m pytest
