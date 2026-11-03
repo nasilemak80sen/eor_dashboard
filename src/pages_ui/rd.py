@@ -229,11 +229,7 @@ def _render_fluid_fluid(data: dict) -> None:
     with rheology:
         _render_rheology(data["rheology_plot"], meta)
     with phase:
-        tests, diagram = st.tabs(["Precipitation tests", "Phase diagram"])
-        with tests:
-            _render_phase_tests(data["phase_tests"])
-        with diagram:
-            _render_phase_diagram(data["phase_points"])
+        _render_phase_tests(data["phase_tests"])
     with ift:
         _render_ift(data)
 
