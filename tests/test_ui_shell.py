@@ -109,7 +109,7 @@ def test_r_and_d_page_routes_ceor_by_field_without_a_legacy_expander():
     assert "_render_fluid_rock(field_data)" in page
     assert "Legacy CEOR evidence" not in page
     assert "render_legacy_ceor" not in page
-    assert "Unassigned · field not stated in source" in page
+    assert "Other · field mapping incomplete" in page
 
 
 def test_r_and_d_data_loader_preserves_source_ift_bounds():

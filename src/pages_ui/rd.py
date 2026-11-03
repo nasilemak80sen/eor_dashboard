@@ -686,7 +686,7 @@ def _render_ceor() -> None:
 
     fields = list(field_data["metadata"].get("fields") or ["St. Joseph"])
     fields = sorted(set(fields), key=lambda value: (value.casefold() != "st. joseph", value.casefold()))
-    unassigned_label = "Unassigned · field not stated in source"
+    unassigned_label = "Other · field mapping incomplete"
     try:
         unassigned_data = load_ceor_evidence()
         fields.append(unassigned_label)
@@ -698,7 +698,7 @@ def _render_ceor() -> None:
         fields,
         index=0,
         key="rd_ceor_field",
-        help="Select the field whose CEOR evidence you want to inspect. Records without a reliable field tag remain in the unassigned source option.",
+        help="Select the field whose CEOR evidence you want to inspect. Other workbook records whose field tags are incomplete remain available as a separate source option.",
     )
     st.caption(f"CEOR evidence · Field: **{selected_field}**")
 
