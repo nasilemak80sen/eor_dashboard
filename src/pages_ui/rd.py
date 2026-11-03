@@ -791,6 +791,14 @@ def _load_st_jos_supplement() -> dict | None:
 
 def _render_ceor_all_fields(data: dict) -> None:
     """Render the primary workbook as the portfolio-wide CEOR evidence source."""
+    try:
+        st_jos_data = load_st_jos_ceor()
+    except FileNotFoundError:
+        st_jos_data = None
+    except Exception as exc:
+        st_jos_data = None
+        st.warning(f"St. Joseph supplemental data could not be loaded: {exc}")
+
     fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
     with fluid_fluid:
         st.markdown("### Primary CEOR experimental evidence")
@@ -803,6 +811,11 @@ def _render_ceor_all_fields(data: dict) -> None:
         if not data.get("thermal", pd.DataFrame()).empty:
             st.divider()
             _render_thermal_all_fields(data["thermal"])
+        if st_jos_data is not None:
+            st.divider()
+            st.markdown("### St. Joseph supplemental Fluid–Fluid evidence")
+            st.caption("Supplementary source: St_Jos CEOR (Shared) (1).xlsx.")
+            _render_fluid_fluid(st_jos_data)
 
     with fluid_rock:
         st.markdown("### Field-tagged adsorption")
@@ -821,6 +834,11 @@ def _render_ceor_all_fields(data: dict) -> None:
         )
         _render_primary_coreflood(data["Coreflood"], data["metadata"])
         _render_primary_sor(data["Sor_F"], data["metadata"])
+        if st_jos_data is not None:
+            st.divider()
+            st.markdown("### St. Joseph supplemental Fluid–Rock evidence")
+            st.caption("Supplementary source: St_Jos CEOR (Shared) (1).xlsx.")
+            _render_fluid_rock(st_jos_data)
 
     field_map = data.get("field_map", pd.DataFrame())
     if not field_map.empty:
