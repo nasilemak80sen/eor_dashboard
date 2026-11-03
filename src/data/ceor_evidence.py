@@ -162,7 +162,9 @@ def _normalise_ift(frame: pd.DataFrame, kind: str) -> pd.DataFrame:
 
 
 def _canonical_field_name(value: Any) -> str:
-    field = str(value or "").strip()
+    if pd.isna(value):
+        return ""
+    field = str(value).strip()
     if field.casefold().replace(".", "").strip() == "st joseph":
         return "St. Joseph"
     return field
