@@ -8,7 +8,10 @@ from data.ceor_evidence import (
     _normalise_adsorption,
     _normalise_coreflood,
     _normalise_phase,
+    _normalise_field_map,
+    _normalise_ift,
     _normalise_sor_sheet,
+    _normalise_thermal,
     _normalise_vis_shear,
     _resolve_sheet,
 )
@@ -27,8 +30,64 @@ def test_vis_shear_normalisation():
         {"Year ": [2013], "Polymer ": ["P1"], "Shear Rate  (1/sec)": [10], "Apparent Viscosity": [42.0]}
     )
     out = _normalise_vis_shear(raw)
-    assert list(out.columns) == ["Year", "Polymer", "Shear Rate", "Apparent Viscosity"]
+    assert list(out.columns) == [
+        "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)",
+        "Shear Rate", "Apparent Viscosity",
+    ]
     assert out.iloc[0]["Apparent Viscosity"] == 42.0
+    assert pd.isna(out.iloc[0]["Salinity (mg/L TDS)"])
+
+
+
+def test_ift_normalisation_preserves_reversed_source_bounds():
+    raw = pd.DataFrame(
+        {
+            "Polymer": ["Polymer A"],
+            "IFT low  dyne/cm": [0.3591],
+            "IFT high  dyne/cm": [0.01],
+            "Year ": [2013],
+        }
+    )
+    out = _normalise_ift(raw, "Polymer")
+    row = out.iloc[0]
+    assert row["IFT Low"] == pytest.approx(0.3591)
+    assert row["IFT High"] == pytest.approx(0.01)
+    assert bool(row["IFT bounds reversed"]) is True
+    assert row["IFT Low raw"] == "0.3591"
+    assert row["IFT High raw"] == "0.01"
+
+
+def test_field_map_contains_ceor_fields_only_and_canonicalises_st_joseph():
+    raw = pd.DataFrame(
+        {
+            "Field ": ["Angsi", "Dulang", "Baram", "St Joseph"],
+            "Types of EOR": ["CEOR ASP", "CEOR Alkaline", "WAG", "CEOR ASP"],
+            "Year ": [2003, 2017, 2015, 2014],
+            "Type of Study ": ["R&D", "R&D", "R&D", "R&D"],
+        }
+    )
+    out = _normalise_field_map(raw)
+    assert set(out["Field"]) == {"Angsi", "Dulang", "St. Joseph"}
+    assert "Baram" not in set(out["Field"])
+
+
+def test_thermal_normalisation_retains_explicit_field_tags():
+    raw = pd.DataFrame(
+        {
+            "No ": [1, 2],
+            "Year ": [2025, 2025],
+            "Field ": ["Angsi", "Temana"],
+            "Polymer Type": ["P1", "P2"],
+            "Viscosity (cp)": [10.0, 12.0],
+            "Viscosity reduction (%)": [25.0, 30.0],
+            "Time (days)": [30, 60],
+            "Polymer Concentration (ppm) ": [1000, 1500],
+            "Temperature (degc)": [80, 90],
+        }
+    )
+    out = _normalise_thermal(raw)
+    assert set(out["Field"]) == {"Angsi", "Temana"}
+    assert out.loc[out["Field"] == "Angsi", "Viscosity (cP)"].iloc[0] == 10.0
 
 
 def test_phase_and_adsorption_normalisation():
@@ -54,6 +113,33 @@ def test_phase_and_adsorption_normalisation():
     assert adsorption.iloc[0]["Adsorption c/cO"] == 0.6
     assert adsorption.iloc[0]["Temperature"] == 80
     assert adsorption.iloc[0]["Polymer Type"] == "P1"
+
+
+
+def test_primary_workbook_loads_the_repository_ceor_evidence_and_field_register():
+    from data.ceor_evidence import load_ceor_evidence
+
+    load_ceor_evidence.clear()
+    data = load_ceor_evidence()
+    metadata = data["metadata"]
+
+    assert metadata["workbook_name"] == "EOR_Screening_Tool_2026.xlsx"
+    assert metadata["source_map"]["field_map"] == "map"
+    assert metadata["source_map"]["PB_2013_B"] == "PB_2013_S"
+    assert len(data["Vis_Shear"]) == 64
+    assert len(data["PB_2003"]) == 14
+    assert len(data["PB_2013_A"]) == 4
+    assert len(data["PB_2013_B"]) == 49
+    assert len(data["IFT_sur_F"]) == 67
+    assert len(data["IFT_sur_T"]) == 14
+    assert metadata["ift_polymer_reversed_bounds"] == 14
+    assert metadata["thermal_rows"] == 92
+    assert set(metadata["thermal_fields"]) == {"Angsi", "D18", "Temana"}
+    assert set(metadata["adsorption_fields"]) == {"Angsi"}
+    assert set(metadata["fields"]) == {
+        "Angsi", "Baronia", "Barton", "D18", "Dulang",
+        "South Furious 30", "St. Joseph", "Temana",
+    }
 
 
 def test_sor_sheet_accepts_long_layout():

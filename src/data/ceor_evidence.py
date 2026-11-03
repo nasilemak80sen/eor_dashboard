@@ -29,6 +29,7 @@ SHEET_ALIASES: dict[str, tuple[str, ...]] = {
     "Coreflood": ("Coreflood",),
     "Sor_F": ("Sor_F", "SOR_F", "Sor F", "Sor_Reduction", "Sor Reduction"),
     "Thermal": ("Thermal",),
+    "field_map": ("map",),
 }
 
 
@@ -99,17 +100,19 @@ def _text(frame: pd.DataFrame, column: str | None, default: str = "Unknown") -> 
 
 
 def _normalise_vis_shear(frame: pd.DataFrame) -> pd.DataFrame:
+    """Normalize primary rheology data without collapsing distinct conditions."""
     frame = _clean_columns(frame)
     out = pd.DataFrame(
         {
             "Year": _numeric(frame, _first_column(frame, ("Year",))),
             "Polymer": _text(frame, _first_column(frame, ("Polymer", "Polymer Type"))),
+            "Salinity (mg/L TDS)": _numeric(frame, _first_column(frame, ("Salinity", "Salinity (mg/L TDS)"))),
+            "Concentration (ppm)": _numeric(frame, _first_column(frame, ("Concentration", "Concentration (ppm)"))),
             "Shear Rate": _numeric(frame, _first_column(frame, ("Shear Rate", "Shear Rate (1/sec)"))),
             "Apparent Viscosity": _numeric(frame, _first_column(frame, ("Apparent Viscosity",))),
         }
     )
     return out.dropna(subset=["Shear Rate", "Apparent Viscosity"]).reset_index(drop=True)
-
 
 def _normalise_phase(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
@@ -125,21 +128,102 @@ def _normalise_phase(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _normalise_ift(frame: pd.DataFrame, kind: str) -> pd.DataFrame:
+    """Keep IFT values under their original source labels, including reversed bounds."""
     frame = _clean_columns(frame)
     name = _first_column(frame, ("Surfactant", "Polymer", "Material"))
     low = _first_column(frame, ("IFT low", "IFT low dyne/cm", "IFT low dyne/cm "))
     high = _first_column(frame, ("IFT high", "IFT high dyne/cm", "IFT high dyne/cm "))
+    low_raw = (
+        frame[low].astype("string").str.strip()
+        if low is not None
+        else pd.Series(pd.NA, index=frame.index, dtype="string")
+    )
+    high_raw = (
+        frame[high].astype("string").str.strip()
+        if high is not None
+        else pd.Series(pd.NA, index=frame.index, dtype="string")
+    )
+    low_values = pd.to_numeric(low_raw, errors="coerce")
+    high_values = pd.to_numeric(high_raw.str.replace("<", "", regex=False), errors="coerce")
     out = pd.DataFrame(
         {
             "Year": _numeric(frame, _first_column(frame, ("Year",))),
             "Material": _text(frame, name),
-            "IFT Low": _numeric(frame, low),
-            "IFT High": _numeric(frame, high),
+            "IFT Low": low_values,
+            "IFT High": high_values,
+            "IFT Low raw": low_raw,
+            "IFT High raw": high_raw,
+            "IFT bounds reversed": low_values.gt(high_values).fillna(False),
+            "Material Type": kind,
         }
     )
-    out["Material Type"] = kind
-    return out.dropna(subset=["Material", "IFT Low", "IFT High"]).reset_index(drop=True)
+    # Keep source rows with a material label even when one bound is missing.
+    return out.dropna(subset=["Material"]).reset_index(drop=True)
 
+
+def _canonical_field_name(value: Any) -> str:
+    if pd.isna(value):
+        return ""
+    field = str(value).strip()
+    if field.casefold().replace(".", "").strip() == "st joseph":
+        return "St. Joseph"
+    return field
+
+
+def _normalise_field_map(frame: pd.DataFrame) -> pd.DataFrame:
+    """Read the workbook's field/EOR register without using it to infer lab rows."""
+    frame = _clean_columns(frame)
+    out = pd.DataFrame(
+        {
+            "Field": _text(frame, _first_column(frame, ("Field",)), default=""),
+            "EOR type": _text(frame, _first_column(frame, ("Types of EOR", "Type of EOR")), default=""),
+            "Year": _numeric(frame, _first_column(frame, ("Year",))),
+            "Study type": _text(frame, _first_column(frame, ("Type of Study", "Study type")), default=""),
+            "Latitude": _numeric(frame, _first_column(frame, ("Latitude",))),
+            "Longitude": _numeric(frame, _first_column(frame, ("Longitude",))),
+        }
+    )
+    out["Field"] = out["Field"].map(_canonical_field_name)
+    out["EOR type"] = out["EOR type"].astype("string").str.strip()
+    # This register also contains WAG, MEOR and other methods. Only CEOR entries
+    # belong in the CEOR field selector.
+    return (
+        out.loc[
+            out["Field"].ne("")
+            & out["EOR type"].str.contains(r"\bCEOR\b", case=False, na=False)
+        ]
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
+
+
+def _normalise_thermal(frame: pd.DataFrame) -> pd.DataFrame:
+    """Normalize thermal/polymer observations only where the source names a field."""
+    frame = _clean_columns(frame)
+    field_col = _first_column(frame, ("Field",))
+    if field_col is None:
+        return pd.DataFrame(
+            columns=[
+                "Test", "Year", "Field", "Polymer", "Analog", "Viscosity (cP)",
+                "Viscosity reduction (%)", "Time (days)",
+                "Polymer concentration (ppm)", "Temperature (°C)",
+            ]
+        )
+    out = pd.DataFrame(
+        {
+            "Test": _text(frame, _first_column(frame, ("No", "Test")), default=""),
+            "Year": _numeric(frame, _first_column(frame, ("Year",))),
+            "Field": _text(frame, field_col, default="").map(_canonical_field_name),
+            "Polymer": _text(frame, _first_column(frame, ("Polymer Type", "Polymer")), default=""),
+            "Analog": _text(frame, _first_column(frame, ("Analog",)), default=""),
+            "Viscosity (cP)": _numeric(frame, _first_column(frame, ("Viscosity",))),
+            "Viscosity reduction (%)": _numeric(frame, _first_column(frame, ("Viscosity reduction",))),
+            "Time (days)": _numeric(frame, _first_column(frame, ("Time",))),
+            "Polymer concentration (ppm)": _numeric(frame, _first_column(frame, ("Polymer Concentration", "Concentration"))),
+            "Temperature (°C)": _numeric(frame, _first_column(frame, ("Temperature",))),
+        }
+    )
+    return out.dropna(subset=["Field"]).loc[lambda data: data["Field"].ne("")].reset_index(drop=True)
 
 def _normalise_adsorption(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
@@ -149,7 +233,7 @@ def _normalise_adsorption(frame: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(
         {
             "Year": _numeric(frame, _first_column(frame, ("Year",))),
-            "Field": _text(frame, _first_column(frame, ("Field",))),
+            "Field": _text(frame, _first_column(frame, ("Field",)), default="").map(_canonical_field_name),
             "Material": _text(frame, surfactant_col),
             "Days": _numeric(frame, _first_column(frame, ("Days", "Time", "Time Days"))),
             "Adsorption c/cO": _numeric(frame, _first_column(frame, ("Adsorption c/cO", "Adsorption", "Adsorption ratio"))),
@@ -158,7 +242,6 @@ def _normalise_adsorption(frame: pd.DataFrame) -> pd.DataFrame:
         }
     )
     return out.dropna(subset=["Days", "Adsorption c/cO"]).reset_index(drop=True)
-
 
 def _normalise_coreflood(frame: pd.DataFrame) -> pd.DataFrame:
     frame = _clean_columns(frame)
@@ -244,9 +327,8 @@ def load_ceor_evidence() -> dict[str, Any]:
     project_root = _safe_project_root()
     workbook_path = project_root / WORKBOOK_NAME
     if not workbook_path.is_file():
-        # Support deployments that retain the legacy laboratory workbook only
-        # in the data directory while the root-level workbook is unavailable.
-        fallback = project_root / "data" / "EOR_Screening_Tool_2026.xlsx"
+        # Support deployments that retain the laboratory workbook in data/.
+        fallback = project_root / "data" / WORKBOOK_NAME
         if fallback.is_file():
             workbook_path = fallback
         else:
@@ -277,13 +359,29 @@ def load_ceor_evidence() -> dict[str, Any]:
     ift_poly = _normalise_ift(raw.get("IFT_sur_T", _empty()), "Polymer")
     adsorption = _normalise_adsorption(raw.get("adsorption", _empty()))
     coreflood = _normalise_coreflood(raw.get("Coreflood", _empty()))
-
     sor = _normalise_sor_sheet(raw.get("Sor_F", _empty()))
     sor_source = source_map.get("Sor_F")
     if sor.empty:
         sor = _derive_sor_from_coreflood(coreflood)
         sor_source = "derived from Coreflood"
 
+    field_map = _normalise_field_map(raw.get("field_map", _empty()))
+    thermal = _normalise_thermal(raw.get("Thermal", _empty()))
+
+    # The workbook's map sheet is a field/EOR register, not a key that links
+    # every laboratory measurement to a field. Only Thermal and Adsorption
+    # rows carry explicit field attribution in their own source records.
+    mapped_fields = set(field_map["Field"].dropna().astype(str).str.strip())
+    thermal_fields = set(thermal["Field"].dropna().astype(str).str.strip())
+    adsorption_fields = set(adsorption["Field"].dropna().astype(str).str.strip())
+    tagged_fields = thermal_fields | adsorption_fields
+    fields = sorted(
+        {field for field in mapped_fields | tagged_fields if field},
+        key=str.casefold,
+    )
+
+    reversed_surf = int(ift_sur["IFT bounds reversed"].sum()) if not ift_sur.empty else 0
+    reversed_poly = int(ift_poly["IFT bounds reversed"].sum()) if not ift_poly.empty else 0
     metadata: dict[str, Any] = {
         "workbook": str(workbook_path),
         "workbook_name": workbook_path.name,
@@ -291,11 +389,36 @@ def load_ceor_evidence() -> dict[str, Any]:
         "source_map": source_map,
         "missing_requested_sheets": missing,
         "sor_source": sor_source,
+        "fields": fields,
+        "field_map_rows": len(field_map),
+        "thermal_rows": len(thermal),
+        "thermal_fields": sorted(thermal_fields, key=str.casefold),
+        "adsorption_fields": sorted(adsorption_fields, key=str.casefold),
+        "ift_surfactant_reversed_bounds": reversed_surf,
+        "ift_polymer_reversed_bounds": reversed_poly,
+        "ift_reversed_bounds": reversed_surf + reversed_poly,
+        "unassigned_laboratory_sheets": [
+            "Vis_Shear", "PB_2003", "PB_2013_A", "PB_2013_S",
+            "IFT_sur_F", "IFT_poly_F", "Coreflood", "Sor_f",
+        ],
+        "source_attribution_note": (
+            "The map sheet registers fields and EOR methods. It does not assign "
+            "the field-unlabeled laboratory rows to individual fields."
+        ),
     }
 
-    metadata["adsorption_available_years"] = sorted(adsorption["Year"].dropna().astype(int).unique().tolist()) if not adsorption.empty else []
-    metadata["adsorption_available_temperatures"] = sorted(adsorption["Temperature"].dropna().unique().tolist()) if "Temperature" in adsorption else []
-    metadata["adsorption_available_polymer_types"] = sorted(adsorption["Polymer Type"].dropna().astype(str).unique().tolist(), key=str.casefold) if "Polymer Type" in adsorption else []
+    metadata["adsorption_available_years"] = (
+        sorted(adsorption["Year"].dropna().astype(int).unique().tolist())
+        if not adsorption.empty else []
+    )
+    metadata["adsorption_available_temperatures"] = (
+        sorted(adsorption["Temperature"].dropna().unique().tolist())
+        if "Temperature" in adsorption else []
+    )
+    metadata["adsorption_available_polymer_types"] = (
+        sorted(adsorption["Polymer Type"].dropna().astype(str).unique().tolist(), key=str.casefold)
+        if "Polymer Type" in adsorption else []
+    )
 
     return {
         "Vis_Shear": vis,
@@ -307,5 +430,7 @@ def load_ceor_evidence() -> dict[str, Any]:
         "adsorption": adsorption,
         "Coreflood": coreflood,
         "Sor_F": sor,
+        "field_map": field_map,
+        "thermal": thermal,
         "metadata": metadata,
     }
