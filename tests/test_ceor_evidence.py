@@ -115,6 +115,33 @@ def test_phase_and_adsorption_normalisation():
     assert adsorption.iloc[0]["Polymer Type"] == "P1"
 
 
+
+def test_primary_workbook_loads_the_repository_ceor_evidence_and_field_register():
+    from data.ceor_evidence import load_ceor_evidence
+
+    load_ceor_evidence.clear()
+    data = load_ceor_evidence()
+    metadata = data["metadata"]
+
+    assert metadata["workbook_name"] == "EOR_Screening_Tool_2026.xlsx"
+    assert metadata["source_map"]["field_map"] == "map"
+    assert metadata["source_map"]["PB_2013_B"] == "PB_2013_S"
+    assert len(data["Vis_Shear"]) == 64
+    assert len(data["PB_2003"]) == 14
+    assert len(data["PB_2013_A"]) == 4
+    assert len(data["PB_2013_B"]) == 49
+    assert len(data["IFT_sur_F"]) == 67
+    assert len(data["IFT_sur_T"]) == 14
+    assert metadata["ift_polymer_reversed_bounds"] == 14
+    assert metadata["thermal_rows"] == 92
+    assert set(metadata["thermal_fields"]) == {"Angsi", "D18", "Temana"}
+    assert set(metadata["adsorption_fields"]) == {"Angsi"}
+    assert set(metadata["fields"]) == {
+        "Angsi", "Baronia", "Barton", "D18", "Dulang",
+        "South Furious 30", "St. Joseph", "Temana",
+    }
+
+
 def test_sor_sheet_accepts_long_layout():
     sor = _normalise_sor_sheet(
         pd.DataFrame(
