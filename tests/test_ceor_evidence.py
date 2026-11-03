@@ -108,12 +108,24 @@ def test_ceor_page_uses_repository_loader_not_legacy_app_renderer():
     assert "_app.render_fluid_rock_section()" not in source
 
 
-def test_r_and_d_page_defines_separate_ceor_and_wag_sources():
+def test_r_and_d_page_uses_ceor_category_with_field_filter_and_two_method_views():
     source = (Path(__file__).resolve().parents[1] / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
-    assert "St_Jos CEOR (Shared) (1).xlsx" in source
+    assert "St_Jos CEOR (Shared) (1).xlsx" in (Path(__file__).resolve().parents[1] / "src" / "data" / "rd_lab_evidence.py").read_text(encoding="utf-8")
     assert "Baronia_WAG_Data_EOR_ATLAS 1.xlsx" in source
     assert 'options=["CEOR", "WAG"]' in source
-    assert 'options=["Fluid–Fluid", "Fluid–Rock"]' in source
+    assert 'st.tabs(["Fluid–Fluid", "Fluid–Rock"])' in source
+    assert 'st.selectbox(\n        "Field"' in source
+    assert "Legacy CEOR evidence" not in source
+    assert "render_legacy_ceor" not in source
+
+
+def test_st_jos_loader_exposes_explicit_thermal_fields():
+    from data.rd_lab_evidence import load_st_jos_ceor
+
+    data = load_st_jos_ceor()
+    assert data["metadata"]["thermal_rows"] == 92
+    assert set(data["thermal"]["Field"].dropna().astype(str)) == {"Angsi", "D18", "Temana"}
+    assert set(data["metadata"]["fields"]) == {"St. Joseph", "Angsi", "D18", "Temana"}
 
 
 def test_ceor_page_has_compact_render_entrypoint():

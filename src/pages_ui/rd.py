@@ -1,8 +1,6 @@
 """R&D laboratory page: St. Joseph CEOR and Baronia WAG."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -10,7 +8,8 @@ import streamlit as st
 
 from data.rd_lab_evidence import load_st_jos_ceor
 from data.baronia_wag_evidence import load_baronia_wag
-from pages_ui.ceor import render_compact as render_legacy_ceor
+from data.ceor_evidence import load_ceor_evidence
+from pages_ui.ceor import _render_compact_fluid_fluid, _render_compact_fluid_rock
 
 
 def _metric_row(items: list[tuple[str, str, str]]) -> None:
@@ -641,10 +640,110 @@ def _render_wag() -> None:
     with quality:
         _render_wag_quality(data)
 
+
+
+def _render_thermal_field(df: pd.DataFrame, field: str) -> None:
+    """Render only thermal records explicitly tagged to the selected field."""
+    work = df.loc[
+        df["Field"].astype(str).str.strip().str.casefold() == field.casefold()
+    ].copy()
+    st.markdown("#### Thermal polymer response")
+    if work.empty:
+        st.info(f"No thermal polymer records are available for {field}.")
+        return
+
+    _metric_row([
+        ("Tests", str(work["Test"].nunique()), "Distinct test identifiers in the Thermal sheet"),
+        ("Polymer types", str(work["Polymer"].nunique()), "Polymer types tested for the selected field"),
+        ("Temperature", f"{work['Temperature (°C)'].dropna().max():g} °C" if work["Temperature (°C)"].notna().any() else "Not reported", "Maximum recorded test temperature"),
+        ("Concentrations", str(work["Polymer concentration (ppm)"].nunique()), "Distinct polymer concentrations recorded"),
+    ])
+    metric = "Viscosity (cP)" if work["Viscosity (cP)"].notna().any() else "Viscosity reduction (%)"
+    fig = px.line(
+        work.sort_values("Time (days)"),
+        x="Time (days)",
+        y=metric,
+        color="Polymer",
+        line_dash="Test",
+        markers=True,
+        hover_data=["Year", "Analog", "Polymer concentration (ppm)", "Temperature (°C)", "Viscosity reduction (%)"],
+        labels={"Time (days)": "Exposure time (days)", metric: metric},
+    )
+    fig.update_layout(height=350, template="plotly_white", margin=dict(l=35, r=15, t=25, b=40))
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    with st.expander("View thermal source records"):
+        st.dataframe(work, use_container_width=True, hide_index=True)
+
+
+def _render_ceor() -> None:
+    try:
+        field_data = load_st_jos_ceor()
+    except Exception as exc:
+        st.error("CEOR field evidence could not be loaded.")
+        with st.expander("Technical detail"):
+            st.exception(exc)
+        return
+
+    fields = list(field_data["metadata"].get("fields") or ["St. Joseph"])
+    fields = sorted(set(fields), key=lambda value: (value.casefold() != "st. joseph", value.casefold()))
+    unassigned_label = "Unassigned · field not stated in source"
+    try:
+        unassigned_data = load_ceor_evidence()
+        fields.append(unassigned_label)
+    except Exception:
+        unassigned_data = None
+
+    selected_field = st.selectbox(
+        "Field",
+        fields,
+        index=0,
+        key="rd_ceor_field",
+        help="Select the field whose CEOR evidence you want to inspect. Records without a reliable field tag remain in the unassigned source option.",
+    )
+    st.caption(f"CEOR evidence · Field: **{selected_field}**")
+
+    fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
+    if selected_field.casefold() == "st. joseph":
+        with fluid_fluid:
+            _render_fluid_fluid(field_data)
+        with fluid_rock:
+            _render_fluid_rock(field_data)
+        with st.expander("Field data and source notes"):
+            st.write({
+                "Selected field": selected_field,
+                "Source workbook": field_data["metadata"]["workbook_name"],
+                "Thermal field records": int(
+                    field_data["thermal"]["Field"].astype(str).str.strip().str.casefold().eq("st joseph").sum()
+                ),
+                "Rheology observations plotted": field_data["metadata"]["rheology_plot_rows"],
+                "Phase points": field_data["metadata"]["phase_point_rows"],
+                "Adsorption tests": field_data["metadata"]["adsorption_rows"],
+                "Coreflood samples": field_data["metadata"]["coreflood_samples"],
+            })
+    elif selected_field == unassigned_label and unassigned_data is not None:
+        with fluid_fluid:
+            _render_compact_fluid_fluid(unassigned_data)
+        with fluid_rock:
+            _render_compact_fluid_rock(unassigned_data)
+        st.caption(
+            "These records are kept in the same CEOR workspace, but their source workbook does not provide a consistent field key across all fluid–fluid and fluid–rock sheets."
+        )
+    else:
+        with fluid_fluid:
+            _render_thermal_field(field_data["thermal"], selected_field)
+            st.caption(
+                "Only records explicitly tagged to this field are shown. No St. Joseph measurements are carried across to another field."
+            )
+        with fluid_rock:
+            st.info(
+                f"No fluid–rock adsorption, core-flood or Sor-reduction records are currently mapped to {selected_field}. They will appear here when field-attributed source evidence is available."
+            )
+
+
 def render() -> None:
     st.markdown("## R&D Laboratory")
     st.caption(
-        "Field-specific laboratory evidence, separated by EOR method and experimental interaction."
+        "Explore CEOR and Water Alternating Gas evidence by field and experimental interaction."
     )
     method = st.segmented_control(
         "Laboratory method",
@@ -660,58 +759,5 @@ def render() -> None:
     if method == "WAG":
         _render_wag()
         return
+    _render_ceor()
 
-    data = None
-    try:
-        data = load_st_jos_ceor()
-    except Exception as exc:
-        st.error("St. Joseph CEOR evidence could not be loaded.")
-        with st.expander("Technical detail"):
-            st.exception(exc)
-        return
-
-    st.markdown("### St. Joseph · Chemical EOR")
-    st.caption("Source: St_Jos CEOR (Shared) (1).xlsx · 2010–2013 laboratory evidence")
-    submethod = st.segmented_control(
-        "CEOR methodology",
-        options=["Fluid–Fluid", "Fluid–Rock"],
-        default="Fluid–Fluid",
-        key="rd_ceor_submethod",
-        label_visibility="collapsed",
-    )
-    if submethod == "Fluid–Rock":
-        _render_fluid_rock(data)
-    else:
-        _render_fluid_fluid(data)
-
-    with st.expander("Legacy CEOR evidence from the EOR Screening Tool workbook"):
-        legacy_root = Path(__file__).resolve().parents[2]
-        legacy_paths = (
-            legacy_root / "EOR_Screening_Tool_2026.xlsx",
-            legacy_root / "data" / "EOR_Screening_Tool_2026.xlsx",
-        )
-        legacy_exists = any(path.is_file() for path in legacy_paths)
-        if legacy_exists:
-            st.caption(
-                "This preserves the pre-existing CEOR panels as a separate legacy source. "
-                "It is not blended into St. Joseph field-level statistics."
-            )
-            render_legacy_ceor()
-        else:
-            st.info(
-                "The legacy EOR_Screening_Tool_2026.xlsx workbook is not present in this "
-                "branch. St. Joseph evidence above remains available independently."
-            )
-
-    meta = data["metadata"]
-    with st.expander("Workbook and data-quality notes"):
-        st.write({
-            "Workbook": meta["workbook_name"],
-            "Rheology source rows": meta["rheology_source_rows"],
-            "Rheology rows plotted": meta["rheology_plot_rows"],
-            "Rheology rows without shear rate": meta["rheology_missing_shear_rate_rows"],
-            "Phase points": meta["phase_point_rows"],
-            "Validated phase points": meta["phase_validated_rows"],
-            "IFT rows with reversed polymer bounds": meta["ift_polymer_reversed_bounds"],
-            "Missing required sheets": meta["missing_sheets"],
-        })

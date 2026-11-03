@@ -115,6 +115,25 @@ def _adsorption(xlsx: pd.ExcelFile) -> pd.DataFrame:
     }).dropna(subset=["Adsorption ratio"]).reset_index(drop=True)
 
 
+
+def _thermal(xlsx: pd.ExcelFile) -> pd.DataFrame:
+    """Normalize the field-labelled thermal polymer evidence."""
+    frame = _clean(pd.read_excel(xlsx, sheet_name="Thermal"))
+    out = pd.DataFrame({
+        "Test": _text(frame, ("No",)),
+        "Year": _numeric(frame, ("Year",)),
+        "Field": _text(frame, ("Field",)).str.strip(),
+        "Polymer": _text(frame, ("Polymer Type",)),
+        "Analog": _text(frame, ("Analog",)),
+        "Viscosity (cP)": _numeric(frame, ("Viscosity",)),
+        "Viscosity reduction (%)": _numeric(frame, ("Viscosity reduction",)),
+        "Time (days)": _numeric(frame, ("Time",)),
+        "Polymer concentration (ppm)": _numeric(frame, ("Polymer Concentration",)),
+        "Temperature (°C)": _numeric(frame, ("Temperature",)),
+    })
+    return out.dropna(subset=["Field"]).reset_index(drop=True)
+
+
 def _coreflood(xlsx: pd.ExcelFile) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     summary = _clean(pd.read_excel(xlsx, sheet_name="Coreflood Summary (St_Jos)"))
     core = _clean(pd.read_excel(xlsx, sheet_name="Coreflood (St_Jos)"))
@@ -246,9 +265,19 @@ def load_st_jos_ceor() -> dict[str, Any]:
     ift_surf = _ift_sheet(xlsx, "IFT_sur_F (St_Jos)", "Surfactant")
     ift_poly = _ift_sheet(xlsx, "IFT_poly_F", "Polymer")
     phase_tests = _phase_tests(xlsx)
+    thermal = _thermal(xlsx) if "Thermal" in names else pd.DataFrame()
     water, stages, factors, sor, core_summary = _coreflood(xlsx)
 
+    field_values = set(thermal["Field"].dropna().astype(str).str.strip()) if not thermal.empty else set()
+    field_values.update(adsorption["Field"].dropna().astype(str).str.strip())
+    field_names = sorted(
+        ("St. Joseph" if value.casefold().replace(".", "").strip() == "st joseph" else value)
+        for value in field_values
+    , key=str.casefold)
+
     meta = {
+        "fields": field_names,
+        "thermal_rows": len(thermal),
         "workbook": str(path),
         "workbook_name": path.name,
         "missing_sheets": missing,
@@ -268,6 +297,7 @@ def load_st_jos_ceor() -> dict[str, Any]:
     return {
         "rheology": rheology,
         "rheology_plot": rheology_plot,
+        "thermal": thermal,
         "phase_points": phase_points,
         "phase_tests": phase_tests,
         "ift_surfactant": ift_surf,
