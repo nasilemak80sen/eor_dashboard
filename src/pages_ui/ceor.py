@@ -31,37 +31,81 @@ def _fmt_source(metadata: dict, requested: str) -> str:
 
 
 def _render_rheology(df: pd.DataFrame) -> None:
-    section_title("Rheology", "Apparent viscosity versus shear rate. Compare polymer behaviour across years and formulations.")
+    section_title(
+        "Rheology",
+        "Apparent viscosity versus shear rate. Compare polymer behaviour without merging distinct salinity or concentration conditions.",
+    )
     if df.empty:
         st.warning("Vis_Shear contains no usable rheology records.")
         return
+
     years = sorted(df["Year"].dropna().astype(int).unique().tolist())
     polymers = sorted(df["Polymer"].dropna().astype(str).unique().tolist(), key=str.casefold)
-    a, b = st.columns([1, 2])
-    with a:
+    salinities = (
+        sorted(df["Salinity (mg/L TDS)"].dropna().unique().tolist())
+        if "Salinity (mg/L TDS)" in df else []
+    )
+    concentrations = (
+        sorted(df["Concentration (ppm)"].dropna().unique().tolist())
+        if "Concentration (ppm)" in df else []
+    )
+
+    controls = st.columns(4)
+    with controls[0]:
         selected_years = st.multiselect("Year", years, default=years, key="ceor_rheo_years")
-    with b:
+    with controls[1]:
         selected_polymers = st.multiselect("Polymer type", polymers, default=polymers, key="ceor_rheo_polymers")
+    with controls[2]:
+        selected_salinities = st.multiselect(
+            "Salinity (mg/L TDS)", salinities, default=salinities, key="ceor_rheo_salinities"
+        )
+    with controls[3]:
+        selected_concentrations = st.multiselect(
+            "Concentration (ppm)", concentrations, default=concentrations, key="ceor_rheo_concentrations"
+        )
+
     work = df.copy()
     if selected_years:
         work = work[work["Year"].isin(selected_years)]
     if selected_polymers:
         work = work[work["Polymer"].isin(selected_polymers)]
+    if salinities and selected_salinities:
+        work = work[work["Salinity (mg/L TDS)"].isin(selected_salinities)]
+    if concentrations and selected_concentrations:
+        work = work[work["Concentration (ppm)"].isin(selected_concentrations)]
+
     if work.empty:
-        st.info("No rheology records match the selected filters.")
+        st.info("No rheology records match the selected experimental conditions.")
         return
+
+    line_group = [
+        column for column in (
+            "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
+        ) if column in work.columns
+    ]
+    hover_columns = [
+        column for column in (
+            "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
+        ) if column in work.columns
+    ]
     fig = px.line(
         work.sort_values(["Polymer", "Shear Rate"]),
         x="Shear Rate",
         y="Apparent Viscosity",
         color="Polymer",
+        line_dash="Concentration (ppm)" if "Concentration (ppm)" in work.columns else None,
+        line_group=line_group or None,
         markers=True,
-        hover_data=["Year"],
+        hover_data=hover_columns,
         labels={"Shear Rate": "Shear Rate (1/sec)", "Apparent Viscosity": "Apparent Viscosity"},
     )
-    fig.update_layout(height=330, margin=dict(l=38, r=12, t=24, b=45), legend_title="Polymer", template="plotly_white")
+    fig.update_layout(
+        height=460,
+        margin=dict(l=50, r=20, t=30, b=80),
+        legend_title="Polymer / concentration",
+        template="plotly_white",
+    )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
 
 def _render_phase_chart(df: pd.DataFrame, title: str) -> None:
     if df.empty:
@@ -106,34 +150,53 @@ def _render_ift_chart(df: pd.DataFrame, title: str) -> None:
     if df.empty:
         st.info(f"{title}: no usable records in the workbook.")
         return
-    work = df.sort_values("IFT High", ascending=False).copy()
-    low = pd.to_numeric(work["IFT Low"], errors="coerce")
-    high = pd.to_numeric(work["IFT High"], errors="coerce")
-    work["Range"] = (high - low).clip(lower=0)
+
     fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            y=work["Material"],
-            x=work["Range"],
-            base=low,
-            orientation="h",
-            customdata=work[["IFT Low", "IFT High", "Year"]].to_numpy(),
-            hovertemplate=(
-                "%{y}<br>IFT low: %{customdata[0]:.4g} dynes/cm<br>"
-                "IFT high: %{customdata[1]:.4g} dynes/cm<br>Year: %{customdata[2]}<extra></extra>"
-            ),
+    for column, label, symbol in (
+        ("IFT Low", "IFT low (source column)", "circle"),
+        ("IFT High", "IFT high (source column)", "diamond"),
+    ):
+        if column not in df.columns:
+            continue
+        part = df.dropna(subset=[column]).copy()
+        if part.empty:
+            continue
+        custom_columns = [
+            column_name for column_name in ("IFT Low raw", "IFT High raw", "Year")
+            if column_name in part.columns
+        ]
+        custom = part[custom_columns].astype(str).to_numpy() if custom_columns else None
+        hover_parts = ["%{y}", f"{label}: %{{x:.5g}} dynes/cm"]
+        if "IFT Low raw" in custom_columns:
+            hover_parts.append("Source IFT low: %{customdata[0]}")
+        if "IFT High raw" in custom_columns:
+            idx = custom_columns.index("IFT High raw")
+            hover_parts.append(f"Source IFT high: %{{customdata[{idx}]}}")
+        if "Year" in custom_columns:
+            idx = custom_columns.index("Year")
+            hover_parts.append(f"Year: %{{customdata[{idx}]}}")
+        fig.add_trace(
+            go.Scatter(
+                x=part[column],
+                y=part["Material"],
+                mode="markers",
+                name=label,
+                marker={"size": 9, "symbol": symbol},
+                customdata=custom,
+                hovertemplate="<br>".join(hover_parts) + "<extra></extra>",
+            )
         )
-    )
+
     fig.update_layout(
         title=str(title),
         xaxis_title="IFT (dynes/cm)",
         yaxis_title="Material",
-        height=max(230, min(330, 75 + 27 * len(work))),
-        margin=dict(l=20, r=12, t=34, b=38),
-        showlegend=False,
+        height=max(310, 100 + 36 * len(df)),
+        margin=dict(l=25, r=20, t=50, b=55),
+        legend_title="Source column",
+        template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
 
 def _render_fluid_fluid(data: dict) -> None:
     metadata = data["metadata"]
@@ -162,6 +225,14 @@ def _render_fluid_fluid(data: dict) -> None:
         actual = metadata.get("source_map", {}).get("IFT_sur_T")
         if actual and actual != "IFT_sur_T":
             st.caption(f"Polymer IFT panel is sourced from repository sheet `{actual}` in this workbook revision.")
+
+    reversed_ift = metadata.get("ift_reversed_bounds", 0)
+    if reversed_ift:
+        st.warning(
+            f"Source-data note: {reversed_ift} IFT records have the source 'IFT low' "
+            "value above 'IFT high'. Both columns are plotted under their original "
+            "labels; the values are not swapped or clipped into an artificial range."
+        )
 
 
 def _render_adsorption(df: pd.DataFrame, metadata: dict) -> None:
