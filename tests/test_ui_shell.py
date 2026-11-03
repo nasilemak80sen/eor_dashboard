@@ -100,13 +100,16 @@ def test_r_and_d_navigation_routes_to_new_page():
     assert '"ceor": rd.render' in app
 
 
-def test_r_and_d_page_has_separate_fluid_fluid_and_fluid_rock_views():
+def test_r_and_d_page_routes_ceor_by_field_without_a_legacy_expander():
     page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
     assert 'options=["CEOR", "WAG"]' in page
-    assert 'options=["Fluid–Fluid", "Fluid–Rock"]' in page
-    assert "load_st_jos_ceor" in page
-    assert "Baronia workbook supplied" in page
-    assert "render_legacy_ceor()" in page
+    assert 'st.tabs(["Fluid–Fluid", "Fluid–Rock"])' in page
+    assert 'st.selectbox(\n        "Field"' in page
+    assert "_render_fluid_fluid(field_data)" in page
+    assert "_render_fluid_rock(field_data)" in page
+    assert "Legacy CEOR evidence" not in page
+    assert "render_legacy_ceor" not in page
+    assert "Other · field mapping incomplete" in page
 
 
 def test_r_and_d_data_loader_preserves_source_ift_bounds():
