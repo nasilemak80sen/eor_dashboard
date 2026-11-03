@@ -1,8 +1,8 @@
-"""Field-specific laboratory evidence loaders for the R&D workspace.
+"""Field-specific CEOR laboratory evidence loaders for the R&D workspace.
 
-The St. Joseph workbook is kept separate from the legacy EOR screening workbook.
-Source values and units are preserved; questionable source values are flagged,
-not silently corrected.
+Field-labelled data stay attached to their source field. Records without a
+consistent field key are exposed as unassigned rather than being attributed to
+a field by assumption. Questionable source values are flagged, not corrected.
 """
 from __future__ import annotations
 

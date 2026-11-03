@@ -1,4 +1,4 @@
-"""R&D laboratory page: St. Joseph CEOR and Baronia WAG."""
+"""R&D laboratory page with CEOR field filtering and a separate WAG category."""
 from __future__ import annotations
 
 import pandas as pd
