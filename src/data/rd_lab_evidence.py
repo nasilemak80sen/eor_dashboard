@@ -154,6 +154,16 @@ def _coreflood(xlsx: pd.ExcelFile) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataF
         "Year": _numeric(core, ("Year",)),
         "Water flood recovery (% OOIP)": _numeric(core, ("Water Flood Recovery, % OOIP",)),
     }).dropna(subset=["Core sample"]).reset_index(drop=True)
+
+    # Preserve the original stacked recovery-component chart's source columns.
+    # Each component is copied independently; missing source columns stay absent
+    # rather than being inferred from a different recovery metric.
+    for component in ("Water Flood", "AS", "Polymer", "Alkaline", "Surfactant", "SP", "ASP"):
+        source_column = _find_column(core, (component,))
+        if source_column is not None:
+            values = pd.to_numeric(core[source_column], errors="coerce")
+            water[component] = values.reindex(water.index)
+
     water = water.merge(summary[["Core sample", "Treatment type"]], on="Core sample", how="left")
 
     stage_specs = (
