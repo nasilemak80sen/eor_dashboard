@@ -782,7 +782,7 @@ def _render_ceor() -> None:
         st.info(
             "The St. Joseph CEOR source workbook is not committed to this public "
             "repository. Upload your approved working copy below, or place it at "
-            f"data/{'St_Jos CEOR (Shared) (1).xlsx'} locally."
+            "data/St_Jos CEOR (Shared) (1).xlsx locally."
         )
         uploaded = st.file_uploader(
             "Upload the St. Joseph CEOR workbook",
