@@ -59,7 +59,7 @@ def _render_rheology(df: pd.DataFrame) -> None:
         hover_data=["Year"],
         labels={"Shear Rate": "Shear Rate (1/sec)", "Apparent Viscosity": "Apparent Viscosity"},
     )
-    fig.update_layout(height=330, margin=dict(l=38, r=12, t=24, b=45), legend_title="Polymer", template="plotly_white")
+    fig.update_layout(height=460, margin=dict(l=50, r=20, t=30, b=80), legend_title="Polymer")
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -93,8 +93,8 @@ def _render_phase_chart(df: pd.DataFrame, title: str) -> None:
         title=str(title),
     )
     fig.update_layout(
-        height=max(230, min(330, 70 + 28 * len(work))),
-        margin=dict(l=22, r=12, t=34, b=34),
+        height=max(300, 90 + 42 * len(work)),
+        margin=dict(l=30, r=20, t=50, b=45),
         legend_title="Phase behaviour",
         xaxis_title="Share of test condition (%)",
         yaxis_title="Formulation",
@@ -128,8 +128,8 @@ def _render_ift_chart(df: pd.DataFrame, title: str) -> None:
         title=str(title),
         xaxis_title="IFT (dynes/cm)",
         yaxis_title="Material",
-        height=max(230, min(330, 75 + 27 * len(work))),
-        margin=dict(l=20, r=12, t=34, b=38),
+        height=max(310, 100 + 36 * len(work)),
+        margin=dict(l=25, r=20, t=50, b=55),
         showlegend=False,
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
@@ -216,7 +216,7 @@ def _render_adsorption(df: pd.DataFrame, metadata: dict) -> None:
         hover_data=["Year", "Field"],
         labels={"Days": "Days", "Adsorption c/cO": "Adsorption c/c₀"},
     )
-    fig.update_layout(height=330, margin=dict(l=38, r=12, t=24, b=45), legend_title="Surfactant / formulation", template="plotly_white")
+    fig.update_layout(height=440, margin=dict(l=50, r=20, t=30, b=70), legend_title="Surfactant / formulation")
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.caption(_fmt_source(metadata, "adsorption"))
 
@@ -234,12 +234,11 @@ def _render_coreflood(df: pd.DataFrame, metadata: dict) -> None:
             chart[column] = pd.to_numeric(chart[column], errors="coerce").fillna(0)
         long = chart.melt(id_vars=["Core sample", "Year"], value_vars=available, var_name="Recovery component", value_name="Recovery (% OOIP)")
         fig = px.bar(long, x="Core sample", y="Recovery (% OOIP)", color="Recovery component", barmode="stack", hover_data=["Year"])
-        fig.update_layout(height=340, margin=dict(l=28, r=12, t=24, b=62), xaxis_tickangle=-35, legend_title="Recovery component", template="plotly_white")
+        fig.update_layout(height=520, margin=dict(l=35, r=20, t=30, b=110), xaxis_tickangle=-55, legend_title="Recovery component")
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     else:
         st.info("No recovery contribution columns were found for the core-flood chart.")
-    with st.expander("View core-flood source records", expanded=False):
-        st.dataframe(df, use_container_width=True, hide_index=True, height=320)
+    st.dataframe(df, use_container_width=True, hide_index=True, height=440)
     st.caption(_fmt_source(metadata, "Coreflood"))
 
 
@@ -257,70 +256,58 @@ def _render_sor(df: pd.DataFrame, metadata: dict) -> None:
         hover_data=["Year"],
         labels={"Sor Reduction (%)": "Sor reduction (%)"},
     )
-    fig.update_layout(height=330, margin=dict(l=35, r=12, t=24, b=62), xaxis_tickangle=-35, legend_title="Method", template="plotly_white")
+    fig.update_layout(height=460, margin=dict(l=45, r=20, t=30, b=110), xaxis_tickangle=-55, legend_title="Method")
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.caption(f"Sor source: `{metadata.get('sor_source') or 'not resolved'}`")
 
 
-def _render_compact_fluid_fluid(data: dict) -> None:
-    metadata = data["metadata"]
-    st.markdown("### Fluid–Fluid evidence")
-    rheology, phase, ift = st.tabs(["Rheology", "Phase behaviour", "IFT"])
-    with rheology:
-        _render_rheology(data["Vis_Shear"])
-        st.caption(_fmt_source(metadata, "Vis_Shear"))
-    with phase:
-        col1, col2 = st.columns(2)
-        with col1:
-            _render_phase_chart(data["PB_2003"], "2003 phase behaviour")
-            _render_phase_chart(data["PB_2013_A"], "2013 formulation set A")
-        with col2:
-            _render_phase_chart(data["PB_2013_B"], "2013 formulation set B")
-        st.caption("Source worksheets remain separately traceable in the workbook.")
-    with ift:
-        col1, col2 = st.columns(2)
-        with col1:
-            _render_ift_chart(data["IFT_sur_F"], "Surfactant IFT")
-            st.caption(_fmt_source(metadata, "IFT_sur_F"))
-        with col2:
-            _render_ift_chart(data["IFT_sur_T"], "Polymer IFT")
-            st.caption(_fmt_source(metadata, "IFT_sur_T"))
-
-
-def _render_compact_fluid_rock(data: dict) -> None:
-    metadata = data["metadata"]
-    adsorption, coreflood, sor = st.tabs(["Adsorption", "Core flood", "Sor reduction"])
-    with adsorption:
-        _render_adsorption(data["adsorption"], metadata)
-    with coreflood:
-        _render_coreflood(data["Coreflood"], metadata)
-    with sor:
-        _render_sor(data["Sor_F"], metadata)
-
-
-def render_compact() -> None:
-    """Render the current CEOR workbook in compact method-specific views."""
+def render() -> None:
     try:
         data = load_ceor_evidence()
     except Exception as exc:
-        st.error("Existing CEOR evidence could not be loaded.")
+        st.error("CEOR evidence could not be loaded from the repository workbook.")
         st.caption(str(exc))
         return
 
     metadata = data["metadata"]
-    fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
-    with fluid_fluid:
-        _render_compact_fluid_fluid(data)
-    with fluid_rock:
-        _render_compact_fluid_rock(data)
+    insight_cards([
+        ("FLUID / FLUID", "Rheology → Phase → IFT", "Establish whether the injected chemistry remains workable and interfacially effective before moving to rock-response evidence."),
+        ("FLUID / ROCK", "Adsorption → Core Flood → Sor", "Trace whether the chemistry survives rock interaction and delivers incremental recovery."),
+        ("EVIDENCE", "Workbook-backed", "Every chart is sourced from the repository engineering workbook, with source-sheet labels shown beside the evidence."),
+    ])
+    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+
+    fluid_fluid_tab, fluid_rock_tab = st.tabs(["Fluid / Fluid", "Fluid / Rock"])
+
+    with fluid_fluid_tab:
+        section_title("CEOR — Fluid / Fluid Interaction", _FF_DESC)
+        try:
+            _render_fluid_fluid(data)
+        except Exception as exc:
+            st.error("The CEOR Fluid / Fluid section could not be rendered.")
+            st.caption(f"Technical detail: {exc}")
+
+    with fluid_rock_tab:
+        section_title("CEOR — Fluid / Rock Interaction", _FR_DESC)
+        try:
+            _render_adsorption(data["adsorption"], metadata)
+        except Exception as exc:
+            st.error("The Adsorption section could not be rendered.")
+            st.caption(f"Technical detail: {exc}")
+        try:
+            _render_coreflood(data["Coreflood"], metadata)
+        except Exception as exc:
+            st.error("The Core Flood section could not be rendered.")
+            st.caption(f"Technical detail: {exc}")
+        try:
+            _render_sor(data["Sor_F"], metadata)
+        except Exception as exc:
+            st.error("The Sor Reduction section could not be rendered.")
+            st.caption(f"Technical detail: {exc}")
 
     missing = metadata.get("missing_requested_sheets") or []
     if missing:
         with st.expander("Workbook source notes", expanded=False):
-            st.write("Requested worksheets not found: " + ", ".join(str(name) for name in missing))
+            st.write("Exact requested sheet names not found: " + ", ".join(str(name) for name in missing))
+            st.write("Where an equivalent alias exists, the page uses it and shows the actual source sheet beside the chart.")
             st.code(metadata.get("workbook") or "")
-
-
-def render() -> None:
-    """Backward-compatible entrypoint for legacy callers."""
-    render_compact()

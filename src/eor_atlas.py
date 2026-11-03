@@ -13,7 +13,7 @@ import streamlit as st
 
 import hybrid_app as engine
 from config.settings import settings
-from pages_ui import challenges, ceor, rd, candidates, historical, insights, intelligence, overview, screening, system
+from pages_ui import challenges, ceor, candidates, historical, insights, intelligence, overview, screening, system
 from ui.app_shell import initialize_ui, render_page_intro, render_shell_header, select_page
 
 logger = logging.getLogger("eor_atlas")
@@ -27,7 +27,7 @@ PAGE_META = {
     "insights": ("DECISION VIEW", "EOR Insights", "Translate screening and portfolio data into an intuitive view of opportunity concentration and next actions."),
     "historical": ("KNOWLEDGE BASE", "Historical EOR", "Review previous EOR studies, saved screening runs and lessons available to inform current decisions."),
     "challenges": ("RISK & LESSONS", "Challenges & Lessons", "Capture technical, operational and execution risks so they remain visible alongside EOR opportunity."),
-    "ceor": ("RESEARCH & DEVELOPMENT", "R&D Laboratory", "Explore Chemical EOR and Water Alternating Gas laboratory evidence by field and methodology."),
+    "ceor": ("TECHNOLOGY", "CEOR Lab", "Explore fluid/fluid and fluid/rock technical evidence supporting chemical EOR decisions."),
     "system": ("PLATFORM GOVERNANCE", "System & Model", "Monitor application health, workbook connection and the active CatBoost configuration."),
 }
 
@@ -62,7 +62,7 @@ def _render_page(page: str, services: dict) -> None:
         "insights": lambda: insights.render(services),
         "historical": historical.render,
         "challenges": challenges.render,
-        "ceor": rd.render,
+        "ceor": ceor.render,
         "system": lambda: system.render(services),
     }
     renderer = renderers.get(page, overview.render)
