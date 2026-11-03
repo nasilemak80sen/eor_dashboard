@@ -117,3 +117,29 @@ def test_r_and_d_data_loader_preserves_source_ift_bounds():
     assert '"IFT low (source)"' in loader
     assert '"IFT high (source)"' in loader
     assert "ift_polymer_reversed_bounds" in loader
+
+
+def test_ceor_field_options_include_all_fields_without_duplicate_field_values():
+    from pages_ui.rd import _ceor_field_options, ALL_FIELDS_LABEL, OTHER_FIELD_LABEL
+
+    options = _ceor_field_options(
+        ["Angsi", "D18", "St. Joseph", "Temana", "St Joseph"],
+        include_other=True,
+    )
+    assert options == [
+        ALL_FIELDS_LABEL,
+        "St. Joseph",
+        "Angsi",
+        "D18",
+        "Temana",
+        OTHER_FIELD_LABEL,
+    ]
+
+
+def test_ceor_all_fields_view_keeps_each_field_and_source_separate():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert 'if selected_field == ALL_FIELDS_LABEL:' in page
+    assert "def _render_ceor_all_fields(" in page
+    assert "_render_thermal_all_fields(thermal)" in page
+    assert "Colour identifies the source field" in page
+    assert "EOR_Screening_Tool_2026.xlsx. Records are kept separate" in page
