@@ -20,117 +20,106 @@ def _metric_row(items: list[tuple[str, str, str]]) -> None:
 
 
 def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
-    st.markdown("#### Polymer rheology")
-    st.caption(
-        "Apparent viscosity against measured shear rate. Filter to one polymer and "
-        "experimental condition before comparing curves."
-    )
+    """Render the original polymer-by-polymer viscosity/shear-rate comparison."""
+    st.markdown("#### Rheology")
+    st.caption("Apparent viscosity versus shear rate. Compare polymer behaviour across years and formulations.")
     if df.empty:
         st.info("No complete shear-rate/viscosity pairs are available.")
         return
 
-    c1, c2, c3, c4 = st.columns(4)
     years = sorted(df["Year"].dropna().astype(int).unique().tolist())
-    polymers = sorted(df["Polymer"].dropna().astype(str).unique().tolist())
-    salinities = sorted(df["Salinity (mg/L TDS)"].dropna().unique().tolist())
-    concentrations = sorted(df["Concentration (ppm)"].dropna().unique().tolist())
-    with c1:
-        year = st.selectbox("Year", ["All"] + years, key="rd_rheo_year")
-    with c2:
-        polymer = st.selectbox("Polymer", ["All"] + polymers, key="rd_rheo_polymer")
-    with c3:
-        selected_salinity = st.multiselect(
-            "Salinity (mg/L TDS)", salinities, default=salinities, key="rd_rheo_salinity"
-        )
-    with c4:
-        selected_concentration = st.multiselect(
-            "Concentration (ppm)", concentrations, default=concentrations,
-            key="rd_rheo_concentration",
-        )
+    polymers = sorted(df["Polymer"].dropna().astype(str).unique().tolist(), key=str.casefold)
+    left, right = st.columns([1, 2])
+    with left:
+        selected_years = st.multiselect("Year", years, default=years, key="rd_rheo_years")
+    with right:
+        selected_polymers = st.multiselect("Polymer type", polymers, default=polymers, key="rd_rheo_polymers")
 
     work = df.copy()
-    if year != "All":
-        work = work[work["Year"] == year]
-    if polymer != "All":
-        work = work[work["Polymer"] == polymer]
-    if selected_salinity:
-        work = work[work["Salinity (mg/L TDS)"].isin(selected_salinity)]
-    if selected_concentration:
-        work = work[work["Concentration (ppm)"].isin(selected_concentration)]
+    if selected_years:
+        work = work[work["Year"].isin(selected_years)]
+    if selected_polymers:
+        work = work[work["Polymer"].isin(selected_polymers)]
     if work.empty:
-        st.info("No rheology observations match the selected conditions.")
+        st.info("No rheology records match the selected filters.")
         return
 
     fig = px.line(
-        work.sort_values("Shear rate (1/sec)"),
+        work.sort_values(["Polymer", "Shear rate (1/sec)"]),
         x="Shear rate (1/sec)",
         y="Apparent viscosity (cP)",
-        color="Salinity (mg/L TDS)",
-        line_dash="Concentration (ppm)",
-        facet_col="Year" if year == "All" else None,
+        color="Polymer",
         markers=True,
-        hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
+        hover_data=["Year"],
         labels={
-            "Shear rate (1/sec)": "Shear rate (1/sec)",
-            "Apparent viscosity (cP)": "Apparent viscosity (cP)",
+            "Shear rate (1/sec)": "Shear Rate (1/sec)",
+            "Apparent viscosity (cP)": "Apparent Viscosity",
         },
     )
     fig.update_layout(
-        height=340, margin=dict(l=35, r=15, t=35, b=45),
-        legend_title="Salinity / concentration", template="plotly_white",
+        height=330, margin=dict(l=38, r=12, t=24, b=45),
+        legend_title="Polymer", template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.caption(
-        f"{len(work):,} plotted observations. {meta['rheology_missing_shear_rate_rows']} "
-        "source rows lack shear rate and are not included in this curve."
+        f"Source sheet: Vis_Shear · {len(work):,} plotted observations. "
+        f"{meta['rheology_missing_shear_rate_rows']} rows without complete shear-rate/viscosity pairs are excluded."
     )
+
+
+def _render_phase_chart(df: pd.DataFrame, title: str) -> None:
+    """Keep each historical phase-behaviour source as its own stacked panel."""
+    if df.empty:
+        st.info(f"{title}: no usable records in the workbook.")
+        return
+
+    work = df.copy()
+    work["Precipitation (%)"] = pd.to_numeric(work["Precipitation"], errors="coerce").fillna(0) * 100
+    work["No Precipitation (%)"] = pd.to_numeric(work["No Precipitation"], errors="coerce").fillna(0) * 100
+    long = work.melt(
+        id_vars=["Formulation", "Test", "Remarks"],
+        value_vars=["No Precipitation (%)", "Precipitation (%)"],
+        var_name="Outcome",
+        value_name="Percent",
+    )
+    fig = px.bar(
+        long, x="Percent", y="Formulation", color="Outcome",
+        orientation="h", barmode="stack",
+        text=long["Percent"].map(lambda value: f"{value:.0f}%" if value >= 8 else ""),
+        hover_data=["Test", "Remarks"],
+        labels={"Percent": "Share of test condition (%)"},
+        title=str(title),
+    )
+    fig.update_layout(
+        height=max(230, min(430, 70 + 28 * len(work))),
+        margin=dict(l=22, r=12, t=34, b=34),
+        legend_title="Phase behaviour",
+        xaxis_title="Share of test condition (%)",
+        yaxis_title="Formulation",
+        template="plotly_white",
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 
 def _render_phase_tests(df: pd.DataFrame) -> None:
-    st.markdown("#### Precipitation screening tests")
+    st.markdown("#### Phase Behaviour Test")
+    st.caption("Three source panels are kept separate so the historical formulations remain traceable.")
     if df.empty:
         st.info("No phase-behaviour screening tests were loaded.")
         return
-    sources = {
-        "2003 surfactant/polymer tests": "PB_2003",
-        "2013 alkali/surfactant tests": "PB_2013_A",
-        "2013 surfactant blend tests": "PB_2013_S",
-    }
-    selected = st.selectbox(
-        "Test series", list(sources), key="rd_phase_test_series"
-    )
-    work = df[df["Source sheet"] == sources[selected]].copy()
-    if work.empty:
-        st.info("No tests in this series.")
-        return
-    work["Precipitation (%)"] = work["Precipitation"] * 100
-    work["No precipitation (%)"] = work["No Precipitation"] * 100
-    long = work.melt(
-        id_vars=["Formulation", "Test", "Remarks"],
-        value_vars=["No precipitation (%)", "Precipitation (%)"],
-        var_name="Reported outcome",
-        value_name="Reported share (%)",
-    )
-    fig = px.bar(
-        long, x="Reported share (%)", y="Formulation", color="Reported outcome",
-        orientation="h", barmode="stack",
-        hover_data=["Test", "Remarks"],
-        labels={"Reported share (%)": "Reported outcome share (%)"},
-        color_discrete_sequence=["#9CA3AF", "#0F9D91"],
-    )
-    fig.update_layout(
-        height=max(280, min(430, 105 + 23 * len(work))),
-        margin=dict(l=20, r=12, t=18, b=42), template="plotly_white",
-        legend_title="Source outcome",
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.caption(
-        f"{len(work)} formulations/tests from {sources[selected]}. The percentages "
-        "are displayed as recorded in the workbook; they are not reclassified as pass/fail."
-    )
-    with st.expander("View individual phase-test records"):
-        st.dataframe(work, use_container_width=True, hide_index=True)
 
+    source_panels = [
+        ("PB_2003", "PB_2003 — Phase Behaviour"),
+        ("PB_2013_A", "PB_2013_A — Phase Behaviour"),
+        ("PB_2013_S", "PB_2013_B — Phase Behaviour"),
+    ]
+    left, right = st.columns(2)
+    for index, (source, title) in enumerate(source_panels):
+        target = left if index in (0, 1) else right
+        with target:
+            _render_phase_chart(df[df["Source sheet"] == source].copy(), title)
+            if source == "PB_2013_S":
+                st.caption("PB_2013_B is represented by repository sheet PB_2013_S in this workbook revision.")
 
 def _render_phase_diagram(df: pd.DataFrame) -> None:
     st.markdown("#### Salinity/solubilization phase diagram")
@@ -179,36 +168,32 @@ def _render_phase_diagram(df: pd.DataFrame) -> None:
 
 
 def _render_ift_chart(df: pd.DataFrame, title: str) -> None:
+    """Restore the original horizontal IFT range chart (low-to-high)."""
     if df.empty:
-        st.info(f"No {title.lower()} records were loaded.")
+        st.info(f"{title}: no usable records in the workbook.")
         return
+    work = df.sort_values("IFT high (source)", ascending=False).copy()
+    low = pd.to_numeric(work["IFT low (source)"], errors="coerce")
+    high = pd.to_numeric(work["IFT high (source)"], errors="coerce")
+    work["Range"] = (high - low).clip(lower=0)
     fig = go.Figure()
-    for column, label, symbol in (
-        ("IFT low (source)", "IFT low (as labelled in source)", "circle"),
-        ("IFT high (source)", "IFT high (as labelled in source)", "triangle-up"),
-    ):
-        part = df.dropna(subset=[column])
-        custom = part[["IFT low raw", "IFT high raw", "IFT high is censored"]].astype(str).to_numpy()
-        fig.add_trace(go.Scatter(
-            x=part[column], y=part["Material"], mode="markers", name=label,
-            marker={"size": 10, "symbol": symbol},
-            customdata=custom,
-            hovertemplate=(
-                "%{y}<br>Plotted value: %{x:.5g} dynes/cm"
-                "<br>Source low: %{customdata[0]}"
-                "<br>Source high: %{customdata[1]}"
-                "<br>High value censored: %{customdata[2]}<extra></extra>"
-            ),
-        ))
-    fig.update_xaxes(type="log", title="IFT (dynes/cm)")
-    fig.update_yaxes(title="")
+    fig.add_trace(go.Bar(
+        y=work["Material"], x=work["Range"], base=low,
+        orientation="h",
+        customdata=work[["IFT low raw", "IFT high raw", "Year"]].astype(str).to_numpy(),
+        hovertemplate=(
+            "%{y}<br>IFT low: %{customdata[0]} dynes/cm<br>"
+            "IFT high: %{customdata[1]} dynes/cm<br>"
+            "Year: %{customdata[2]}<extra></extra>"
+        ),
+    ))
     fig.update_layout(
-        title=title, height=max(290, 80 + 28 * len(df)),
-        margin=dict(l=20, r=12, t=45, b=42),
-        template="plotly_white", legend_title="Source column",
+        title=str(title), xaxis_title="IFT (dynes/cm)", yaxis_title="Material",
+        height=max(230, min(430, 75 + 27 * len(work))),
+        margin=dict(l=20, r=12, t=34, b=38),
+        showlegend=False, template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-
 
 def _render_ift(data: dict) -> None:
     st.markdown("#### Interfacial tension")
@@ -254,139 +239,107 @@ def _render_fluid_fluid(data: dict) -> None:
 
 
 def _render_adsorption(df: pd.DataFrame) -> None:
-    st.markdown("#### Static adsorption")
+    st.markdown("#### Adsorption Test")
+    st.caption("Explore adsorption behaviour by the dimensions actually present in the source workbook.")
     if df.empty:
         st.info("No St. Joseph adsorption records were found.")
         return
-    mean_ratio = df["Adsorption ratio"].mean()
-    _metric_row([
-        ("Test records", str(len(df)), "Source records in Adsorption (St_Jos)"),
-        ("Mean adsorption", f"{mean_ratio:.0%}", "Mean reported c/c₀ ratio"),
-        ("Test duration", f"{df['Days'].dropna().iloc[0]:g} days" if df["Days"].notna().any() else "Not stated", "Duration recorded in the source"),
-    ])
-    fig = px.bar(
-        df, y="Surfactant", x="Adsorption (%)", color="Surfactant",
-        orientation="h", text=df["Adsorption (%)"].map(lambda x: f"{x:.0f}%"),
-        hover_data=["Sample", "Year", "Days", "Adsorption (mg/g, source note)", "Source note"],
-        labels={"Adsorption (%)": "Adsorption ratio (%)"},
-        color_discrete_sequence=["#0F9D91", "#D97706"],
+
+    years = sorted(df["Year"].dropna().astype(int).unique().tolist())
+    fields = sorted(df["Field"].dropna().astype(str).unique().tolist(), key=str.casefold)
+    materials = sorted(df["Surfactant"].dropna().astype(str).unique().tolist(), key=str.casefold)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        selected_years = st.multiselect("Year", years, default=years, key="rd_ads_years")
+    with c2:
+        selected_fields = st.multiselect("Field", fields, default=fields, key="rd_ads_fields")
+    with c3:
+        selected_materials = st.multiselect("Surfactant / formulation", materials, default=materials, key="rd_ads_materials")
+
+    work = df.copy()
+    if selected_years:
+        work = work[work["Year"].isin(selected_years)]
+    if selected_fields:
+        work = work[work["Field"].isin(selected_fields)]
+    if selected_materials:
+        work = work[work["Surfactant"].isin(selected_materials)]
+    if work.empty:
+        st.info("No adsorption records match the selected filters.")
+        return
+
+    fig = px.line(
+        work.sort_values(["Surfactant", "Days"]),
+        x="Days", y="Adsorption ratio", color="Surfactant",
+        markers=True, hover_data=["Year", "Field", "Sample"],
+        labels={"Days": "Days", "Adsorption ratio": "Adsorption c/c₀"},
     )
     fig.update_layout(
-        height=260, showlegend=False,
-        margin=dict(l=20, r=12, t=18, b=42), template="plotly_white",
+        height=330, margin=dict(l=38, r=12, t=24, b=45),
+        legend_title="Surfactant / formulation", template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.caption("Only two St. Joseph static-adsorption tests are present. Avoid generalising these results beyond the tested formulations and conditions.")
+    st.caption("Source sheet: Adsorption (St_Jos)")
     with st.expander("View adsorption source records"):
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
+        st.dataframe(work, use_container_width=True, hide_index=True)
 
 def _render_coreflood(data: dict) -> None:
-    st.markdown("#### Core-flood recovery")
+    st.markdown("#### Core Flood")
+    st.caption("Compare waterflood recovery with chemical-EOR recovery contributions, then inspect the full source table.")
     water = data["waterflood"]
     if water.empty:
-        st.info("No water-flood recovery records were found.")
+        st.info("No core-flood recovery records were found.")
         return
-    mean_wf = water["Water flood recovery (% OOIP)"].mean()
-    _metric_row([
-        ("Core samples", str(water["Core sample"].nunique()), "Distinct core samples"),
-        ("Mean waterflood recovery", f"{mean_wf:.1f}%", "Arithmetic mean of reported % OOIP values"),
-        ("Treatment groups", str(water["Treatment type"].nunique()), "Treatment codes exactly as listed in the source summary"),
-    ])
-    fig = px.bar(
-        water.sort_values("Water flood recovery (% OOIP)"),
-        x="Water flood recovery (% OOIP)", y="Core sample",
-        color="Treatment type", orientation="h",
-        hover_data=["Year"],
-        labels={"Water flood recovery (% OOIP)": "Water-flood recovery (% OOIP)"},
-        color_discrete_sequence=px.colors.qualitative.Safe,
-    )
-    fig.update_layout(
-        height=390, margin=dict(l=20, r=12, t=18, b=42),
-        template="plotly_white", legend_title="Source treatment type",
-    )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    stages = data["chemical_stage_recovery"]
-    if not stages.empty:
-        st.markdown("**Reported chemical-stage recovery**")
-        stage_fig = px.scatter(
-            stages, x="Core sample", y="Reported chemical-stage recovery (% OOIP)",
-            color="Method", symbol="Method", hover_data=["Year"],
-            labels={"Reported chemical-stage recovery (% OOIP)": "Reported recovery (% OOIP)"},
+    components = ["Water Flood", "AS", "Polymer", "Alkaline", "Surfactant", "SP", "ASP"]
+    available = [column for column in components if column in water.columns and pd.to_numeric(water[column], errors="coerce").notna().any()]
+    if available:
+        chart = water[["Core sample", "Year"] + available].copy()
+        for column in available:
+            chart[column] = pd.to_numeric(chart[column], errors="coerce").fillna(0)
+        long = chart.melt(
+            id_vars=["Core sample", "Year"], value_vars=available,
+            var_name="Recovery component", value_name="Recovery (% OOIP)",
         )
-        stage_fig.update_layout(
-            height=280, margin=dict(l=25, r=12, t=18, b=45),
-            template="plotly_white", legend_title="Method",
+        fig = px.bar(
+            long, x="Core sample", y="Recovery (% OOIP)",
+            color="Recovery component", barmode="stack", hover_data=["Year"],
         )
-        st.plotly_chart(stage_fig, use_container_width=True, config={"displayModeBar": False})
-        st.caption(
-            "Only the source's explicitly named Surfactant (S), Alkaline–surfactant (AS) "
-            "and Polymer (P) chemical-stage recovery columns are included here. The "
-            "AS,P recovery-factor column is not treated as an incremental recovery value."
+        fig.update_layout(
+            height=340, margin=dict(l=28, r=12, t=24, b=62),
+            xaxis_tickangle=-35, legend_title="Recovery component",
+            template="plotly_white",
         )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    else:
+        st.info("The imported core-flood sheet does not contain the original recovery-component columns.")
 
-    factors = data["recovery_factors"]
-    if not factors.empty:
-        st.markdown("**Reported recovery factor**")
-        factor_fig = px.scatter(
-            factors, x="Core sample", y="Recovery factor (%)",
-            color="Method", symbol="Method", hover_data=["Year"],
-            labels={"Recovery factor (%)": "Recovery factor (%)"},
-        )
-        factor_fig.update_layout(
-            height=280, margin=dict(l=25, r=12, t=18, b=45),
-            template="plotly_white", legend_title="Reported method",
-        )
-        st.plotly_chart(factor_fig, use_container_width=True, config={"displayModeBar": False})
-        st.caption(
-            "Recovery factor is kept separate from the reported chemical-stage recovery "
-            "(% OOIP); the two source metrics are not added together."
-        )
-
-    with st.expander("View core-flood sample and formulation records"):
+    with st.expander("View core-flood source records", expanded=False):
         st.dataframe(data["coreflood_summary"], use_container_width=True, hide_index=True)
         st.dataframe(water, use_container_width=True, hide_index=True)
 
 
+
+
 def _render_sor(data: dict) -> None:
-    st.markdown("#### Residual-oil-saturation reduction")
+    st.markdown("#### Sor Reduction From a Core Flood")
     sor = data["sor_reduction"]
     if sor.empty:
         st.info("No Sor-reduction values were found.")
         return
-    method_summary = (
-        sor.groupby("Method", as_index=False)
-        .agg(Records=("Sor reduction (%)", "count"), Mean=("Sor reduction (%)", "mean"), Maximum=("Sor reduction (%)", "max"))
+    fig = px.bar(
+        sor.sort_values(["Core sample", "Method"]),
+        x="Core sample", y="Sor reduction (%)",
+        color="Method", barmode="group", hover_data=["Year"],
+        labels={"Sor reduction (%)": "Sor reduction (%)"},
     )
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        fig = px.bar(
-            sor.sort_values("Sor reduction (%)"),
-            x="Sor reduction (%)", y="Core sample", color="Method",
-            orientation="h", hover_data=["Year", "Source field"],
-            labels={"Sor reduction (%)": "Sor reduction (%)"},
-        )
-        fig.update_layout(
-            height=max(300, min(430, 115 + 22 * len(sor))),
-            margin=dict(l=20, r=12, t=18, b=42), template="plotly_white",
-            legend_title="Treatment method",
-        )
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    with c2:
-        st.markdown("**Method summary**")
-        summary = method_summary.copy()
-        summary["Mean"] = summary["Mean"].map(lambda x: f"{x:.1f}%")
-        summary["Maximum"] = summary["Maximum"].map(lambda x: f"{x:.1f}%")
-        st.dataframe(summary, use_container_width=True, hide_index=True)
-    st.caption(
-        "The source contains 16 reported Sor-reduction records across five treatment "
-        "labels. These are sparse, unbalanced groups; the method averages are descriptive, "
-        "not a controlled ranking of efficacy."
+    fig.update_layout(
+        height=330, margin=dict(l=35, r=12, t=24, b=62),
+        xaxis_tickangle=-35, legend_title="Method", template="plotly_white",
     )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.caption("Sor source: Sor_f (StJoseph)")
     with st.expander("View Sor-reduction source records"):
         st.dataframe(sor, use_container_width=True, hide_index=True)
-
 
 def _render_fluid_rock(data: dict) -> None:
     _metric_row([
