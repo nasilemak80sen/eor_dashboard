@@ -649,16 +649,27 @@ def _render_wag() -> None:
 
 
 ALL_FIELDS_LABEL = "All fields"
+OTHER_FIELD_LABEL = "Other · field mapping incomplete"
 
 
-def _ceor_field_options(field_names: list[str]) -> list[str]:
-    """Build the selector from CEOR field-register entries and explicit lab tags."""
+def _ceor_field_options(field_names: list[str], include_other: bool = False) -> list[str]:
+    """Build a predictable field selector without collapsing named fields."""
     normalized = {
         "St. Joseph" if value.casefold().replace(".", "").strip() == "st joseph" else value.strip()
         for value in field_names
         if value and value.strip()
     }
-    return [ALL_FIELDS_LABEL, *sorted(normalized, key=str.casefold)]
+    ordered = sorted(
+        normalized,
+        key=lambda value: (value.casefold() != "st. joseph", value.casefold()),
+    )
+    options = [ALL_FIELDS_LABEL, *ordered]
+    # Kept for compatibility with consumers that explicitly request the legacy
+    # bucket. The R&D page does not use it; field-unassigned evidence is labelled
+    # and rendered separately rather than mixed into a pseudo-field.
+    if include_other:
+        options.append(OTHER_FIELD_LABEL)
+    return options
 
 
 def _field_rows(frame: pd.DataFrame, field: str) -> pd.DataFrame:
@@ -715,7 +726,7 @@ def _render_thermal_all_fields(df: pd.DataFrame) -> None:
     st.markdown("### Thermal polymer response · all tagged fields")
     st.caption(
         "These records carry a Field value in the Thermal worksheet. Colour identifies "
-        "the field; measurements are not averaged across fields."
+        "the source field; measurements are not averaged across fields."
     )
     metric = "Viscosity (cP)" if work["Viscosity (cP)"].notna().any() else "Viscosity reduction (%)"
     fig = px.line(
@@ -803,19 +814,21 @@ def _render_ceor_all_fields(data: dict) -> None:
     with fluid_fluid:
         st.markdown("### Primary CEOR experimental evidence")
         st.caption(
-            "Source: EOR_Screening_Tool_2026.xlsx. The Vis_Shear, phase-behaviour and "
-            "IFT worksheets do not carry a Field column, so they are shown as shared "
-            "laboratory evidence and are not assigned to a field through the map sheet."
+            "EOR_Screening_Tool_2026.xlsx. Records are kept separate from field-specific "
+            "supplemental evidence. The Vis_Shear, phase-behaviour and IFT worksheets do "
+            "not carry a Field column, so they are shown as shared laboratory evidence "
+            "and are not assigned to a field through the map sheet."
         )
         _render_primary_fluid_fluid(data)
-        if not data.get("thermal", pd.DataFrame()).empty:
+        thermal = data.get("thermal", pd.DataFrame())
+        if not thermal.empty:
             st.divider()
-            _render_thermal_all_fields(data["thermal"])
+            _render_thermal_all_fields(thermal)
         if st_jos_data is not None:
             st.divider()
             st.markdown("### St. Joseph supplemental Fluid–Fluid evidence")
             st.caption("Supplementary source: St_Jos CEOR (Shared) (1).xlsx.")
-            _render_fluid_fluid(st_jos_data)
+            _render_fluid_fluid(field_data)
 
     with fluid_rock:
         st.markdown("### Field-tagged adsorption")
@@ -838,7 +851,7 @@ def _render_ceor_all_fields(data: dict) -> None:
             st.divider()
             st.markdown("### St. Joseph supplemental Fluid–Rock evidence")
             st.caption("Supplementary source: St_Jos CEOR (Shared) (1).xlsx.")
-            _render_fluid_rock(st_jos_data)
+            _render_fluid_rock(field_data)
 
     field_map = data.get("field_map", pd.DataFrame())
     if not field_map.empty:
@@ -853,7 +866,7 @@ def _render_ceor_all_fields(data: dict) -> None:
 
 
 def _render_ceor_field(data: dict, field: str, st_jos_data: dict | None) -> None:
-    field_map = data.get("field_map", pd.DataFrame())
+    field_data = st_jos_data
     thermal = _field_rows(data.get("thermal", pd.DataFrame()), field)
     adsorption = _field_rows(data.get("adsorption", pd.DataFrame()), field)
 
@@ -861,7 +874,7 @@ def _render_ceor_field(data: dict, field: str, st_jos_data: dict | None) -> None
     fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
 
     with fluid_fluid:
-        if field.casefold() == "st. joseph" and st_jos_data is not None:
+        if field.casefold() == "st. joseph" and field_data is not None:
             st.markdown("### St. Joseph supplemental evidence")
             st.caption(
                 "Source: St_Jos CEOR (Shared) (1).xlsx. This is supplementary "
