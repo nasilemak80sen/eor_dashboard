@@ -372,8 +372,9 @@ def load_ceor_evidence() -> dict[str, Any]:
     # every laboratory measurement to a field. Only Thermal and Adsorption
     # rows carry explicit field attribution in their own source records.
     mapped_fields = set(field_map["Field"].dropna().astype(str).str.strip())
-    tagged_fields = set(thermal["Field"].dropna().astype(str).str.strip())
-    tagged_fields.update(adsorption["Field"].dropna().astype(str).str.strip())
+    thermal_fields = set(thermal["Field"].dropna().astype(str).str.strip())
+    adsorption_fields = set(adsorption["Field"].dropna().astype(str).str.strip())
+    tagged_fields = thermal_fields | adsorption_fields
     fields = sorted(
         {field for field in mapped_fields | tagged_fields if field},
         key=str.casefold,
@@ -391,11 +392,8 @@ def load_ceor_evidence() -> dict[str, Any]:
         "fields": fields,
         "field_map_rows": len(field_map),
         "thermal_rows": len(thermal),
-        "thermal_fields": sorted(tagged_fields, key=str.casefold),
-        "adsorption_fields": sorted(
-            set(adsorption["Field"].dropna().astype(str).str.strip()),
-            key=str.casefold,
-        ) if not adsorption.empty else [],
+        "thermal_fields": sorted(thermal_fields, key=str.casefold),
+        "adsorption_fields": sorted(adsorption_fields, key=str.casefold),
         "ift_surfactant_reversed_bounds": reversed_surf,
         "ift_polymer_reversed_bounds": reversed_poly,
         "ift_reversed_bounds": reversed_surf + reversed_poly,
