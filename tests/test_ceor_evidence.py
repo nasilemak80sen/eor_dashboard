@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from data.ceor_evidence import (
     _derive_sor_from_coreflood,
@@ -119,6 +120,10 @@ def test_r_and_d_page_uses_ceor_category_with_field_filter_and_two_method_views(
     assert "render_legacy_ceor" not in source
 
 
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "St_Jos CEOR (Shared) (1).xlsx").is_file(),
+    reason="St. Joseph source workbook is supplied locally or through the R&D upload control",
+)
 def test_st_jos_loader_exposes_explicit_thermal_fields():
     from data.rd_lab_evidence import load_st_jos_ceor
 
@@ -135,6 +140,10 @@ def test_ceor_page_has_compact_render_entrypoint():
     assert 'st.tabs(["Adsorption", "Core flood", "Sor reduction"])' in source
 
 
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "St_Jos CEOR (Shared) (1).xlsx").is_file(),
+    reason="St. Joseph source workbook is supplied locally or through the R&D upload control",
+)
 def test_st_jos_ceor_workbook_loads_field_specific_laboratory_evidence():
     from data.rd_lab_evidence import load_st_jos_ceor
 
@@ -154,6 +163,10 @@ def test_st_jos_ceor_workbook_loads_field_specific_laboratory_evidence():
     assert meta["ift_polymer_reversed_bounds"] == 14
 
 
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "St_Jos CEOR (Shared) (1).xlsx").is_file(),
+    reason="St. Joseph source workbook is supplied locally or through the R&D upload control",
+)
 def test_st_jos_source_labels_are_preserved_when_ift_bounds_are_reversed():
     from data.rd_lab_evidence import load_st_jos_ceor
 
