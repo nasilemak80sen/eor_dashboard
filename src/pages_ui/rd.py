@@ -725,8 +725,8 @@ def _render_thermal_all_fields(df: pd.DataFrame) -> None:
     work["Field"] = work["Field"].astype(str).str.strip()
     st.markdown("### Thermal polymer response · all tagged fields")
     st.caption(
-        "These records carry a Field value in the Thermal worksheet. Colour identifies "
-        "the source field; measurements are not averaged across fields."
+        "These records carry a Field value in the Thermal worksheet. "
+        "Colour identifies the source field; measurements are not averaged across fields."
     )
     metric = "Viscosity (cP)" if work["Viscosity (cP)"].notna().any() else "Viscosity reduction (%)"
     fig = px.line(
