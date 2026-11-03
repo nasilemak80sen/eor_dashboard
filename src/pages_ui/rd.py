@@ -642,6 +642,28 @@ def _render_wag() -> None:
 
 
 
+
+ALL_FIELDS_LABEL = "All fields"
+OTHER_FIELD_LABEL = "Other · field mapping incomplete"
+
+
+def _ceor_field_options(field_names: list[str], include_other: bool = False) -> list[str]:
+    """Build a predictable field selector with an aggregate option first."""
+    normalized = {
+        "St. Joseph" if value.casefold().replace(".", "").strip() == "st joseph" else value.strip()
+        for value in field_names
+        if value and value.strip()
+    }
+    ordered = sorted(
+        normalized,
+        key=lambda value: (value.casefold() != "st. joseph", value.casefold()),
+    )
+    options = [ALL_FIELDS_LABEL, *ordered]
+    if include_other:
+        options.append(OTHER_FIELD_LABEL)
+    return options
+
+
 def _render_thermal_field(df: pd.DataFrame, field: str) -> None:
     """Render only thermal records explicitly tagged to the selected field."""
     work = df.loc[
@@ -675,6 +697,84 @@ def _render_thermal_field(df: pd.DataFrame, field: str) -> None:
         st.dataframe(work, use_container_width=True, hide_index=True)
 
 
+def _render_thermal_all_fields(df: pd.DataFrame) -> None:
+    """Show field-tagged thermal tests together while retaining field identity."""
+    work = df.dropna(subset=["Field"]).copy()
+    if work.empty:
+        return
+    work["Field"] = work["Field"].astype(str).str.strip()
+    st.markdown("### Thermal polymer response · all tagged fields")
+    st.caption(
+        "Field-tagged thermal tests are shown together for portfolio visibility. "
+        "Colour identifies the source field; observations are not averaged across fields."
+    )
+    metric = "Viscosity (cP)" if work["Viscosity (cP)"].notna().any() else "Viscosity reduction (%)"
+    fig = px.line(
+        work.sort_values("Time (days)"),
+        x="Time (days)",
+        y=metric,
+        color="Field",
+        line_dash="Polymer",
+        markers=True,
+        hover_data=["Test", "Year", "Polymer", "Analog", "Polymer concentration (ppm)", "Temperature (°C)"],
+        labels={"Time (days)": "Exposure time (days)", metric: metric},
+    )
+    fig.update_layout(height=390, template="plotly_white", margin=dict(l=35, r=15, t=25, b=40), legend_title="Field / polymer")
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+    st.caption(f"{len(work):,} thermal records across {work['Field'].nunique()} explicitly named fields.")
+    with st.expander("View all field-tagged thermal records"):
+        st.dataframe(work, use_container_width=True, hide_index=True)
+
+
+def _render_ceor_all_fields(
+    field_data: dict,
+    other_data: dict | None,
+) -> None:
+    """Aggregate the view, not the measurements: preserve source and field boundaries."""
+    fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
+
+    with fluid_fluid:
+        st.markdown("### St. Joseph")
+        st.caption("Source: St_Jos CEOR (Shared) (1).xlsx")
+        _render_fluid_fluid(field_data)
+
+        thermal = field_data.get("thermal", pd.DataFrame())
+        if not thermal.empty:
+            st.divider()
+            _render_thermal_all_fields(thermal)
+
+        if other_data is not None:
+            st.divider()
+            st.markdown(f"### {OTHER_FIELD_LABEL}")
+            st.caption("Source: EOR_Screening_Tool_2026.xlsx. Records are kept separate because field attribution is incomplete across its worksheets.")
+            _render_compact_fluid_fluid(other_data)
+
+    with fluid_rock:
+        st.markdown("### St. Joseph")
+        st.caption("Source: St_Jos CEOR (Shared) (1).xlsx")
+        _render_fluid_rock(field_data)
+
+        if other_data is not None:
+            st.divider()
+            st.markdown(f"### {OTHER_FIELD_LABEL}")
+            st.caption("Source: EOR_Screening_Tool_2026.xlsx. These records are not attributed to St. Joseph.")
+            _render_compact_fluid_rock(other_data)
+
+        thermal_fields = sorted(
+            field_data.get("thermal", pd.DataFrame()).get("Field", pd.Series(dtype="string"))
+            .dropna().astype(str).str.strip().unique().tolist(),
+            key=str.casefold,
+        )
+        if thermal_fields:
+            st.divider()
+            st.info(
+                "No field-tagged fluid–rock adsorption, core-flood or Sor-reduction "
+                "records are present for the other thermal fields: "
+                + ", ".join(thermal_fields)
+                + ". Those fields remain visible in Fluid–Fluid only until matching evidence is sourced."
+            )
+
+
 def _render_ceor() -> None:
     try:
         field_data = load_st_jos_ceor()
@@ -684,23 +784,28 @@ def _render_ceor() -> None:
             st.exception(exc)
         return
 
-    fields = list(field_data["metadata"].get("fields") or ["St. Joseph"])
-    fields = sorted(set(fields), key=lambda value: (value.casefold() != "st. joseph", value.casefold()))
-    unassigned_label = "Other · field mapping incomplete"
     try:
-        unassigned_data = load_ceor_evidence()
-        fields.append(unassigned_label)
+        other_data = load_ceor_evidence()
     except Exception:
-        unassigned_data = None
+        other_data = None
 
+    other_available = other_data is not None
+    fields = _ceor_field_options(
+        list(field_data["metadata"].get("fields") or ["St. Joseph"]),
+        include_other=other_available,
+    )
     selected_field = st.selectbox(
         "Field",
         fields,
         index=0,
         key="rd_ceor_field",
-        help="Select the field whose CEOR evidence you want to inspect. Other workbook records whose field tags are incomplete remain available as a separate source option.",
+        help="Choose All fields for an overall view. Field-specific evidence remains grouped by source field; Other contains records whose field mapping is incomplete.",
     )
-    st.caption(f"CEOR evidence · Field: **{selected_field}**")
+    st.caption(f"CEOR evidence · **{selected_field}**")
+
+    if selected_field == ALL_FIELDS_LABEL:
+        _render_ceor_all_fields(field_data, other_data)
+        return
 
     fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
     if selected_field.casefold() == "st. joseph":
@@ -712,32 +817,33 @@ def _render_ceor() -> None:
             st.write({
                 "Selected field": selected_field,
                 "Source workbook": field_data["metadata"]["workbook_name"],
-                "Thermal field records": int(
-                    field_data["thermal"]["Field"].astype(str).str.strip().str.casefold().eq("st joseph").sum()
-                ),
                 "Rheology observations plotted": field_data["metadata"]["rheology_plot_rows"],
                 "Phase points": field_data["metadata"]["phase_point_rows"],
                 "Adsorption tests": field_data["metadata"]["adsorption_rows"],
                 "Coreflood samples": field_data["metadata"]["coreflood_samples"],
             })
-    elif selected_field == unassigned_label and unassigned_data is not None:
+    elif selected_field == OTHER_FIELD_LABEL and other_data is not None:
         with fluid_fluid:
-            _render_compact_fluid_fluid(unassigned_data)
+            _render_compact_fluid_fluid(other_data)
         with fluid_rock:
-            _render_compact_fluid_rock(unassigned_data)
+            _render_compact_fluid_rock(other_data)
         st.caption(
-            "These records are kept in the same CEOR workspace, but their source workbook does not provide a consistent field key across all fluid–fluid and fluid–rock sheets."
+            "These records remain in the CEOR workspace, but the source workbook "
+            "does not provide consistent field attribution across all worksheets."
         )
     else:
         with fluid_fluid:
             _render_thermal_field(field_data["thermal"], selected_field)
             st.caption(
-                "Only records explicitly tagged to this field are shown. No St. Joseph measurements are carried across to another field."
+                "Only records explicitly tagged to this field are shown. "
+                "No St. Joseph measurements are carried across to another field."
             )
         with fluid_rock:
             st.info(
-                f"No fluid–rock adsorption, core-flood or Sor-reduction records are currently mapped to {selected_field}. They will appear here when field-attributed source evidence is available."
+                f"No fluid–rock adsorption, core-flood or Sor-reduction records "
+                f"are currently mapped to {selected_field}."
             )
+
 
 
 def render() -> None:
