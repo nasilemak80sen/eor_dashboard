@@ -828,7 +828,7 @@ def _render_ceor_all_fields(data: dict) -> None:
             st.divider()
             st.markdown("### St. Joseph supplemental Fluid–Fluid evidence")
             st.caption("Supplementary source: St_Jos CEOR (Shared) (1).xlsx.")
-            _render_fluid_fluid(field_data)
+            _render_fluid_fluid(st_jos_data)
 
     with fluid_rock:
         st.markdown("### Field-tagged adsorption")
@@ -851,7 +851,7 @@ def _render_ceor_all_fields(data: dict) -> None:
             st.divider()
             st.markdown("### St. Joseph supplemental Fluid–Rock evidence")
             st.caption("Supplementary source: St_Jos CEOR (Shared) (1).xlsx.")
-            _render_fluid_rock(field_data)
+            _render_fluid_rock(st_jos_data)
 
     field_map = data.get("field_map", pd.DataFrame())
     if not field_map.empty:
