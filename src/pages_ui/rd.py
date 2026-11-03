@@ -9,7 +9,12 @@ import streamlit as st
 from data.rd_lab_evidence import load_st_jos_ceor
 from data.baronia_wag_evidence import load_baronia_wag
 from data.ceor_evidence import load_ceor_evidence
-from pages_ui.ceor import _render_compact_fluid_fluid, _render_compact_fluid_rock
+from pages_ui.ceor import (
+    _render_adsorption as _render_primary_adsorption,
+    _render_coreflood as _render_primary_coreflood,
+    _render_fluid_fluid as _render_primary_fluid_fluid,
+    _render_sor as _render_primary_sor,
+)
 
 
 def _metric_row(items: list[tuple[str, str, str]]) -> None:
@@ -644,39 +649,36 @@ def _render_wag() -> None:
 
 
 ALL_FIELDS_LABEL = "All fields"
-OTHER_FIELD_LABEL = "Other · field mapping incomplete"
 
 
-def _ceor_field_options(field_names: list[str], include_other: bool = False) -> list[str]:
-    """Build a predictable field selector with an aggregate option first."""
+def _ceor_field_options(field_names: list[str]) -> list[str]:
+    """Build the selector from CEOR field-register entries and explicit lab tags."""
     normalized = {
         "St. Joseph" if value.casefold().replace(".", "").strip() == "st joseph" else value.strip()
         for value in field_names
         if value and value.strip()
     }
-    ordered = sorted(
-        normalized,
-        key=lambda value: (value.casefold() != "st. joseph", value.casefold()),
-    )
-    options = [ALL_FIELDS_LABEL, *ordered]
-    if include_other:
-        options.append(OTHER_FIELD_LABEL)
-    return options
+    return [ALL_FIELDS_LABEL, *sorted(normalized, key=str.casefold)]
+
+
+def _field_rows(frame: pd.DataFrame, field: str) -> pd.DataFrame:
+    if frame.empty or "Field" not in frame.columns:
+        return frame.iloc[0:0].copy()
+    values = frame["Field"].astype("string").str.strip()
+    return frame.loc[values.str.casefold() == field.casefold()].copy()
 
 
 def _render_thermal_field(df: pd.DataFrame, field: str) -> None:
-    """Render only thermal records explicitly tagged to the selected field."""
-    work = df.loc[
-        df["Field"].astype(str).str.strip().str.casefold() == field.casefold()
-    ].copy()
+    """Render thermal measurements only when the source row names the field."""
+    work = _field_rows(df, field)
     st.markdown("#### Thermal polymer response")
     if work.empty:
-        st.info(f"No thermal polymer records are available for {field}.")
+        st.info(f"No field-tagged thermal polymer measurements are available for {field}.")
         return
 
     _metric_row([
         ("Tests", str(work["Test"].nunique()), "Distinct test identifiers in the Thermal sheet"),
-        ("Polymer types", str(work["Polymer"].nunique()), "Polymer types tested for the selected field"),
+        ("Polymer types", str(work["Polymer"].nunique()), "Polymer types tested for this field"),
         ("Temperature", f"{work['Temperature (°C)'].dropna().max():g} °C" if work["Temperature (°C)"].notna().any() else "Not reported", "Maximum recorded test temperature"),
         ("Concentrations", str(work["Polymer concentration (ppm)"].nunique()), "Distinct polymer concentrations recorded"),
     ])
@@ -688,10 +690,17 @@ def _render_thermal_field(df: pd.DataFrame, field: str) -> None:
         color="Polymer",
         line_dash="Test",
         markers=True,
-        hover_data=["Year", "Analog", "Polymer concentration (ppm)", "Temperature (°C)", "Viscosity reduction (%)"],
+        hover_data=[
+            "Year", "Field", "Analog", "Polymer concentration (ppm)",
+            "Temperature (°C)", "Viscosity reduction (%)",
+        ],
         labels={"Time (days)": "Exposure time (days)", metric: metric},
     )
-    fig.update_layout(height=350, template="plotly_white", margin=dict(l=35, r=15, t=25, b=40))
+    fig.update_layout(
+        height=350,
+        template="plotly_white",
+        margin=dict(l=35, r=15, t=25, b=40),
+    )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     with st.expander("View thermal source records"):
         st.dataframe(work, use_container_width=True, hide_index=True)
@@ -705,8 +714,8 @@ def _render_thermal_all_fields(df: pd.DataFrame) -> None:
     work["Field"] = work["Field"].astype(str).str.strip()
     st.markdown("### Thermal polymer response · all tagged fields")
     st.caption(
-        "Field-tagged thermal tests are shown together for portfolio visibility. "
-        "Colour identifies the source field; observations are not averaged across fields."
+        "These records carry a Field value in the Thermal worksheet. Colour identifies "
+        "the field; measurements are not averaged across fields."
     )
     metric = "Viscosity (cP)" if work["Viscosity (cP)"].notna().any() else "Viscosity reduction (%)"
     fig = px.line(
@@ -716,155 +725,201 @@ def _render_thermal_all_fields(df: pd.DataFrame) -> None:
         color="Field",
         line_dash="Polymer",
         markers=True,
-        hover_data=["Test", "Year", "Polymer", "Analog", "Polymer concentration (ppm)", "Temperature (°C)"],
+        hover_data=[
+            "Test", "Year", "Polymer", "Analog",
+            "Polymer concentration (ppm)", "Temperature (°C)",
+        ],
         labels={"Time (days)": "Exposure time (days)", metric: metric},
     )
-    fig.update_layout(height=390, template="plotly_white", margin=dict(l=35, r=15, t=25, b=40), legend_title="Field / polymer")
+    fig.update_layout(
+        height=390,
+        template="plotly_white",
+        margin=dict(l=35, r=15, t=25, b=40),
+        legend_title="Field / polymer",
+    )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-    st.caption(f"{len(work):,} thermal records across {work['Field'].nunique()} explicitly named fields.")
+    st.caption(f"{len(work):,} thermal records across {work['Field'].nunique()} explicitly tagged fields.")
     with st.expander("View all field-tagged thermal records"):
         st.dataframe(work, use_container_width=True, hide_index=True)
 
 
-def _render_ceor_all_fields(
-    field_data: dict,
-    other_data: dict | None,
-) -> None:
-    """Aggregate the view, not the measurements: preserve source and field boundaries."""
+def _render_field_register(data: dict, field: str) -> None:
+    records = data.get("field_map", pd.DataFrame())
+    if records.empty:
+        return
+    rows = records.loc[records["Field"].astype(str).str.casefold() == field.casefold()]
+    if not rows.empty:
+        with st.expander("Field register and study references"):
+            st.dataframe(
+                rows[["Field", "EOR type", "Year", "Study type"]].drop_duplicates(),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+
+def _load_st_jos_supplement() -> dict | None:
+    """Load St. Joseph evidence only when its field is selected."""
+    try:
+        return load_st_jos_ceor()
+    except FileNotFoundError:
+        uploaded = st.file_uploader(
+            "Upload the St. Joseph supplemental CEOR workbook",
+            type=["xlsx"],
+            key="rd_st_jos_upload",
+            help="Used only for St. Joseph. The primary CEOR workbook remains the repository dataset.",
+        )
+        if uploaded is None:
+            st.info(
+                "St. Joseph is present in the field register, but its supplemental workbook "
+                "is not available in this checkout. Upload the St. Joseph workbook to show "
+                "its additional field-specific measurements."
+            )
+            return None
+        try:
+            return load_st_jos_ceor(uploaded.getvalue())
+        except Exception as exc:
+            st.error("The St. Joseph supplemental workbook could not be loaded.")
+            with st.expander("Technical detail"):
+                st.exception(exc)
+            return None
+    except Exception as exc:
+        st.error("The St. Joseph supplemental workbook could not be loaded.")
+        with st.expander("Technical detail"):
+            st.exception(exc)
+        return None
+
+
+def _render_ceor_all_fields(data: dict) -> None:
+    """Render the primary workbook as the portfolio-wide CEOR evidence source."""
+    fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
+    with fluid_fluid:
+        st.markdown("### Primary CEOR experimental evidence")
+        st.caption(
+            "Source: EOR_Screening_Tool_2026.xlsx. The Vis_Shear, phase-behaviour and "
+            "IFT worksheets do not carry a Field column, so they are shown as shared "
+            "laboratory evidence and are not assigned to a field through the map sheet."
+        )
+        _render_primary_fluid_fluid(data)
+        if not data.get("thermal", pd.DataFrame()).empty:
+            st.divider()
+            _render_thermal_all_fields(data["thermal"])
+
+    with fluid_rock:
+        st.markdown("### Field-tagged adsorption")
+        st.caption(
+            "The Adsorption worksheet carries its own Field values. Use its filters to "
+            "compare only the source-tagged observations."
+        )
+        _render_primary_adsorption(data["adsorption"], data["metadata"])
+
+        st.divider()
+        st.markdown("### Core-flood and Sor evidence · field not specified")
+        st.caption(
+            "Coreflood and Sor_f identify core samples and years but do not contain a "
+            "Field column. They are kept visible as shared laboratory evidence, not "
+            "assigned to a field by matching years or sample names."
+        )
+        _render_primary_coreflood(data["Coreflood"], data["metadata"])
+        _render_primary_sor(data["Sor_F"], data["metadata"])
+
+    field_map = data.get("field_map", pd.DataFrame())
+    if not field_map.empty:
+        with st.expander("CEOR field register"):
+            st.dataframe(
+                field_map[["Field", "EOR type", "Year", "Study type"]]
+                .drop_duplicates()
+                .sort_values(["Field", "Year"], kind="stable"),
+                use_container_width=True,
+                hide_index=True,
+            )
+
+
+def _render_ceor_field(data: dict, field: str, st_jos_data: dict | None) -> None:
+    field_map = data.get("field_map", pd.DataFrame())
+    thermal = _field_rows(data.get("thermal", pd.DataFrame()), field)
+    adsorption = _field_rows(data.get("adsorption", pd.DataFrame()), field)
+
+    _render_field_register(data, field)
     fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
 
     with fluid_fluid:
-        st.markdown("### St. Joseph")
-        st.caption("Source: St_Jos CEOR (Shared) (1).xlsx")
-        _render_fluid_fluid(field_data)
-
-        thermal = field_data.get("thermal", pd.DataFrame())
+        if field.casefold() == "st. joseph" and st_jos_data is not None:
+            st.markdown("### St. Joseph supplemental evidence")
+            st.caption(
+                "Source: St_Jos CEOR (Shared) (1).xlsx. This is supplementary "
+                "St. Joseph evidence, not the master CEOR dataset."
+            )
+            _render_fluid_fluid(st_jos_data)
         if not thermal.empty:
             st.divider()
-            _render_thermal_all_fields(thermal)
+            _render_thermal_field(data["thermal"], field)
+        elif field.casefold() != "st. joseph":
+            st.info(
+                f"No primary-workbook Thermal measurements are explicitly tagged to {field}."
+            )
 
-        if other_data is not None:
-            st.divider()
-            st.markdown(f"### {OTHER_FIELD_LABEL}")
-            st.caption("Source: EOR_Screening_Tool_2026.xlsx. Records are kept separate because field attribution is incomplete across its worksheets.")
-            _render_compact_fluid_fluid(other_data)
+        st.divider()
+        st.markdown("### Shared primary Fluid–Fluid evidence")
+        st.caption(
+            "The primary Vis_Shear, phase-behaviour and IFT rows do not specify a Field. "
+            "They are shown as shared experimental evidence and must not be interpreted "
+            "as measurements from the selected field."
+        )
+        _render_primary_fluid_fluid(data)
 
     with fluid_rock:
-        st.markdown("### St. Joseph")
-        st.caption("Source: St_Jos CEOR (Shared) (1).xlsx")
-        _render_fluid_rock(field_data)
+        if field.casefold() == "st. joseph" and st_jos_data is not None:
+            st.markdown("### St. Joseph supplemental Fluid–Rock evidence")
+            st.caption("Source: St_Jos CEOR (Shared) (1).xlsx.")
+            _render_fluid_rock(st_jos_data)
 
-        if other_data is not None:
-            st.divider()
-            st.markdown(f"### {OTHER_FIELD_LABEL}")
-            st.caption("Source: EOR_Screening_Tool_2026.xlsx. These records are not attributed to St. Joseph.")
-            _render_compact_fluid_rock(other_data)
+        st.markdown("### Primary Adsorption evidence")
+        if adsorption.empty:
+            st.info(f"No Adsorption observations in the primary workbook are tagged to {field}.")
+        else:
+            _render_primary_adsorption(adsorption, data["metadata"])
 
-        thermal_fields = sorted(
-            field_data.get("thermal", pd.DataFrame()).get("Field", pd.Series(dtype="string"))
-            .dropna().astype(str).str.strip().unique().tolist(),
-            key=str.casefold,
+        st.divider()
+        st.markdown("### Shared primary Core-flood and Sor evidence")
+        st.caption(
+            "The primary Coreflood and Sor_f worksheets do not identify a Field. "
+            "They are retained here as shared laboratory evidence, not attributed "
+            "to the selected field."
         )
-        if thermal_fields:
-            st.divider()
-            st.info(
-                "No field-tagged fluid–rock adsorption, core-flood or Sor-reduction "
-                "records are present for the other thermal fields: "
-                + ", ".join(thermal_fields)
-                + ". Those fields remain visible in Fluid–Fluid only until matching evidence is sourced."
-            )
+        _render_primary_coreflood(data["Coreflood"], data["metadata"])
+        _render_primary_sor(data["Sor_F"], data["metadata"])
 
 
 def _render_ceor() -> None:
     try:
-        field_data = load_st_jos_ceor()
-    except FileNotFoundError:
-        st.info(
-            "The St. Joseph CEOR source workbook is not committed to this public "
-            "repository. Upload your approved working copy below, or place it at "
-            "data/St_Jos CEOR (Shared) (1).xlsx locally."
-        )
-        uploaded = st.file_uploader(
-            "Upload the St. Joseph CEOR workbook",
-            type=["xlsx"],
-            key="rd_st_jos_upload",
-            help="The workbook is read for this session and is not committed to GitHub.",
-        )
-        if uploaded is None:
-            return
-        try:
-            field_data = load_st_jos_ceor(uploaded.getvalue())
-        except Exception as exc:
-            st.error("The uploaded CEOR workbook could not be loaded.")
-            with st.expander("Technical detail"):
-                st.exception(exc)
-            return
+        data = load_ceor_evidence()
     except Exception as exc:
-        st.error("CEOR field evidence could not be loaded.")
+        st.error("The primary CEOR workbook could not be loaded.")
         with st.expander("Technical detail"):
             st.exception(exc)
         return
 
-    try:
-        other_data = load_ceor_evidence()
-    except Exception:
-        other_data = None
-
-    other_available = other_data is not None
-    fields = _ceor_field_options(
-        list(field_data["metadata"].get("fields") or ["St. Joseph"]),
-        include_other=other_available,
-    )
+    field_names = list(data["metadata"].get("fields") or [])
+    fields = _ceor_field_options(field_names)
     selected_field = st.selectbox(
         "Field",
         fields,
         index=0,
         key="rd_ceor_field",
-        help="Choose All fields for an overall view. Field-specific evidence remains grouped by source field; Other contains records whose field mapping is incomplete.",
+        help=(
+            "The field list comes from CEOR entries in the workbook's map sheet plus "
+            "explicit Field tags in Thermal and Adsorption. Field-unlabeled experiments "
+            "remain shared evidence; the map is not used to infer their field."
+        ),
     )
-    st.caption(f"CEOR evidence · **{selected_field}**")
 
+    st.caption(f"CEOR evidence · **{selected_field}**")
     if selected_field == ALL_FIELDS_LABEL:
-        _render_ceor_all_fields(field_data, other_data)
+        _render_ceor_all_fields(data)
         return
 
-    fluid_fluid, fluid_rock = st.tabs(["Fluid–Fluid", "Fluid–Rock"])
-    if selected_field.casefold() == "st. joseph":
-        with fluid_fluid:
-            _render_fluid_fluid(field_data)
-        with fluid_rock:
-            _render_fluid_rock(field_data)
-        with st.expander("Field data and source notes"):
-            st.write({
-                "Selected field": selected_field,
-                "Source workbook": field_data["metadata"]["workbook_name"],
-                "Rheology observations plotted": field_data["metadata"]["rheology_plot_rows"],
-                "Phase points": field_data["metadata"]["phase_point_rows"],
-                "Adsorption tests": field_data["metadata"]["adsorption_rows"],
-                "Coreflood samples": field_data["metadata"]["coreflood_samples"],
-            })
-    elif selected_field == OTHER_FIELD_LABEL and other_data is not None:
-        with fluid_fluid:
-            _render_compact_fluid_fluid(other_data)
-        with fluid_rock:
-            _render_compact_fluid_rock(other_data)
-        st.caption(
-            "These records remain in the CEOR workspace, but the source workbook "
-            "does not provide consistent field attribution across all worksheets."
-        )
-    else:
-        with fluid_fluid:
-            _render_thermal_field(field_data["thermal"], selected_field)
-            st.caption(
-                "Only records explicitly tagged to this field are shown. "
-                "No St. Joseph measurements are carried across to another field."
-            )
-        with fluid_rock:
-            st.info(
-                f"No fluid–rock adsorption, core-flood or Sor-reduction records "
-                f"are currently mapped to {selected_field}."
-            )
-
+    st_jos_data = _load_st_jos_supplement() if selected_field.casefold() == "st. joseph" else None
+    _render_ceor_field(data, selected_field, st_jos_data)
 
 
 def render() -> None:
@@ -872,10 +927,11 @@ def render() -> None:
     st.caption(
         "Explore CEOR and Water Alternating Gas evidence by field and experimental interaction."
     )
-    method = st.segmented_control(
+    method = st.radio(
         "Laboratory method",
         options=["CEOR", "WAG"],
-        default="CEOR",
+        index=0,
+        horizontal=True,
         key="rd_method",
         label_visibility="collapsed",
         format_func=lambda value: (
@@ -887,4 +943,3 @@ def render() -> None:
         _render_wag()
         return
     _render_ceor()
-
