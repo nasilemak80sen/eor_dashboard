@@ -90,3 +90,56 @@ def test_top_navigation_uses_buttons_not_radio():
 def test_sidebar_starts_collapsed():
     settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
     assert '"initial_sidebar_state": "collapsed"' in settings
+
+
+def test_r_and_d_navigation_routes_to_new_page():
+    navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
+    app = (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+    assert 'NavItem("ceor", "R&D", "🧪")' in navigation
+    assert "from pages_ui import challenges, ceor, rd," in app
+    assert '"ceor": rd.render' in app
+
+
+def test_r_and_d_page_routes_ceor_by_field_without_a_legacy_expander():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert 'options=["CEOR", "WAG"]' in page
+    assert 'st.tabs(["Fluid–Fluid", "Fluid–Rock"])' in page
+    assert 'st.selectbox(\n        "Field"' in page
+    assert "_render_fluid_fluid(field_data)" in page
+    assert "_render_fluid_rock(field_data)" in page
+    assert "Legacy CEOR evidence" not in page
+    assert "render_legacy_ceor" not in page
+    assert "Other · field mapping incomplete" in page
+
+
+def test_r_and_d_data_loader_preserves_source_ift_bounds():
+    loader = (ROOT / "src" / "data" / "rd_lab_evidence.py").read_text(encoding="utf-8")
+    assert '"IFT low (source)"' in loader
+    assert '"IFT high (source)"' in loader
+    assert "ift_polymer_reversed_bounds" in loader
+
+
+def test_ceor_field_options_include_all_fields_without_duplicate_field_values():
+    from pages_ui.rd import _ceor_field_options, ALL_FIELDS_LABEL, OTHER_FIELD_LABEL
+
+    options = _ceor_field_options(
+        ["Angsi", "D18", "St. Joseph", "Temana", "St Joseph"],
+        include_other=True,
+    )
+    assert options == [
+        ALL_FIELDS_LABEL,
+        "St. Joseph",
+        "Angsi",
+        "D18",
+        "Temana",
+        OTHER_FIELD_LABEL,
+    ]
+
+
+def test_ceor_all_fields_view_keeps_each_field_and_source_separate():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert 'if selected_field == ALL_FIELDS_LABEL:' in page
+    assert "def _render_ceor_all_fields(" in page
+    assert "_render_thermal_all_fields(thermal)" in page
+    assert "Colour identifies the source field" in page
+    assert "EOR_Screening_Tool_2026.xlsx. Records are kept separate" in page

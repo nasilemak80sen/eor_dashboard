@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Streamlit secrets
+.streamlit/secrets.toml
+
+# Local field workbooks are supplied by the data owner and are not published.
+data/WAG_Copy*.xlsx
+data/Baronia_WAG_Data_EOR_ATLAS*unencrypted*.xlsx
+data/Baronia_WAG_Data_EOR_ATLAS 1*.xlsx
+data/St_Jos CEOR*.xlsx

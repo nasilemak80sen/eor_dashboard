@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from data.ceor_evidence import (
     _derive_sor_from_coreflood,
@@ -106,3 +107,71 @@ def test_ceor_page_uses_repository_loader_not_legacy_app_renderer():
     assert "load_ceor_evidence" in source
     assert "_app.render_fluid_fluid_section()" not in source
     assert "_app.render_fluid_rock_section()" not in source
+
+
+def test_r_and_d_page_uses_ceor_category_with_field_filter_and_two_method_views():
+    source = (Path(__file__).resolve().parents[1] / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert "St_Jos CEOR (Shared) (1).xlsx" in (Path(__file__).resolve().parents[1] / "src" / "data" / "rd_lab_evidence.py").read_text(encoding="utf-8")
+    assert "Baronia_WAG_Data_EOR_ATLAS 1.xlsx" in source
+    assert 'options=["CEOR", "WAG"]' in source
+    assert 'st.tabs(["Fluid–Fluid", "Fluid–Rock"])' in source
+    assert 'st.selectbox(\n        "Field"' in source
+    assert "Legacy CEOR evidence" not in source
+    assert "render_legacy_ceor" not in source
+
+
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "St_Jos CEOR (Shared) (1).xlsx").is_file(),
+    reason="St. Joseph source workbook is supplied locally or through the R&D upload control",
+)
+def test_st_jos_loader_exposes_explicit_thermal_fields():
+    from data.rd_lab_evidence import load_st_jos_ceor
+
+    data = load_st_jos_ceor()
+    assert data["metadata"]["thermal_rows"] == 92
+    assert set(data["thermal"]["Field"].dropna().astype(str)) == {"Angsi", "D18", "Temana"}
+    assert set(data["metadata"]["fields"]) == {"St. Joseph", "Angsi", "D18", "Temana"}
+
+
+def test_ceor_page_has_compact_render_entrypoint():
+    source = (Path(__file__).resolve().parents[1] / "src" / "pages_ui" / "ceor.py").read_text(encoding="utf-8")
+    assert "def render_compact()" in source
+    assert 'st.tabs(["Rheology", "Phase behaviour", "IFT"])' in source
+    assert 'st.tabs(["Adsorption", "Core flood", "Sor reduction"])' in source
+
+
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "St_Jos CEOR (Shared) (1).xlsx").is_file(),
+    reason="St. Joseph source workbook is supplied locally or through the R&D upload control",
+)
+def test_st_jos_ceor_workbook_loads_field_specific_laboratory_evidence():
+    from data.rd_lab_evidence import load_st_jos_ceor
+
+    data = load_st_jos_ceor()
+    meta = data["metadata"]
+
+    assert meta["rheology_plot_rows"] == 366
+    assert meta["rheology_source_rows"] == 377
+    assert meta["phase_point_rows"] == 290
+    assert meta["phase_formulations"] == 26
+    assert meta["phase_validated_rows"] == 262
+    assert meta["phase_test_rows"] == 67
+    assert meta["ift_rows"] == 21
+    assert meta["adsorption_rows"] == 2
+    assert meta["coreflood_samples"] == 16
+    assert meta["sor_records"] == 16
+    assert meta["ift_polymer_reversed_bounds"] == 14
+
+
+@pytest.mark.skipif(
+    not (Path(__file__).resolve().parents[1] / "data" / "St_Jos CEOR (Shared) (1).xlsx").is_file(),
+    reason="St. Joseph source workbook is supplied locally or through the R&D upload control",
+)
+def test_st_jos_source_labels_are_preserved_when_ift_bounds_are_reversed():
+    from data.rd_lab_evidence import load_st_jos_ceor
+
+    data = load_st_jos_ceor()
+    polymer_ift = data["ift_polymer"]
+
+    assert (polymer_ift["IFT low (source)"] > polymer_ift["IFT high (source)"]).sum() == 14
+    assert set(polymer_ift["IFT high raw"].dropna().astype(str)) == {"0.01"}
