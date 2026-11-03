@@ -143,3 +143,10 @@ def test_ceor_all_fields_view_keeps_each_field_and_source_separate():
     assert "_render_thermal_all_fields(thermal)" in page
     assert "Colour identifies the source field" in page
     assert "EOR_Screening_Tool_2026.xlsx. Records are kept separate" in page
+
+
+def test_r_and_d_method_selector_uses_compatible_radio_widget():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert "method = st.radio(" in page
+    assert "horizontal=True" in page
+    assert "st.segmented_control(" not in page

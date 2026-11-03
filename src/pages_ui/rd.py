@@ -872,11 +872,14 @@ def render() -> None:
     st.caption(
         "Explore CEOR and Water Alternating Gas evidence by field and experimental interaction."
     )
-    method = st.segmented_control(
+    # Use st.radio rather than st.segmented_control for compatibility with
+    # Streamlit runtimes that have not yet picked up the newer widget API.
+    method = st.radio(
         "Laboratory method",
         options=["CEOR", "WAG"],
-        default="CEOR",
+        index=0,
         key="rd_method",
+        horizontal=True,
         label_visibility="collapsed",
         format_func=lambda value: (
             "CEOR · Chemical EOR" if value == "CEOR"
