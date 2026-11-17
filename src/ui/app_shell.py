@@ -78,6 +78,10 @@ def _search_catalog(query: str, services: dict | None) -> list[dict]:
 
 def _open_search_result(result: dict) -> None:
     st.session_state["atlas_page"] = result["page"]
+    # Defer clearing the widget key until the next run, before st.text_input
+    # is instantiated. This avoids Streamlit's post-instantiation state guard.
+    st.session_state["_clear_atlas_global_search"] = True
+    st.session_state.pop("atlas_global_search_result", None)
     if result.get("kind") == "reservoir":
         # Clear conflicting live filters so the searched record is visible immediately.
         for key in (
@@ -102,6 +106,9 @@ def render_shell_header(services: dict | None = None) -> None:
             unsafe_allow_html=True,
         )
     with search_col:
+        if st.session_state.pop("_clear_atlas_global_search", False):
+            st.session_state["atlas_global_search_query"] = ""
+            st.session_state.pop("atlas_global_search_result", None)
         query = st.text_input(
             "Global search", key="atlas_global_search_query",
             placeholder="Search pages, fields or reservoirs...",
