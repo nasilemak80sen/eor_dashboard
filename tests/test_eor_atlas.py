@@ -110,16 +110,22 @@ def test_catboost_input_adapter_maps_formation_and_duplicates_scalar_ranges():
     result = _build_legacy_catboost_input(values, "Carbonate")
 
     assert result["formation_category"] == "Carbonates"
-    for key, expected in (
-        ("depth", 5000),
-        ("porosity", 20),
-        ("perm", 100),
-        ("api", 35),
-        ("visc", 2),
-        ("so", 55),
-    ):
-        assert result[f"{key}_min" + ("_pct" if key in {"porosity", "so"} else "_ft" if key == "depth" else "_md" if key == "perm" else "_cp" if key == "visc" else "")] == expected
-        assert result[f"{key}_max" + ("_pct" if key in {"porosity", "so"} else "_ft" if key == "depth" else "_md" if key == "perm" else "_cp" if key == "visc" else "")] == expected
+    expected_ranges = {
+        "depth_min_ft": 5000,
+        "depth_max_ft": 5000,
+        "porosity_min_pct": 20,
+        "porosity_max_pct": 20,
+        "perm_min_md": 100,
+        "perm_max_md": 100,
+        "api_min": 35,
+        "api_max": 35,
+        "visc_min_cp": 2,
+        "visc_max_cp": 2,
+        "so_min_pct": 55,
+        "so_max_pct": 55,
+    }
+    for key, expected in expected_ranges.items():
+        assert result[key] == expected
 
 
 @pytest.mark.parametrize(
