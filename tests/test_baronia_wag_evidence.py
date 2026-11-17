@@ -226,3 +226,27 @@ def test_approved_library_baronia_workbook_end_to_end():
     issue_names = set(data["quality_issues"]["Issue"])
     assert "Injection-cycle sequence is incomplete" in issue_names
     assert "Coreflood PV endpoints conflict with the injection design" in issue_names
+
+
+def test_cycle_order_and_interval_gaps_are_flagged():
+    from data.baronia_wag_evidence import _quality_issues
+
+    recovery = pd.DataFrame(columns=["Recovery Stage", "Value"])
+    iwag = pd.DataFrame(columns=["Parameter", "Value"])
+    fluid = pd.DataFrame(columns=["Parameter", "Value"])
+    design = _design_table()
+    curve = _phase_curve()
+    cycles = _cycle_table()
+    # Preserve all labels but swap two adjacent source rows.
+    cycles.loc[[2, 3], :] = cycles.loc[[3, 2], :].to_numpy()
+    cycles.loc[cycles["Injection Cycle"].eq("2nd Gas Cycle"), "PV Start"] = 1.15
+
+    issues = _quality_issues(
+        recovery, iwag, curve, cycles, design, fluid,
+        material_balance=pd.DataFrame(columns=["Parameter", "Value"]),
+        production_curve=pd.DataFrame(columns=["PV Injected"]),
+    )
+    names = set(issues["Issue"])
+
+    assert "Injection-cycle rows are not in the expected gas/water order" in names
+    assert "Injection-cycle PV intervals are not contiguous" in names
