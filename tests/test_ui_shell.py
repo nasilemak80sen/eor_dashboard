@@ -311,3 +311,73 @@ def test_candidate_scatter_and_location_implementations_remain_separate_from_lay
     assert "st.altair_chart(chart, use_container_width=True)" in analytics
     assert "render_openglobus_map(" in page
     assert 'camera_height=5000000 if focus != "All fields" else 12000000' in page
+
+
+
+def test_screening_page_uses_a_guided_single_flow_and_preserves_submission_contract():
+    page = (ROOT / "src" / "pages_ui" / "screening.py").read_text(encoding="utf-8")
+    assert 'page_header(\n        "ENGINEERING WORKSPACE",\n        "EOR Screening",' in page
+    assert 'st.form("screening_reservoir_form", clear_on_submit=False)' in page
+    assert '_hybrid.render_eor_input_form("screening")' in page
+    assert "st.form_submit_button(" in page
+    assert "if submitted:" in page
+    assert "_app.ExcelScreeningService().screen(inputs, formation)" in page
+    assert "persist_engineering_run(inputs, formation, result)" in page
+    assert 'st.session_state["excel_screening_result"] = result' in page
+    assert 'st.session_state["screening_last_run"] = persist_engineering_run(inputs, formation, result)' in page
+    assert "_app.render_excel_screening_result(result)" in page
+    assert "workflow_steps(" in page
+    assert "st.tabs(" not in page
+
+
+def test_screening_gate_and_report_card_side_effects_are_inside_explicit_submit_guard():
+    page = (ROOT / "src" / "pages_ui" / "screening.py").read_text(encoding="utf-8")
+    tree = ast.parse(page)
+    render = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "render"
+    )
+    parents = {
+        child: parent
+        for parent in ast.walk(render)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+    def inside_submit_guard(node):
+        current = node
+        while current in parents:
+            current = parents[current]
+            if isinstance(current, ast.If) and ast.dump(current.test) == ast.dump(ast.Name(id="submitted", ctx=ast.Load())):
+                return True
+        return False
+
+    gate_calls = [
+        node for node in ast.walk(render)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "screen"
+        and isinstance(node.func.value, ast.Call)
+        and isinstance(node.func.value.func, ast.Attribute)
+        and node.func.value.func.attr == "ExcelScreeningService"
+    ]
+    save_calls = [
+        node for node in ast.walk(render)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "persist_engineering_run"
+    ]
+    assert len(gate_calls) == 1
+    assert len(save_calls) == 1
+    assert inside_submit_guard(gate_calls[0])
+    assert inside_submit_guard(save_calls[0])
+    assert gate_calls[0].lineno < save_calls[0].lineno
+
+
+def test_screening_result_summary_and_result_renderer_contracts_are_retained():
+    page = (ROOT / "src" / "pages_ui" / "screening.py").read_text(encoding="utf-8")
+    assert "def _screening_summary(result: dict | None)" in page
+    assert 'str(item.get("Status", "")).upper() == "PASS"' in page
+    assert 'str(item.get("Status", "")).upper() == "CONDITIONAL"' in page
+    assert 'str(item.get("Status", "")).upper() == "FAIL (CRITICAL)"' in page
+    assert "_app.render_excel_screening_result(result)" in page
+    assert 'last_run["reference"]' in page
