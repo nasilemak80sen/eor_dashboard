@@ -6,6 +6,7 @@ a field by assumption. Questionable source values are flagged, not corrected.
 """
 from __future__ import annotations
 
+from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,43 @@ import pandas as pd
 import streamlit as st
 
 ST_JOS_WORKBOOK = "St_Jos CEOR (Shared) (1).xlsx"
+ST_JOS_SOURCE_REF = "fix/restore-original-ceor-charts"
+ST_JOS_SOURCE_COMMIT = "0338bcd904fea38f71724c6a67a6cdcdf272a5fa"
+ST_JOS_SOURCE_BLOB_SHA = "61001208ab3c2b8611b194c295cff029a432614c"
+
+ST_JOS_REQUIRED_SHEETS = {
+    "Vis_Shear (St_Jos)", "Phase_Points", "PB_2003", "PB_2013_A",
+    "PB_2013_S", "IFT_poly_F", "IFT_sur_F (St_Jos)",
+    "Adsorption (St_Jos)", "Coreflood Summary (St_Jos)",
+    "Coreflood (St_Jos)", "Sor_f (StJoseph)",
+}
+
+# These are the minimum headers needed for the normalized evidence contract.
+# Optional descriptive columns remain optional and are retained where available.
+ST_JOS_REQUIRED_COLUMN_GROUPS = {
+    "Vis_Shear (St_Jos)": (
+        ("Year",), ("Polymer",), ("Salinity",), ("Concentration",),
+        ("Shear Rate",), ("Apparent Viscosity",),
+    ),
+    "Phase_Points": (
+        ("Formulation",), ("Phase",), ("TDS_wt_pct",),
+        ("Solubilization_cc_per_cc",),
+    ),
+    "PB_2003": (("Formulation (A/S/P)",),),
+    "PB_2013_A": (("Formulation (A/S/P)",),),
+    "PB_2013_S": (("Formulation (A/S/P)",),),
+    "IFT_poly_F": (("Polymer",), ("IFT low",), ("IFT high",)),
+    "IFT_sur_F (St_Jos)": (("Surfactant",), ("IFT low",), ("IFT high",)),
+    "Adsorption (St_Jos)": (
+        ("Sample No",), ("Year",), ("Field",), ("Surfactant",),
+        ("Days",), ("Adsorption c/cO",),
+    ),
+    "Coreflood Summary (St_Jos)": (("Core Floof Sample",), ("Type",)),
+    "Coreflood (St_Jos)": (
+        ("Core sample",), ("Year",), ("Water Flood Recovery, % OOIP",),
+    ),
+    "Sor_f (StJoseph)": (("Core sample",), ("Year",)),
+}
 
 
 def _root() -> Path:
@@ -37,6 +75,40 @@ def _find_column(frame: pd.DataFrame, terms: tuple[str, ...]) -> str | None:
         if all(term.casefold() in key for term in terms):
             return column
     return None
+
+
+def _validate_st_jos_workbook(xlsx: pd.ExcelFile) -> list[str]:
+    """Fail fast when the pinned St. Joseph workbook no longer matches its contract."""
+    names = set(xlsx.sheet_names)
+    missing_sheets = sorted(ST_JOS_REQUIRED_SHEETS - names)
+    if missing_sheets:
+        raise ValueError(
+            "St. Joseph CEOR workbook is missing required worksheets: "
+            + ", ".join(missing_sheets)
+        )
+
+    issues: list[str] = []
+    for sheet, required_groups in ST_JOS_REQUIRED_COLUMN_GROUPS.items():
+        headers = _clean(pd.read_excel(xlsx, sheet_name=sheet, nrows=0))
+        for terms in required_groups:
+            if _find_column(headers, terms) is None:
+                issues.append(f"{sheet}: expected a column containing {' / '.join(terms)}")
+
+    sor_headers = _clean(pd.read_excel(xlsx, sheet_name="Sor_f (StJoseph)", nrows=0))
+    if not any("sor reduction" in str(column).casefold() for column in sor_headers.columns):
+        issues.append("Sor_f (StJoseph): expected at least one '% Sor Reduction' column")
+
+    if "Thermal" in names:
+        thermal_headers = _clean(pd.read_excel(xlsx, sheet_name="Thermal", nrows=0))
+        if _find_column(thermal_headers, ("Field",)) is None:
+            issues.append("Thermal: expected a Field column to preserve field attribution")
+
+    if issues:
+        raise ValueError(
+            "St. Joseph CEOR workbook has an incompatible worksheet schema: "
+            + "; ".join(issues)
+        )
+    return sorted(names)
 
 
 def _numeric(frame: pd.DataFrame, terms: tuple[str, ...]) -> pd.Series:
@@ -225,24 +297,20 @@ def load_st_jos_ceor(workbook_bytes: bytes | None = None) -> dict[str, Any]:
     path = _root() / "data" / ST_JOS_WORKBOOK
     if workbook_bytes is None:
         if not path.is_file():
-            raise FileNotFoundError(f"St. Joseph CEOR workbook not found: {path}")
-        workbook_source = path
+            raise FileNotFoundError(f"Repository-pinned St. Joseph CEOR workbook not found: {path}")
+        source_bytes = path.read_bytes()
         workbook_label = str(path)
         workbook_name = path.name
+        source_kind = "repository"
     else:
-        workbook_source = BytesIO(workbook_bytes)
-        workbook_label = "Uploaded workbook (session-only)"
+        source_bytes = bytes(workbook_bytes)
+        workbook_label = "Provided workbook bytes (session-only)"
         workbook_name = ST_JOS_WORKBOOK
+        source_kind = "provided-bytes"
 
-    xlsx = pd.ExcelFile(workbook_source, engine="openpyxl")
-    names = set(xlsx.sheet_names)
-    required = {
-        "Vis_Shear (St_Jos)", "Phase_Points", "PB_2003", "PB_2013_A",
-        "PB_2013_S", "IFT_poly_F", "IFT_sur_F (St_Jos)",
-        "Adsorption (St_Jos)", "Coreflood Summary (St_Jos)",
-        "Coreflood (St_Jos)", "Sor_f (StJoseph)",
-    }
-    missing = sorted(required - names)
+    source_sha256 = sha256(source_bytes).hexdigest()
+    xlsx = pd.ExcelFile(BytesIO(source_bytes), engine="openpyxl")
+    names = set(_validate_st_jos_workbook(xlsx))
 
     vis_raw = _clean(pd.read_excel(xlsx, sheet_name="Vis_Shear (St_Jos)"))
     rheology = pd.DataFrame({
@@ -292,7 +360,13 @@ def load_st_jos_ceor(workbook_bytes: bytes | None = None) -> dict[str, Any]:
         "thermal_rows": len(thermal),
         "workbook": workbook_label,
         "workbook_name": workbook_name,
-        "missing_sheets": missing,
+        "workbook_source_kind": source_kind,
+        "workbook_sha256": source_sha256,
+        "source_repository_ref": ST_JOS_SOURCE_REF if source_kind == "repository" else None,
+        "source_repository_commit": ST_JOS_SOURCE_COMMIT if source_kind == "repository" else None,
+        "source_git_blob_sha": ST_JOS_SOURCE_BLOB_SHA if source_kind == "repository" else None,
+        "source_sheet_names": sorted(names),
+        "missing_sheets": [],
         "rheology_source_rows": rheology_source_rows,
         "rheology_plot_rows": len(rheology_plot),
         "rheology_missing_shear_rate_rows": rheology_source_rows - len(rheology_plot),
@@ -305,6 +379,20 @@ def load_st_jos_ceor(workbook_bytes: bytes | None = None) -> dict[str, Any]:
         "adsorption_rows": len(adsorption),
         "coreflood_samples": int(water["Core sample"].nunique()),
         "sor_records": len(sor),
+        "normalized_record_counts": {
+            "rheology": len(rheology),
+            "rheology_plot": len(rheology_plot),
+            "phase_points": len(phase_points),
+            "phase_tests": len(phase_tests),
+            "ift_surfactant": len(ift_surf),
+            "ift_polymer": len(ift_poly),
+            "adsorption": len(adsorption),
+            "waterflood": len(water),
+            "chemical_stage_recovery": len(stages),
+            "recovery_factors": len(factors),
+            "sor_reduction": len(sor),
+            "thermal": len(thermal),
+        },
     }
     return {
         "rheology": rheology,

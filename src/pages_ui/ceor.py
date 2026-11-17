@@ -287,13 +287,27 @@ def _render_adsorption(df: pd.DataFrame, metadata: dict) -> None:
         st.info("No adsorption records match the selected filters.")
         return
 
+    hover_fields = ["Year", "Field"]
+    line_group = None
+    if "Sample No" in work.columns and work["Sample No"].notna().any():
+        hover_fields.insert(0, "Sample No")
+        sample_key_columns = [
+            column for column in ("Year", "Field", "Material", "Sample No")
+            if column in work.columns
+        ]
+        work["_Sample series"] = (
+            work[sample_key_columns].astype("string").fillna("Unknown").agg(" | ".join, axis=1)
+        )
+        line_group = "_Sample series"
+
     fig = px.line(
         work.sort_values(["Material", "Days"]),
         x="Days",
         y="Adsorption c/cO",
         color="Material",
+        line_group=line_group,
         markers=True,
-        hover_data=["Year", "Field"],
+        hover_data=hover_fields,
         labels={"Days": "Days", "Adsorption c/cO": "Adsorption c/c₀"},
     )
     fig.update_layout(height=330, margin=dict(l=38, r=12, t=24, b=45), legend_title="Surfactant / formulation", template="plotly_white")

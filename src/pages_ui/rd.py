@@ -24,6 +24,36 @@ def _metric_row(items: list[tuple[str, str, str]]) -> None:
             st.metric(label, value, help=help_text)
 
 
+def _build_rheology_figure(work: pd.DataFrame, year: str | int) -> go.Figure:
+    """Build distinct rheology curves for each polymer/test-condition combination."""
+    plot_data = work.copy()
+    series_columns = [
+        "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
+    ]
+    plot_data["_Experiment series"] = (
+        plot_data[series_columns]
+        .astype("string")
+        .fillna("Not stated")
+        .agg(" | ".join, axis=1)
+    )
+    return px.line(
+        plot_data.sort_values("Shear rate (1/sec)"),
+        x="Shear rate (1/sec)",
+        y="Apparent viscosity (cP)",
+        color="Polymer",
+        line_dash="Concentration (ppm)",
+        symbol="Salinity (mg/L TDS)",
+        line_group="_Experiment series",
+        facet_col="Year" if year == "All" else None,
+        markers=True,
+        hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
+        labels={
+            "Shear rate (1/sec)": "Shear rate (1/sec)",
+            "Apparent viscosity (cP)": "Apparent viscosity (cP)",
+        },
+    )
+
+
 def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
     st.markdown("#### Polymer rheology")
     st.caption(
@@ -66,28 +96,17 @@ def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
         st.info("No rheology observations match the selected conditions.")
         return
 
-    fig = px.line(
-        work.sort_values("Shear rate (1/sec)"),
-        x="Shear rate (1/sec)",
-        y="Apparent viscosity (cP)",
-        color="Salinity (mg/L TDS)",
-        line_dash="Concentration (ppm)",
-        facet_col="Year" if year == "All" else None,
-        markers=True,
-        hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
-        labels={
-            "Shear rate (1/sec)": "Shear rate (1/sec)",
-            "Apparent viscosity (cP)": "Apparent viscosity (cP)",
-        },
-    )
+    fig = _build_rheology_figure(work, year)
     fig.update_layout(
         height=340, margin=dict(l=35, r=15, t=35, b=45),
-        legend_title="Salinity / concentration", template="plotly_white",
+        legend_title="Polymer / test condition", template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.caption(
-        f"{len(work):,} plotted observations. {meta['rheology_missing_shear_rate_rows']} "
-        "source rows lack shear rate and are not included in this curve."
+        f"{len(work):,} plotted observations. Each curve is grouped by polymer, year, "
+        "salinity and concentration. "
+        f"{meta['rheology_missing_shear_rate_rows']} source rows lack shear rate and "
+        "are not included in this curve."
     )
 
 
@@ -192,19 +211,34 @@ def _render_ift_chart(df: pd.DataFrame, title: str) -> None:
         ("IFT low (source)", "IFT low (as labelled in source)", "circle"),
         ("IFT high (source)", "IFT high (as labelled in source)", "triangle-up"),
     ):
-        part = df.dropna(subset=[column])
-        custom = part[["IFT low raw", "IFT high raw", "IFT high is censored"]].astype(str).to_numpy()
-        fig.add_trace(go.Scatter(
-            x=part[column], y=part["Material"], mode="markers", name=label,
-            marker={"size": 10, "symbol": symbol},
-            customdata=custom,
-            hovertemplate=(
-                "%{y}<br>Plotted value: %{x:.5g} dynes/cm"
-                "<br>Source low: %{customdata[0]}"
-                "<br>Source high: %{customdata[1]}"
-                "<br>High value censored: %{customdata[2]}<extra></extra>"
-            ),
-        ))
+        part = df.dropna(subset=[column]).copy()
+        if column == "IFT high (source)":
+            censored = part["IFT high is censored"].fillna(False).astype(bool)
+            groups = (
+                (part.loc[~censored], label, symbol),
+                (part.loc[censored], f"{label} · detection limit", "triangle-up-open"),
+            )
+        else:
+            groups = ((part, label, symbol),)
+
+        for plotted, trace_label, trace_symbol in groups:
+            if plotted.empty:
+                continue
+            custom = plotted[
+                ["IFT low raw", "IFT high raw", "IFT high is censored"]
+            ].astype(str).to_numpy()
+            fig.add_trace(go.Scatter(
+                x=plotted[column], y=plotted["Material"], mode="markers",
+                name=trace_label,
+                marker={"size": 10, "symbol": trace_symbol},
+                customdata=custom,
+                hovertemplate=(
+                    "%{y}<br>Plotted limit/value: %{x:.5g} dynes/cm"
+                    "<br>Source low: %{customdata[0]}"
+                    "<br>Source high: %{customdata[1]}"
+                    "<br>High value censored: %{customdata[2]}<extra></extra>"
+                ),
+            ))
     fig.update_xaxes(type="log", title="IFT (dynes/cm)")
     fig.update_yaxes(title="")
     fig.update_layout(
@@ -232,8 +266,8 @@ def _render_ift(data: dict) -> None:
     if data["ift_surfactant"]["IFT high is censored"].any():
         st.caption(
             "At least one surfactant IFT result is reported as a detection limit "
-            "(for example, '<0.001'). The marker is placed at the stated limit and "
-            "retains the original text in its hover details."
+            "(for example, '<0.001'). It is shown with an open marker at the stated "
+            "limit, not as an exact measured value; the raw source text remains in hover details."
         )
 
 
@@ -443,11 +477,31 @@ def _render_wag_performance(data: dict) -> None:
             hover_data=["Oil Recovery (Fraction)", "Injection Phase"],
             labels={"PV Injected": "Pore volumes injected (PV)", "Oil Recovery (%)": "Oil recovery (% OOIP)"},
         )
-        fig.add_hline(y=64, line_dash="dot", annotation_text="Summary waterflood: 64%")
-        fig.add_hline(y=87, line_dash="dash", annotation_text="Reported final recovery: 87%")
+        summary_wf = _wag_lookup(
+            data["recovery_summary"], "Waterflood Recovery",
+            key_col="Recovery Stage", value_col="Value",
+        )
+        summary_final = _wag_lookup(
+            data["recovery_summary"], "IWAG Recovery (Total)",
+            key_col="Recovery Stage", value_col="Value",
+        )
+        if summary_wf is not None:
+            fig.add_hline(
+                y=float(summary_wf), line_dash="dot",
+                annotation_text=f"Summary waterflood: {float(summary_wf):g}%",
+            )
+        if summary_final is not None:
+            fig.add_hline(
+                y=float(summary_final), line_dash="dash",
+                annotation_text=f"Summary final: {float(summary_final):g}%",
+            )
         fig.update_layout(height=370, template="plotly_white", margin=dict(l=35, r=15, t=30, b=40))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.caption("The source curve marks 65% at the end of primary waterflood, while the summary reports 64%. Both are retained.")
+        st.caption(
+            "Reference lines come from the coreflood summary. The recovery curve is "
+            "plotted at its reported PV values without rebasing or forcing it to match "
+            "the injection design."
+        )
 
     left, right = st.columns(2)
     with left:
@@ -502,7 +556,19 @@ def _render_wag_injection_model(data: dict) -> None:
         value = _wag_lookup(design, key, key_col="Parameter", value_col="Value")
         cols[i % 4].metric(label, _wag_display(value, unit))
 
-    st.caption("Equal 0.2 PV gas and water slugs imply a 1:1 per-cycle slug-size ratio. The separate WAG Ratio cell is time-formatted and is withheld pending source confirmation.")
+    gas_slug = _wag_lookup(design, "Gas Slug Size", key_col="Parameter", value_col="Value")
+    water_slug = _wag_lookup(design, "Water Slug Size", key_col="Parameter", value_col="Value")
+    if (
+        gas_slug is not None and water_slug is not None
+        and not pd.isna(gas_slug) and not pd.isna(water_slug)
+    ):
+        st.caption(
+            f"Slug sizes recorded in the design: gas {_wag_display(gas_slug, 'PV')} and "
+            f"water {_wag_display(water_slug, 'PV')} per cycle. The separate WAG Ratio "
+            "cell is time-formatted and is withheld pending source confirmation."
+        )
+    else:
+        st.caption("One or both per-cycle slug sizes are not reported. The malformed WAG Ratio cell remains withheld pending source confirmation.")
 
     gas = data["gas_composition"]
     if not gas.empty:
@@ -555,34 +621,221 @@ def _render_wag_field_core(data: dict) -> None:
         st.dataframe(data["facies"], use_container_width=True, hide_index=True)
 
 
+def _wag_reconciliation_value(frame: pd.DataFrame, measure: str):
+    return _wag_lookup(frame, measure, key_col="Measure", value_col="Value")
+
+
+def _wag_reconciliation_snapshot(data: dict) -> dict:
+    """Create a compact, source-aware summary for the WAG Data Quality view."""
+    recovery = data["recovery_reconciliation"]
+    pv = data["pv_reconciliation"]
+    cycles = data["cycle_reconciliation"]
+
+    def value(frame: pd.DataFrame, measure: str):
+        return _wag_reconciliation_value(frame, measure)
+
+    expected_stages = int(cycles["Expected stage"].notna().sum()) if not cycles.empty else 0
+    present_stages = int(
+        (cycles["Presence"].eq("Present") & cycles["Expected stage"].notna()).sum()
+    ) if not cycles.empty else 0
+    missing_stages = int(cycles["Presence"].eq("Missing").sum()) if not cycles.empty else 0
+    phase_conflicts = int(cycles["Phase alignment"].eq("Conflict").sum()) if not cycles.empty else 0
+
+    return {
+        "summary_increment": value(recovery, "IWAG incremental recovery"),
+        "iwag_results_increment": value(recovery, "IWAG Results increment"),
+        "cycle_increment": value(recovery, "Cycle increments summed"),
+        "design_total_pv": value(pv, "Expected total injection"),
+        "material_balance_total_pv": value(pv, "Material-balance total injected"),
+        "curve_total_pv": value(pv, "Recovery-curve PV endpoint"),
+        "expected_stages": expected_stages,
+        "present_stages": present_stages,
+        "missing_stages": missing_stages,
+        "phase_conflicts": phase_conflicts,
+    }
+
+
+def _render_wag_reconciliation_overview(data: dict) -> None:
+    snapshot = _wag_reconciliation_snapshot(data)
+
+    def pp(value) -> str:
+        return "Not reported" if value is None or pd.isna(value) else f"{float(value):g} pp"
+
+    def pv(value) -> str:
+        return "Not reported" if value is None or pd.isna(value) else f"{float(value):.2f} PV"
+
+    st.markdown("#### Reconciliation at a glance")
+    a, b, c, d = st.columns(4)
+    a.metric(
+        "Recovery claims · summary / IWAG / cycles",
+        " / ".join([
+            pp(snapshot["summary_increment"]).replace(" pp", ""),
+            pp(snapshot["iwag_results_increment"]).replace(" pp", ""),
+            pp(snapshot["cycle_increment"]).replace(" pp", ""),
+        ]) + " pp",
+        help="The three values are independent source claims or sums. They are not averaged or selected.",
+    )
+
+    design_total = snapshot["design_total_pv"]
+    curve_total = snapshot["curve_total_pv"]
+    delta = (
+        float(curve_total) - float(design_total)
+        if design_total is not None and curve_total is not None else None
+    )
+    b.metric(
+        "Design total / curve endpoint",
+        f"{pv(design_total)} / {pv(curve_total)}",
+        delta=f"{delta:+.2f} PV at curve endpoint" if delta is not None else None,
+        help="The design-derived total is compared with the recorded curve endpoint; the PV axis is not rescaled.",
+    )
+    c.metric(
+        "Injection-stage coverage",
+        f"{snapshot['present_stages']} / {snapshot['expected_stages']}",
+        delta=(
+            f"{snapshot['missing_stages']} missing"
+            if snapshot["missing_stages"] else "All expected stages present"
+        ),
+        help="Expected stages are derived from the WAG cycle count and include one gas and one water stage per cycle.",
+    )
+    d.metric(
+        "Cycle start-label conflicts",
+        str(snapshot["phase_conflicts"]),
+        help="Counts rows where the cycle-table start and recovery-curve phase disagree by gas/water type or cycle ordinal.",
+    )
+
+    if snapshot["phase_conflicts"]:
+        st.warning(
+            f"{snapshot['phase_conflicts']} cycle start labels conflict with the recovery-curve phase or cycle ordinal. "
+            "Review the cycle table against the curve before attributing stage-level recovery."
+        )
+
+    pv_frame = data["pv_reconciliation"]
+    comparison_measures = [
+        "Expected total injection",
+        "Field-reported total fluid injected",
+        "Material-balance total injected",
+        "Coreflood-summary total injected",
+        "Recovery-curve PV endpoint",
+        "Production-curve PV endpoint",
+    ]
+    plot_data = pv_frame.loc[pv_frame["Measure"].isin(comparison_measures)].dropna(
+        subset=["Value"]
+    ).copy()
+    if not plot_data.empty:
+        fig = px.bar(
+            plot_data,
+            x="Value",
+            y="Measure",
+            color="Comparison",
+            orientation="h",
+            text="Value",
+            hover_data=["Source"],
+            labels={
+                "Value": "Total injected pore volumes (PV)",
+                "Measure": "",
+                "Comparison": "Reconciliation",
+            },
+        )
+        fig.update_traces(texttemplate="%{x:.2f} PV", textposition="outside", cliponaxis=False)
+        fig.update_layout(
+            height=330,
+            template="plotly_white",
+            margin=dict(l=12, r=55, t=18, b=45),
+            legend_title="Source check",
+        )
+        fig.update_xaxes(rangemode="tozero", title="Total injected pore volumes (PV)")
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.caption(
+            "Only comparable total-injection quantities are plotted. Initial waterflood PV "
+            "and post-waterflood slug span remain in the detailed reconciliation table."
+        )
+
+
 def _render_wag_quality(data: dict) -> None:
+    _render_wag_reconciliation_overview(data)
+
     issues = data["quality_issues"]
     if not issues.empty:
         high = int(issues["Severity"].eq("High").sum())
         review = int(issues["Severity"].eq("Review").sum())
-        st.warning(f"Workbook QA identified {len(issues)} issues: {high} high-priority and {review} requiring review. Source values are preserved, not silently corrected.")
-        st.dataframe(issues, use_container_width=True, hide_index=True)
+        st.warning(
+            f"Source QA identified {len(issues)} findings: {high} high-priority and "
+            f"{review} requiring review. No source value has been selected or corrected."
+        )
+        st.dataframe(
+            issues.sort_values(
+                ["Severity", "Issue"],
+                key=lambda column: column.map({"High": 0, "Review": 1}).fillna(2)
+                if column.name == "Severity" else column,
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
         st.success("No automated workbook consistency flags were triggered.")
 
-    with st.expander("Recovery values reported by each workbook section"):
-        st.markdown("**Coreflood recovery summary**")
-        st.dataframe(data["recovery_summary"], use_container_width=True, hide_index=True)
-        st.markdown("**IWAG Results sheet**")
-        st.dataframe(data["iwag_recovery"], use_container_width=True, hide_index=True)
-        st.markdown("**EOR ATLAS Summary sheet**")
-        st.dataframe(data["summary_metrics"], use_container_width=True, hide_index=True)
-
-    with st.expander("Raw saturation values · not suitable as a physical profile"):
-        st.caption("Out-of-range saturation values are retained for audit but are not plotted as saturation evolution.")
-        st.dataframe(
-            data["recovery_curve"][["PV Injected", "Oil Saturation (%)", "Water Saturation (%)", "Gas Saturation (%)"]],
-            use_container_width=True, hide_index=True,
+    with st.expander("Detailed recovery reconciliation"):
+        st.caption(
+            "Source-reported recovery and arithmetic-derived values are kept separate. "
+            "Percentage points (pp) are not percentage values."
         )
-    with st.expander("Material balance and source details"):
+        st.dataframe(
+            data["recovery_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Original recovery source tables**")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.dataframe(data["recovery_summary"], use_container_width=True, hide_index=True)
+        with c2:
+            st.dataframe(data["iwag_recovery"], use_container_width=True, hide_index=True)
+
+    with st.expander("Detailed injection-volume / PV reconciliation"):
+        st.caption(
+            "Design arithmetic, Field Information, material balance and curve endpoints "
+            "are independent evidence. The PV axis is not rebased to force agreement."
+        )
+        st.dataframe(
+            data["pv_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Material-balance source records**")
         st.dataframe(data["material_balance"], use_container_width=True, hide_index=True)
+
+    with st.expander("Injection-cycle sequence and interval audit"):
+        st.caption(
+            "Expected stages are derived from the cycle count. Missing rows are not "
+            "filled with estimated recovery increments."
+        )
+        st.dataframe(
+            data["cycle_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Source cycle table**")
+        st.dataframe(data["cycle_recovery"], use_container_width=True, hide_index=True)
+
+    with st.expander("Raw saturation values · invalid as a physical profile"):
+        st.caption(
+            "Out-of-range saturation values are retained for audit but are not plotted "
+            "as saturation evolution."
+        )
+        st.dataframe(
+            data["recovery_curve"][[
+                "PV Injected", "Oil Saturation (%)",
+                "Water Saturation (%)", "Gas Saturation (%)",
+            ]],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    with st.expander("Workbook provenance and source details"):
         st.write({
             "Workbook": data["metadata"]["workbook_name"],
+            "SHA-256": data["metadata"]["workbook_sha256"],
+            "Loaded via": data["metadata"]["workbook_source_kind"],
             "Source report": data["metadata"]["source_report"],
             "Worksheets": data["metadata"]["sheets"],
             "Gas composition total (excluding Total row)": data["metadata"]["gas_composition_total_mol_pct"],
@@ -591,16 +844,27 @@ def _render_wag_quality(data: dict) -> None:
 
 def _render_wag() -> None:
     st.markdown("### Baronia · Water Alternating Gas (IWAG)")
-    st.caption("Baronia workbook supplied: WAG_Copy.xlsx · Original workbook reference: Baronia_WAG_Data_EOR_ATLAS 1.xlsx")
+    st.caption(
+        "The WAG workbook is supplied as a local or session-only input. "
+        "It is intentionally excluded from the public repository."
+    )
+    st.caption(
+        "Working input: WAG_Copy.xlsx · Legacy workbook reference: "
+        "Baronia_WAG_Data_EOR_ATLAS 1.xlsx"
+    )
     try:
         data = load_baronia_wag()
     except FileNotFoundError:
-        st.info("The unlocked workbook is not stored in this public repository. Upload your working copy below, or place it at data/WAG_Copy.xlsx locally.")
+        st.info(
+            "The approved Baronia workbook is not configured locally. Set "
+            "BARONIA_WAG_WORKBOOK to a file outside the repository, or upload the "
+            "workbook for this session. The uploaded bytes are not written to disk."
+        )
         uploaded = st.file_uploader(
-            "Upload the unlocked Baronia WAG workbook",
+            "Select the approved Baronia WAG workbook",
             type=["xlsx"],
             key="rd_baronia_wag_upload",
-            help="The workbook is read for this session and is not committed to GitHub.",
+            help="Read for this Streamlit session only. The file is not saved to or committed from this app.",
         )
         if uploaded is None:
             return
@@ -624,7 +888,14 @@ def _render_wag() -> None:
     final = _wag_lookup(data["recovery_summary"], "IWAG Recovery (Total)", key_col="Recovery Stage", value_col="Value")
     increment = _wag_lookup(data["recovery_summary"], "IWAG Incremental Recovery", key_col="Recovery Stage", value_col="Value")
 
-    st.caption(f"{field_name or 'Baronia'} · {target or 'RV2'} reservoir · Source: {data['metadata']['source_report']}")
+    st.caption(
+        f"{field_name or 'Baronia'} · {target or 'RV2'} reservoir · "
+        f"Source: {data['metadata']['source_report']}"
+    )
+    st.caption(
+        f"Input mode: {data['metadata']['workbook_source_kind']} · "
+        f"SHA-256: {data['metadata']['workbook_sha256'][:16]}…"
+    )
     kpis = st.columns(5)
     kpis[0].metric("STOIIP", _wag_display(stoiip))
     kpis[1].metric("Waterflood recovery", _wag_display(wf, "% OOIP"))
@@ -769,32 +1040,17 @@ def _render_field_register(data: dict, field: str) -> None:
 
 
 def _load_st_jos_supplement() -> dict | None:
-    """Load St. Joseph evidence only when its field is selected."""
+    """Load the repository-pinned St. Joseph workbook; do not substitute uploads."""
     try:
         return load_st_jos_ceor()
     except FileNotFoundError:
-        uploaded = st.file_uploader(
-            "Upload the St. Joseph supplemental CEOR workbook",
-            type=["xlsx"],
-            key="rd_st_jos_upload",
-            help="Used only for St. Joseph. The primary CEOR workbook remains the repository dataset.",
+        st.error(
+            "The repository-pinned St. Joseph CEOR workbook is missing from data/. "
+            "Restore the approved repository source rather than substituting an upload."
         )
-        if uploaded is None:
-            st.info(
-                "St. Joseph is present in the field register, but its supplemental workbook "
-                "is not available in this checkout. Upload the St. Joseph workbook to show "
-                "its additional field-specific measurements."
-            )
-            return None
-        try:
-            return load_st_jos_ceor(uploaded.getvalue())
-        except Exception as exc:
-            st.error("The St. Joseph supplemental workbook could not be loaded.")
-            with st.expander("Technical detail"):
-                st.exception(exc)
-            return None
+        return None
     except Exception as exc:
-        st.error("The St. Joseph supplemental workbook could not be loaded.")
+        st.error("The repository-pinned St. Joseph CEOR workbook could not be loaded.")
         with st.expander("Technical detail"):
             st.exception(exc)
         return None

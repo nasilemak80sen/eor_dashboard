@@ -3,6 +3,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from pages_ui import ceor
+
 from data.ceor_evidence import (
     _derive_sor_from_coreflood,
     _normalise_adsorption,
@@ -107,12 +109,88 @@ def test_phase_and_adsorption_normalisation():
                 "Adsorption c/cO": [0.6],
                 "Temperature": [80],
                 "Polymer Type": ["P1"],
+                "Sample No": [17],
             }
         )
     )
     assert adsorption.iloc[0]["Adsorption c/cO"] == 0.6
     assert adsorption.iloc[0]["Temperature"] == 80
     assert adsorption.iloc[0]["Polymer Type"] == "P1"
+    assert adsorption.iloc[0]["Sample No"] == 17
+
+
+
+def test_adsorption_normalisation_supports_workbooks_without_sample_number():
+    raw = pd.DataFrame(
+        {
+            "Year": [2003],
+            "Field": ["Angsi"],
+            "Surfactant": ["S1"],
+            "Days": [5],
+            "Adsorption c/cO": [0.6],
+        }
+    )
+
+    out = _normalise_adsorption(raw)
+
+    assert len(out) == 1
+    assert "Sample No" in out.columns
+    assert out["Sample No"].isna().all()
+
+
+def test_adsorption_chart_exposes_sample_id_and_keeps_sample_series_separate(monkeypatch):
+    captured = {}
+
+    class FakeColumn:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+        def multiselect(self, label, options, default, key):
+            return default
+
+    class FakeFigure:
+        def update_layout(self, **kwargs):
+            return None
+
+    def capture_line(frame, **kwargs):
+        captured["frame"] = frame.copy()
+        captured.update(kwargs)
+        return FakeFigure()
+
+    monkeypatch.setattr(ceor, "section_title", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ceor.st, "columns", lambda count: [FakeColumn() for _ in range(count)])
+    monkeypatch.setattr(ceor.st, "plotly_chart", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ceor.st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ceor.px, "line", capture_line)
+
+    source = pd.DataFrame(
+        {
+            "Year": [2003, 2003, 2003, 2003],
+            "Field": ["Angsi", "Angsi", "Angsi", "Angsi"],
+            "Material": ["S1", "S1", "S1", "S1"],
+            "Days": [0, 1, 0, 1],
+            "Adsorption c/cO": [1.0, 0.8, 0.9, 0.7],
+            "Temperature": [80, 80, 80, 80],
+            "Polymer Type": ["P1", "P1", "P1", "P1"],
+            "Sample No": [17, 17, 18, 18],
+        }
+    )
+    metadata = {"source_map": {"adsorption": "Adsorption"}}
+
+    ceor._render_adsorption(source, metadata)
+
+    assert captured["hover_data"] == ["Sample No", "Year", "Field"]
+    assert captured["line_group"] == "_Sample series"
+    assert captured["frame"]["_Sample series"].nunique() == 2
+
+    captured.clear()
+    ceor._render_adsorption(source.drop(columns=["Sample No"]), metadata)
+
+    assert captured["hover_data"] == ["Year", "Field"]
+    assert captured["line_group"] is None
 
 
 
