@@ -81,3 +81,32 @@ streamlit run src/eor_atlas.py
 ```
 
 The expected SHA-256 is pinned in the local-only integration test. The workbook is read from the external path and is not copied into the repository, CI artifacts, or public workflow inputs.
+
+
+## Phase 3 R&D experience refinement
+
+- The WAG Data Quality tab starts with a compact reconciliation overview:
+  - recovery claims in the order coreflood summary / IWAG Results / cycle sum;
+  - design total versus recovery-curve endpoint;
+  - expected versus present injection stages;
+  - cycle-start phase/ordinal label conflicts.
+- Total-PV evidence is visualized as a source comparison chart. Initial waterflood PV and post-waterflood span remain in the detailed table so unlike quantities are not mixed.
+- Detailed recovery, PV, cycle and raw saturation tables are collapsed by default. The source QA findings remain visible.
+- The WAG input message now makes the local/session-only boundary explicit. The app displays the workbook source mode and a short SHA-256 fingerprint.
+- Slug-size captions are derived from the loaded design values. The malformed WAG Ratio cell remains withheld.
+
+## Phase 3 local workbook review
+
+The approved Library workbook was read directly and its source tables independently reconciled. Results:
+
+- Design schedule: 1.0 PV initial waterflood + 4 × (0.2 PV gas + 0.2 PV water) = 2.6 PV.
+- Material balance: 1.8 PV water + 0.8 PV gas = 2.6 PV.
+- Field Information reports approximately 2.0 PV; coreflood summary and recovery/production curve endpoints are 2.0 PV.
+- Recovery curve places the end of primary waterflood at 0.7 PV and 65% recovery; design says 1.0 PV for initial waterflood.
+- Recovery-curve final recovery is 87%, giving 22 percentage points above its 65% curve waterflood endpoint.
+- Post-waterflood injection-cycle increments sum to 22 percentage points. The cycle table contains seven post-waterflood stage rows against eight expected stages; the missing stage is the 4th Water Cycle.
+- Reported cycle PV intervals are contiguous; the current workbook review found no gaps or overlaps.
+- Five cycle start points disagree with the recovery-curve phase label or cycle ordinal. This is distinct from the missing-row issue and is surfaced separately in the UI.
+- Recovery sources still report 23 pp (summary) and 17 pp (IWAG Results), versus 22 pp from cycle and curve arithmetic.
+
+No source values were rewritten, estimated, rebased or designated as authoritative. These are review findings only. The local-only pytest integration test remains opt-in through `BARONIA_WAG_WORKBOOK`; public CI does not receive the Library workbook.
