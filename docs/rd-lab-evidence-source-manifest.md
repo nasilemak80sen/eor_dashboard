@@ -110,3 +110,51 @@ The approved Library workbook was read directly and its source tables independen
 - Recovery sources still report 23 pp (summary) and 17 pp (IWAG Results), versus 22 pp from cycle and curve arithmetic.
 
 No source values were rewritten, estimated, rebased or designated as authoritative. These are review findings only. The local-only pytest integration test remains opt-in through `BARONIA_WAG_WORKBOOK`; public CI does not receive the Library workbook.
+
+
+## Phase 4 regression and acceptance
+
+Phase 4 is an acceptance gate, not a new evidence-normalization phase. Its purpose is to prove that the R&D Laboratory's existing source contracts, QA findings and navigation remain stable.
+
+### Automated acceptance coverage
+
+- `tests/test_rd_lab_app.py` uses Streamlit AppTest to exercise the CEOR default/all-fields view, the St. Joseph field-specific route, and the WAG method switch. It asserts the Fluid–Fluid and Fluid–Rock tabs and all four WAG workspace tabs render without Streamlit exceptions.
+- `tests/test_baronia_wag_acceptance.py` verifies that an incomplete workbook is rejected at the required-worksheet boundary before normalization.
+- `tests/test_ceor_evidence.py` retains the St. Joseph source-count regression checks for rheology, phase points, phase tests, IFT, adsorption, coreflood and Sor evidence.
+- `tests/test_baronia_wag_evidence.py` retains synthetic recovery/PV/cycle QA tests and the opt-in exact Library workbook integration test.
+- GitHub Actions runs the complete Python test discovery set under `tests/` and `src/tests/` with `pytest -q tests src/tests`.
+
+### Exact Baronia Library workbook test
+
+The Baronia workbook remains outside GitHub, CI inputs, fixtures and workflow artifacts. Run the pinned end-to-end test locally against the approved Library copy:
+
+Windows PowerShell:
+
+```powershell
+$env:BARONIA_WAG_WORKBOOK = "C:\path\outside\repository\WAG_Copy.xlsx"
+$env:PYTHONPATH = "src"
+python -m pytest -q tests/test_baronia_wag_evidence.py
+```
+
+The local test checks the approved workbook SHA-256, worksheet inventory, independent recovery claims, PV evidence, missing cycle stage and five cycle/curve phase-label conflicts. Public CI skips this one test unless an external workbook path is explicitly supplied.
+
+### Manual browser acceptance checklist
+
+After starting the app with `streamlit run src/eor_atlas.py`:
+
+1. Open R&D Laboratory from the main navigation.
+2. In CEOR, verify All fields and St. Joseph can be selected and both Fluid–Fluid and Fluid–Rock tabs render.
+3. In WAG, verify IWAG Performance, Injection & Model, Field & Core and Data Quality tabs render.
+4. With no local Baronia path configured, verify the page explains the local/session-only upload path and does not save the upload to the repository.
+5. With the approved workbook loaded, verify the source mode and SHA-256 fingerprint are visible and the Data Quality findings remain visible.
+6. Confirm source disagreements remain separate: 17/22/23 percentage-point recovery claims; 2.0/2.6 PV totals; seven of eight expected WAG stages; five phase-label conflicts.
+7. Confirm no source value is silently corrected, imputed, averaged or presented as authoritative.
+
+### Phase 4 exit criteria
+
+- Full repository regression suite and GitHub Actions are green.
+- Streamlit AppTest covers both methods, the St. Joseph field route and all R&D tabs without exceptions.
+- The exact approved Baronia Library workbook integration test passes locally.
+- Manual browser smoke review shows stable navigation, usable tabs and source/QA provenance.
+- The Baronia workbook remains untracked and absent from repository history additions.
+- No engineering evidence is silently rewritten and no unlike quantities are combined in visualizations.
