@@ -26,16 +26,24 @@ def _metric_row(items: list[tuple[str, str, str]]) -> None:
 
 def _build_rheology_figure(work: pd.DataFrame, year: str | int) -> go.Figure:
     """Build distinct rheology curves for each polymer/test-condition combination."""
+    plot_data = work.copy()
+    series_columns = [
+        "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
+    ]
+    plot_data["_Experiment series"] = (
+        plot_data[series_columns]
+        .astype("string")
+        .fillna("Not stated")
+        .agg(" | ".join, axis=1)
+    )
     return px.line(
-        work.sort_values("Shear rate (1/sec)"),
+        plot_data.sort_values("Shear rate (1/sec)"),
         x="Shear rate (1/sec)",
         y="Apparent viscosity (cP)",
         color="Polymer",
         line_dash="Concentration (ppm)",
         symbol="Salinity (mg/L TDS)",
-        line_group=[
-            "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
-        ],
+        line_group="_Experiment series",
         facet_col="Year" if year == "All" else None,
         markers=True,
         hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
