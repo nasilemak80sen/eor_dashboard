@@ -235,3 +235,11 @@ def test_executive_overview_retains_rf_gap_chart_definition_and_rendering():
     assert 'y=alt.Y("Field:N", sort="-x", title=None)' in page
     assert "st.altair_chart(chart, use_container_width=True)" in page
     assert ".properties(height=440).interactive()" in page
+
+
+
+def test_executive_overview_distinguishes_loaded_map_source_from_usable_coordinates():
+    page = (ROOT / "src" / "pages_ui" / "overview.py").read_text(encoding="utf-8")
+    assert "map_source_available = isinstance(map_df, pd.DataFrame) and not map_df.empty" in page
+    assert "map_ready = not mapped.empty" in page
+    assert "int(map_df.shape[0])" in page

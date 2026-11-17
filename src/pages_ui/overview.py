@@ -153,7 +153,7 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
             f'<div class="atlas-overview-map-context">'
             f'<span class="atlas-overview-map-context-label">CURRENT MAP SCOPE</span>'
             f'<span class="atlas-overview-map-context-value">{escape(scope_label)}</span>'
-            f'<span class="atlas-overview-map-context-note">{len(visible):,} mapped field records</span>'
+            f'<span class="atlas-overview-map-context-note">{len(visible):,} mapped fields · {int(map_df.shape[0]):,} map records</span>'
             f"</div>",
             unsafe_allow_html=True,
         )
@@ -310,13 +310,14 @@ def render() -> None:
     )
 
     workbook_ready = isinstance(workbook, dict)
-    map_ready = isinstance(map_df, pd.DataFrame) and not map_df.empty
+    map_source_available = isinstance(map_df, pd.DataFrame) and not map_df.empty
+    map_ready = not mapped.empty
     _render_source_availability(workbook_ready, map_ready)
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
     # The WebGL map remains in a stable visible page container, outside tabs.
-    if map_ready:
+    if map_source_available:
         _render_spatial_snapshot(map_df)
     else:
         st.info("The workbook map sheet is unavailable in this session.")
