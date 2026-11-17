@@ -103,7 +103,7 @@ def _verify_openglobus(page, label: str) -> None:
 
 def _assert_report_reference(page, label: str) -> str:
     text = page.locator("body").inner_text()
-    match = re.search(rf"{re.escape(label)}:\\s*(EOR-\\d{{4}}-\\d{{6}})", text)
+    match = re.search(rf"{re.escape(label)}:\s*(EOR-\d{{4}}-\d{{6}})", text)
     if not match:
         raise AssertionError(f"Expected a saved report reference after {label} submission.")
     return match.group(1)
@@ -150,7 +150,7 @@ def main() -> None:
             # Submitting a valid default engineering case must persist exactly one run.
             before_engineering = _run_count()
             page.get_by_role("button", name=re.compile("Run EOR Screening")).click(timeout=20_000)
-            page.get_by_text(re.compile(r"Saved report card:.*EOR-\\d{4}-\\d{6}")).wait_for(
+            page.get_by_text(re.compile(r"Saved report card:.*EOR-\d{4}-\d{6}")).wait_for(
                 state="visible", timeout=60_000
             )
             after_engineering = _run_count()
@@ -187,7 +187,7 @@ def main() -> None:
             _navigate_sidebar(page, "Hybrid Intelligence", "Hybrid Intelligence", "eor-atlas-hybrid.png")
             before_hybrid = _run_count()
             page.get_by_role("button", name=re.compile("Run Hybrid Intelligence")).click(timeout=20_000)
-            page.get_by_text(re.compile(r"Saved hybrid report card:.*EOR-\\d{4}-\\d{6}")).wait_for(
+            page.get_by_text(re.compile(r"Saved hybrid report card:.*EOR-\d{4}-\d{6}")).wait_for(
                 state="visible", timeout=90_000
             )
             after_hybrid = _run_count()
