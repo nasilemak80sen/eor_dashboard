@@ -82,7 +82,19 @@ def test_application_services_are_cached_across_reruns():
 def test_top_navigation_uses_buttons_not_radio():
     navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
     shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
-    assert "st.button(" in navigation
+    tree = ast.parse(navigation)
+    sidebar_button_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "button"
+        and isinstance(node.func.value, ast.Attribute)
+        and node.func.value.attr == "sidebar"
+        and isinstance(node.func.value.value, ast.Name)
+        and node.func.value.value.id == "st"
+    ]
+    assert sidebar_button_calls
     assert "st.radio(" not in navigation
     assert "render_top_nav()" in shell
 
@@ -375,12 +387,37 @@ def test_screening_gate_and_report_card_side_effects_are_inside_explicit_submit_
 
 def test_screening_result_summary_and_result_renderer_contracts_are_retained():
     page = (ROOT / "src" / "pages_ui" / "screening.py").read_text(encoding="utf-8")
+    tree = ast.parse(page)
     assert "def _screening_summary(result: dict | None)" in page
     assert 'str(item.get("Status", "")).upper() == "PASS"' in page
     assert 'str(item.get("Status", "")).upper() == "CONDITIONAL"' in page
     assert 'str(item.get("Status", "")).upper() == "FAIL (CRITICAL)"' in page
     assert "_app.render_excel_screening_result(result)" in page
-    assert 'last_run["reference"]' in page
+
+    # Keep both the defensive KPI fallback and the saved-record reference lookup.
+    reference_fallbacks = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "get"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "last_run"
+        and node.args
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "reference"
+    ]
+    saved_reference_lookups = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "last_run"
+        and isinstance(node.slice, ast.Constant)
+        and node.slice.value == "reference"
+    ]
+    assert reference_fallbacks
+    assert saved_reference_lookups
 
 
 
