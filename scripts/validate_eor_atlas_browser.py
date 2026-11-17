@@ -153,7 +153,7 @@ def main() -> None:
             except Exception:
                 REPORTS.mkdir(exist_ok=True)
                 (REPORTS / "browser-search-debug.txt").write_text(
-                    "Search value: " + search.input_value() + "\\n\\n"
+                    "Search value: " + search.input_value() + "\n\n"
                     + page.locator("body").inner_text(),
                     encoding="utf-8",
                 )
