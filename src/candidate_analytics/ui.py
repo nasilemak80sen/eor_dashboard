@@ -576,9 +576,9 @@ def render_field_reservoir_parameters_tab(
         repository = get_candidate_repository(path)
         source = repository.source_summary(dataframe)
         st.write(
-            f"Source workbook: **{source['workbook']}**  \\n"
-            f"Primary sheet: **{source['primary_sheet']}**  \\n"
-            f"Coordinate enrichment: **{source['coordinate_sheet']}**  \\n"
+            f"Source workbook: **{source['workbook']}**  \n"
+            f"Primary sheet: **{source['primary_sheet']}**  \n"
+            f"Coordinate enrichment: **{source['coordinate_sheet']}**  \n"
             f"Records: **{source['rows']:,}**  |  "
             f"Fields: **{source['fields']:,}**  |  "
             f"Records with coordinates: **{source['coordinates']:,}**"
