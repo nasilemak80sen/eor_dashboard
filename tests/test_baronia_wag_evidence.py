@@ -220,13 +220,27 @@ def test_approved_library_baronia_workbook_end_to_end():
     pv = data["pv_reconciliation"].set_index("Measure")["Value"]
     assert pv["Expected total injection"] == pytest.approx(2.6)
     assert pv["Material-balance total injected"] == pytest.approx(2.6)
+    assert pv["Field-reported total fluid injected"] == pytest.approx(2.0)
     assert pv["Coreflood-summary total injected"] == pytest.approx(2.0)
     assert pv["Recovery-curve PV endpoint"] == pytest.approx(2.0)
+    assert pv["Observed post-waterflood PV span"] == pytest.approx(1.3)
+
+    recovery = data["recovery_reconciliation"].set_index("Measure")["Value"]
+    assert recovery["IWAG incremental recovery"] == pytest.approx(23)
+    assert recovery["IWAG Results increment"] == pytest.approx(17)
+    assert recovery["Cycle increments summed"] == pytest.approx(22)
+    assert recovery["Recovery-curve increment"] == pytest.approx(22)
+
     cycle = data["cycle_reconciliation"]
     assert cycle.loc[cycle["Expected stage"].eq("4th Water Cycle"), "Presence"].iloc[0] == "Missing"
+    assert cycle["Presence"].eq("Present").sum() == 7
+    assert cycle["Phase alignment"].eq("Conflict").sum() == 5
+
     issue_names = set(data["quality_issues"]["Issue"])
     assert "Injection-cycle sequence is incomplete" in issue_names
     assert "Coreflood PV endpoints conflict with the injection design" in issue_names
+    assert "Injection-cycle labels conflict with recovery-curve phase labels" in issue_names
+    assert "Injection-cycle PV intervals are not contiguous" not in issue_names
 
 
 def test_cycle_order_and_interval_gaps_are_flagged():
