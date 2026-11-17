@@ -243,3 +243,71 @@ def test_executive_overview_distinguishes_loaded_map_source_from_usable_coordina
     assert "map_source_available = isinstance(map_df, pd.DataFrame) and not map_df.empty" in page
     assert "map_ready = not mapped.empty" in page
     assert "int(map_df.shape[0])" in page
+
+
+
+def test_candidates_page_uses_the_shared_workspace_header_and_live_map():
+    page = (ROOT / "src" / "pages_ui" / "candidates.py").read_text(encoding="utf-8")
+    analytics = (ROOT / "src" / "candidate_analytics" / "ui.py").read_text(encoding="utf-8")
+    assert 'page_header(\n        "WORKSPACE / PORTFOLIO",\n        "Candidates",' in page
+    assert "candidate_ui._render_candidate_map = _render_reactive_location_map" in page
+    assert "render_field_reservoir_parameters_tab(show_header=False)" in page
+    assert "st.tabs(" not in page
+    assert "st.tabs(" not in analytics
+    assert 'section_title(\n        "Portfolio geography",' in analytics
+    assert 'section_title(\n        "Relationship explorer",' in analytics
+    assert 'section_title(\n        "Reservoir register",' in analytics
+
+
+def test_candidate_discovery_preserves_filter_keys_chart_map_and_detail_contracts():
+    analytics = (ROOT / "src" / "candidate_analytics" / "ui.py").read_text(encoding="utf-8")
+    page = (ROOT / "src" / "pages_ui" / "candidates.py").read_text(encoding="utf-8")
+
+    for key in (
+        "candidate_injected_fluid",
+        "candidate_status",
+        "candidate_api",
+        "candidate_porosity",
+        "candidate_perm",
+        "candidate_temperature",
+        "candidate_oil_column",
+        "candidate_viscosity",
+        "candidate_x_axis",
+        "candidate_y_axis",
+        "candidate_group_by",
+        "candidate_analytics_selected_reservoir",
+    ):
+        assert f'"{key}"' in analytics
+
+    assert "filtered = analysis.filter(" in analytics
+    assert "injected_fluids=fluids" in analytics
+    assert "statuses=statuses" in analytics
+    assert "oil_api=api_range" in analytics
+    assert "porosity=porosity_range" in analytics
+    assert "permeability=permeability_range" in analytics
+    assert "temperature_c=temperature_range" in analytics
+    assert "oil_column=oil_column_range" in analytics
+    assert "viscosity=viscosity_range" in analytics
+    assert "_render_scatter(analysis, filtered, x_column, y_column, group_by)" in analytics
+
+    assert "render_openglobus_map(" in page
+    assert 'latitude="LATITUDE"' in page
+    assert 'longitude="LONGITUDE"' in page
+    assert 'name="Reservoir"' in page
+    assert 'value="CR_Potential"' in page
+    assert "height=620" in page
+    assert "show_labels=False" in page
+    assert "render_detail_drawer(" in analytics
+    assert "candidate_global_search_selection" in analytics
+    assert "render_saved_filter_controls(" in analytics
+
+
+def test_candidate_scatter_and_location_implementations_remain_separate_from_layout():
+    analytics = (ROOT / "src" / "candidate_analytics" / "ui.py").read_text(encoding="utf-8")
+    page = (ROOT / "src" / "pages_ui" / "candidates.py").read_text(encoding="utf-8")
+    assert ".mark_circle(opacity=0.72)" in analytics
+    assert 'size=alt.Size(\n                    "CR Potential:Q"' in analytics
+    assert ".properties(height=560)" in analytics
+    assert "st.altair_chart(chart, use_container_width=True)" in analytics
+    assert "render_openglobus_map(" in page
+    assert 'camera_height=5000000 if focus != "All fields" else 12000000' in page
