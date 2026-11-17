@@ -12,23 +12,6 @@ from ui.components import page_header, reset_button, section_title, kpi_cards, m
 
 def _hybrid_summary(result: dict | None) -> tuple[str, str, list[tuple[str, object]]]:
     if not result:
-        return "Awaiting run", "Complete the form to generate an engineering-plus-ML recommendation.", [("Current status", "No result yet")]
-
-    hybrid = (result or {}).get("hybrid", {}) or {}
-    recommendation = hybrid.get("recommendation") or {}
-    ranking = hybrid.get("ranking", []) or []
-    top_name = recommendation.get("EOR Technique", "N/A")
-    top_score = recommendation.get("Hybrid Score", 0.0)
-    status = "Ready" if top_name != "N/A" else "Warning"
-    return (
-        "Decision ready",
-        f"Recommended technique: {top_name} with a hybrid score of {float(top_score):.1%}.",
-        [("Top candidate", top_name), ("Hybrid score", f"{float(top_score):.1%}"), ("Leads", len(ranking)), ("Model", "Active" if result.get("ml_available") else "Review required")],
-    )
-
-
-def _hybrid_summary(result: dict | None) -> tuple[str, str, list[tuple[str, object]]]:
-    if not result:
         return (
             "Awaiting run",
             "Complete the form to generate an engineering-plus-ML recommendation.",
