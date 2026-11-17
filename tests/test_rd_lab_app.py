@@ -80,6 +80,7 @@ def test_ceor_st_joseph_field_selection_renders_supplemental_evidence(monkeypatc
     )
 
     app = AppTest.from_function(rd.render).run()
+    calls.clear()
     app.selectbox(key="rd_ceor_field").select("St. Joseph").run()
 
     assert not app.exception
@@ -134,6 +135,7 @@ def test_wag_method_renders_all_four_workspace_tabs(monkeypatch):
     )
 
     app = AppTest.from_function(rd.render).run()
+    calls.clear()
     app.radio(key="rd_method").set_value("WAG").run()
 
     assert not app.exception
