@@ -609,56 +609,198 @@ def _render_wag_field_core(data: dict) -> None:
         st.dataframe(data["facies"], use_container_width=True, hide_index=True)
 
 
-def _render_wag_quality(data: dict) -> None:
-    st.markdown("#### Source-to-source recovery reconciliation")
-    st.caption(
-        "These are separate source claims and arithmetic checks. Values are not "
-        "normalized to a selected preferred recovery figure."
+def _wag_reconciliation_value(frame: pd.DataFrame, measure: str):
+    return _wag_lookup(frame, measure, key_col="Measure", value_col="Value")
+
+
+def _wag_reconciliation_snapshot(data: dict) -> dict:
+    """Create a compact, source-aware summary for the WAG Data Quality view."""
+    recovery = data["recovery_reconciliation"]
+    pv = data["pv_reconciliation"]
+    cycles = data["cycle_reconciliation"]
+
+    def value(frame: pd.DataFrame, measure: str):
+        return _wag_reconciliation_value(frame, measure)
+
+    expected_stages = int(cycles["Expected stage"].notna().sum()) if not cycles.empty else 0
+    present_stages = int(
+        (cycles["Presence"].eq("Present") & cycles["Expected stage"].notna()).sum()
+    ) if not cycles.empty else 0
+    missing_stages = int(cycles["Presence"].eq("Missing").sum()) if not cycles.empty else 0
+    phase_conflicts = int(cycles["Phase alignment"].eq("Conflict").sum()) if not cycles.empty else 0
+
+    return {
+        "summary_increment": value(recovery, "IWAG incremental recovery"),
+        "iwag_results_increment": value(recovery, "IWAG Results increment"),
+        "cycle_increment": value(recovery, "Cycle increments summed"),
+        "design_total_pv": value(pv, "Expected total injection"),
+        "material_balance_total_pv": value(pv, "Material-balance total injected"),
+        "curve_total_pv": value(pv, "Recovery-curve PV endpoint"),
+        "expected_stages": expected_stages,
+        "present_stages": present_stages,
+        "missing_stages": missing_stages,
+        "phase_conflicts": phase_conflicts,
+    }
+
+
+def _render_wag_reconciliation_overview(data: dict) -> None:
+    snapshot = _wag_reconciliation_snapshot(data)
+
+    def pp(value) -> str:
+        return "Not reported" if value is None or pd.isna(value) else f"{float(value):g} pp"
+
+    def pv(value) -> str:
+        return "Not reported" if value is None or pd.isna(value) else f"{float(value):.2f} PV"
+
+    st.markdown("#### Reconciliation at a glance")
+    a, b, c = st.columns(3)
+    a.metric(
+        "Recovery increment · summary / IWAG / cycles",
+        " / ".join([
+            pp(snapshot["summary_increment"]).replace(" pp", ""),
+            pp(snapshot["iwag_results_increment"]).replace(" pp", ""),
+            pp(snapshot["cycle_increment"]).replace(" pp", ""),
+        ]) + " pp",
+        help="The three values are independent source claims or sums. They are not averaged or selected.",
     )
-    with st.expander("Recovery reconciliation", expanded=True):
-        st.dataframe(
-            data["recovery_reconciliation"],
-            use_container_width=True,
-            hide_index=True,
+
+    design_total = snapshot["design_total_pv"]
+    curve_total = snapshot["curve_total_pv"]
+    delta = (
+        float(curve_total) - float(design_total)
+        if design_total is not None and curve_total is not None else None
+    )
+    b.metric(
+        "Design total / recovery-curve endpoint",
+        f"{pv(design_total)} / {pv(curve_total)}",
+        delta=f"{delta:+.2f} PV at curve endpoint" if delta is not None else None,
+        help="The design-derived total is compared with the recorded curve endpoint; the PV axis is not rescaled.",
+    )
+    c.metric(
+        "Injection-stage coverage",
+        f"{snapshot['present_stages']} / {snapshot['expected_stages']}",
+        delta=(
+            f"{snapshot['missing_stages']} missing"
+            if snapshot["missing_stages"] else "All expected stages present"
+        ),
+        help="Expected stages are derived from the WAG cycle count and include one gas and one water stage per cycle.",
+    )
+
+    if snapshot["phase_conflicts"]:
+        st.warning(
+            f"{snapshot['phase_conflicts']} cycle start labels conflict with the recovery-curve phase or cycle ordinal. "
+            "Review the cycle table against the curve before attributing stage-level recovery."
         )
-    with st.expander("Injection-volume / PV reconciliation", expanded=True):
-        st.dataframe(
-            data["pv_reconciliation"],
-            use_container_width=True,
-            hide_index=True,
+
+    pv_frame = data["pv_reconciliation"]
+    comparison_measures = [
+        "Expected total injection",
+        "Field-reported total fluid injected",
+        "Material-balance total injected",
+        "Coreflood-summary total injected",
+        "Recovery-curve PV endpoint",
+        "Production-curve PV endpoint",
+    ]
+    plot_data = pv_frame.loc[pv_frame["Measure"].isin(comparison_measures)].dropna(
+        subset=["Value"]
+    ).copy()
+    if not plot_data.empty:
+        fig = px.bar(
+            plot_data,
+            x="Value",
+            y="Measure",
+            color="Comparison",
+            orientation="h",
+            text="Value",
+            hover_data=["Source"],
+            labels={
+                "Value": "Total injected pore volumes (PV)",
+                "Measure": "",
+                "Comparison": "Reconciliation",
+            },
         )
-    with st.expander("Expected versus reported injection-cycle sequence", expanded=True):
+        fig.update_traces(texttemplate="%{x:.2f} PV", textposition="outside", cliponaxis=False)
+        fig.update_layout(
+            height=330,
+            template="plotly_white",
+            margin=dict(l=12, r=55, t=18, b=45),
+            legend_title="Source check",
+        )
+        fig.update_xaxes(rangemode="tozero", title="Total injected pore volumes (PV)")
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         st.caption(
-            "The expected sequence is built from the design cycle count. Missing stages "
-            "are shown as missing; recovery increments are never invented."
+            "Only comparable total-injection quantities are plotted. Initial waterflood PV "
+            "and post-waterflood slug span remain in the detailed reconciliation table."
         )
-        st.dataframe(
-            data["cycle_reconciliation"],
-            use_container_width=True,
-            hide_index=True,
-        )
+
+
+def _render_wag_quality(data: dict) -> None:
+    _render_wag_reconciliation_overview(data)
 
     issues = data["quality_issues"]
     if not issues.empty:
         high = int(issues["Severity"].eq("High").sum())
         review = int(issues["Severity"].eq("Review").sum())
         st.warning(
-            f"Workbook QA identified {len(issues)} issues: {high} high-priority "
-            f"and {review} requiring review. Source values are preserved, not silently corrected."
+            f"Source QA identified {len(issues)} findings: {high} high-priority and "
+            f"{review} requiring review. No source value has been selected or corrected."
         )
-        st.dataframe(issues, use_container_width=True, hide_index=True)
+        st.dataframe(
+            issues.sort_values(
+                ["Severity", "Issue"],
+                key=lambda column: column.map({"High": 0, "Review": 1}).fillna(2)
+                if column.name == "Severity" else column,
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
     else:
         st.success("No automated workbook consistency flags were triggered.")
 
-    with st.expander("Recovery values reported by each workbook section"):
-        st.markdown("**Coreflood recovery summary**")
-        st.dataframe(data["recovery_summary"], use_container_width=True, hide_index=True)
-        st.markdown("**IWAG Results sheet**")
-        st.dataframe(data["iwag_recovery"], use_container_width=True, hide_index=True)
-        st.markdown("**EOR ATLAS Summary sheet**")
-        st.dataframe(data["summary_metrics"], use_container_width=True, hide_index=True)
+    with st.expander("Detailed recovery reconciliation"):
+        st.caption(
+            "Source-reported recovery and arithmetic-derived values are kept separate. "
+            "Percentage points (pp) are not percentage values."
+        )
+        st.dataframe(
+            data["recovery_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Original recovery source tables**")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.dataframe(data["recovery_summary"], use_container_width=True, hide_index=True)
+        with c2:
+            st.dataframe(data["iwag_recovery"], use_container_width=True, hide_index=True)
 
-    with st.expander("Raw saturation values · not suitable as a physical profile"):
+    with st.expander("Detailed injection-volume / PV reconciliation"):
+        st.caption(
+            "Design arithmetic, Field Information, material balance and curve endpoints "
+            "are independent evidence. The PV axis is not rebased to force agreement."
+        )
+        st.dataframe(
+            data["pv_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Material-balance source records**")
+        st.dataframe(data["material_balance"], use_container_width=True, hide_index=True)
+
+    with st.expander("Injection-cycle sequence and interval audit"):
+        st.caption(
+            "Expected stages are derived from the cycle count. Missing rows are not "
+            "filled with estimated recovery increments."
+        )
+        st.dataframe(
+            data["cycle_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.markdown("**Source cycle table**")
+        st.dataframe(data["cycle_recovery"], use_container_width=True, hide_index=True)
+
+    with st.expander("Raw saturation values · invalid as a physical profile"):
         st.caption(
             "Out-of-range saturation values are retained for audit but are not plotted "
             "as saturation evolution."
@@ -668,14 +810,15 @@ def _render_wag_quality(data: dict) -> None:
                 "PV Injected", "Oil Saturation (%)",
                 "Water Saturation (%)", "Gas Saturation (%)",
             ]],
-            use_container_width=True, hide_index=True,
+            use_container_width=True,
+            hide_index=True,
         )
-    with st.expander("Material balance and source details"):
-        st.dataframe(data["material_balance"], use_container_width=True, hide_index=True)
+
+    with st.expander("Workbook provenance and source details"):
         st.write({
             "Workbook": data["metadata"]["workbook_name"],
-            "Workbook SHA-256": data["metadata"]["workbook_sha256"],
-            "Workbook source mode": data["metadata"]["workbook_source_kind"],
+            "SHA-256": data["metadata"]["workbook_sha256"],
+            "Loaded via": data["metadata"]["workbook_source_kind"],
             "Source report": data["metadata"]["source_report"],
             "Worksheets": data["metadata"]["sheets"],
             "Gas composition total (excluding Total row)": data["metadata"]["gas_composition_total_mol_pct"],
