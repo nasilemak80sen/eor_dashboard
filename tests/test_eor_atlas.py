@@ -13,7 +13,7 @@ from config.settings import settings
 from eor_atlas import _system_state
 from hybrid_app import _build_legacy_catboost_input
 from pages_ui.overview import _map_summary
-from ui.openglobus import _normalise_records
+from ui.openglobus import _build_openglobus_html, _marker_node_capacity, _normalise_records
 
 
 def test_system_state_uses_loaded_workbook_and_model_services(monkeypatch):
@@ -149,3 +149,55 @@ def test_catboost_input_adapter_rejects_nonpositive_physical_inputs(field, value
     values[field] = value
     with pytest.raises(ValueError, match=message):
         _build_legacy_catboost_input(values, "Sandstone")
+
+
+
+def test_openglobus_node_capacity_handles_dense_coordinate_clusters():
+    records = [
+        {
+            "name": f"Reservoir {index}",
+            "latitude": 4.31,
+            "longitude": 103.12,
+            "value": 0.0,
+            "value_label": "CR Potential",
+            "details": {},
+        }
+        for index in range(89)
+    ]
+    records.extend(
+        {
+            "name": f"Other reservoir {index}",
+            "latitude": 5.0 + index,
+            "longitude": 104.0 + index,
+            "value": 0.0,
+            "value_label": "CR Potential",
+            "details": {},
+        }
+        for index in range(3)
+    )
+
+    assert _marker_node_capacity(records) == 90
+    html = _build_openglobus_html(
+        records,
+        title="Candidate reservoirs",
+        subtitle="Clustered coordinate fixture",
+    )
+    assert "nodeCapacity: 90" in html
+    # Marker records are not thinned or deduplicated to avoid the quadtree edge case.
+    assert '"name":"Reservoir 88"' in html
+    assert '"name":"Other reservoir 2"' in html
+
+
+def test_openglobus_node_capacity_keeps_default_floor_for_spread_records():
+    records = [
+        {
+            "name": f"Field {index}",
+            "latitude": float(index),
+            "longitude": float(index + 10),
+            "value": None,
+            "value_label": "Value",
+            "details": {},
+        }
+        for index in range(12)
+    ]
+    assert _marker_node_capacity(records) == 60
