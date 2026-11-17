@@ -848,6 +848,10 @@ def _render_wag() -> None:
         "The WAG workbook is supplied as a local or session-only input. "
         "It is intentionally excluded from the public repository."
     )
+    st.caption(
+        "Working input: WAG_Copy.xlsx · Legacy workbook reference: "
+        "Baronia_WAG_Data_EOR_ATLAS 1.xlsx"
+    )
     try:
         data = load_baronia_wag()
     except FileNotFoundError:
