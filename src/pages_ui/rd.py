@@ -24,6 +24,28 @@ def _metric_row(items: list[tuple[str, str, str]]) -> None:
             st.metric(label, value, help=help_text)
 
 
+def _build_rheology_figure(work: pd.DataFrame, year: str | int) -> go.Figure:
+    """Build distinct rheology curves for each polymer/test-condition combination."""
+    return px.line(
+        work.sort_values("Shear rate (1/sec)"),
+        x="Shear rate (1/sec)",
+        y="Apparent viscosity (cP)",
+        color="Polymer",
+        line_dash="Concentration (ppm)",
+        symbol="Salinity (mg/L TDS)",
+        line_group=[
+            "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
+        ],
+        facet_col="Year" if year == "All" else None,
+        markers=True,
+        hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
+        labels={
+            "Shear rate (1/sec)": "Shear rate (1/sec)",
+            "Apparent viscosity (cP)": "Apparent viscosity (cP)",
+        },
+    )
+
+
 def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
     st.markdown("#### Polymer rheology")
     st.caption(
@@ -66,24 +88,7 @@ def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
         st.info("No rheology observations match the selected conditions.")
         return
 
-    fig = px.line(
-        work.sort_values("Shear rate (1/sec)"),
-        x="Shear rate (1/sec)",
-        y="Apparent viscosity (cP)",
-        color="Polymer",
-        line_dash="Concentration (ppm)",
-        symbol="Salinity (mg/L TDS)",
-        line_group=[
-            "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
-        ],
-        facet_col="Year" if year == "All" else None,
-        markers=True,
-        hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
-        labels={
-            "Shear rate (1/sec)": "Shear rate (1/sec)",
-            "Apparent viscosity (cP)": "Apparent viscosity (cP)",
-        },
-    )
+    fig = _build_rheology_figure(work, year)
     fig.update_layout(
         height=340, margin=dict(l=35, r=15, t=35, b=45),
         legend_title="Polymer / test condition", template="plotly_white",
