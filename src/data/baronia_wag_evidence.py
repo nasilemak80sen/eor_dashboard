@@ -223,9 +223,11 @@ def load_baronia_wag(
 ) -> dict[str, Any]:
     """Load Baronia IWAG evidence from a local workbook or uploaded file."""
     if workbook_bytes is not None:
-        source: Any = BytesIO(workbook_bytes)
+        source_bytes = bytes(workbook_bytes)
+        source: Any = BytesIO(source_bytes)
         source_name = workbook_name or BARONIA_WORKBOOK
         source_path = source_name
+        source_kind = "provided-bytes"
     else:
         if workbook_path:
             path = Path(workbook_path)
@@ -245,7 +247,10 @@ def load_baronia_wag(
         source = path
         source_name = path.name
         source_path = str(path)
+        source_bytes = path.read_bytes()
+        source_kind = "local-file"
 
+    workbook_sha256 = sha256(source_bytes).hexdigest()
     xlsx = pd.ExcelFile(source, engine="openpyxl")
     sheet_names = set(xlsx.sheet_names)
     missing = sorted(REQUIRED_SHEETS - sheet_names)
@@ -352,11 +357,26 @@ def load_baronia_wag(
         section="SECTION 4: SPECIAL CORE ANALYSIS (SCAL) RESULTS SUMMARY",
     )
 
-    issues = _quality_issues(recovery_summary, iwag_results, recovery_curve, cycles, design_parameters, fluid_properties)
+    issues = _quality_issues(
+        recovery_summary, iwag_results, recovery_curve, cycles,
+        design_parameters, fluid_properties, material_balance, production_curve,
+    )
+    recovery_reconciliation = _build_recovery_reconciliation(
+        recovery_summary, iwag_results, recovery_curve, cycles
+    )
+    pv_reconciliation, pv_metrics = _build_pv_reconciliation(
+        recovery_summary, recovery_curve, production_curve,
+        design_parameters, material_balance,
+    )
+    cycle_reconciliation = _build_cycle_reconciliation(
+        cycles, design_parameters, recovery_curve
+    )
     gas_total = float(gas_composition["Mol%"].sum()) if not gas_composition.empty else None
     metadata = {
         "workbook_name": source_name,
         "workbook_path": source_path,
+        "workbook_source_kind": source_kind,
+        "workbook_sha256": workbook_sha256,
         "source_report": "T2 Advanced Gas EOR for Baronia - Final Report (PRSB-EOR-14-25, July 2014)",
         "sheets": sorted(sheet_names),
         "missing_sheets": missing,
@@ -368,6 +388,11 @@ def load_baronia_wag(
         "gas_components": len(gas_composition),
         "gas_composition_total_mol_pct": gas_total,
         "quality_issue_count": len(issues),
+        "recovery_reconciliation_rows": len(recovery_reconciliation),
+        "pv_reconciliation_rows": len(pv_reconciliation),
+        "cycle_reconciliation_rows": len(cycle_reconciliation),
+        "design_expected_total_pv": pv_metrics["expected_total"],
+        "material_balance_total_pv": pv_metrics["balance_total"],
     }
     return {
         "summary_metrics": summary_metrics,
@@ -395,5 +420,8 @@ def load_baronia_wag(
         "facies": facies,
         "scal_summary": scal_summary,
         "quality_issues": issues,
+        "recovery_reconciliation": recovery_reconciliation,
+        "pv_reconciliation": pv_reconciliation,
+        "cycle_reconciliation": cycle_reconciliation,
         "metadata": metadata,
     }
