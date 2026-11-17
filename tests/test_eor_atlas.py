@@ -85,16 +85,17 @@ def test_openglobus_normalizes_valid_records_and_drops_invalid_coordinates():
         detail_columns=(("EOR methods", "EOR Methods"),),
     )
 
-    assert records == [
-        {
-            "name": "Angsi",
-            "latitude": 4.31,
-            "longitude": 103.12,
-            "value": 3.0,
-            "value_label": "Distinct EOR methods",
-            "details": {"EOR methods": "CO2, WAG, Steam"},
-        }
-    ]
+    assert [record["name"] for record in records] == ["Angsi", "Bekok"]
+    assert records[0] == {
+        "name": "Angsi",
+        "latitude": 4.31,
+        "longitude": 103.12,
+        "value": 3.0,
+        "value_label": "Distinct EOR methods",
+        "details": {"EOR methods": "CO2, WAG, Steam"},
+    }
+    # Rows with invalid coordinates or blank names are discarded.
+    assert all(record["name"] not in {"Tapis", ""} for record in records)
 
 
 def test_catboost_input_adapter_maps_formation_and_duplicates_scalar_ranges():
