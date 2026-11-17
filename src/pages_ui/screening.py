@@ -5,7 +5,7 @@ from __future__ import annotations
 import streamlit as st
 
 from data.screening_history import persist_engineering_run
-from ui.components import insight_cards, reset_button, section_title, kpi_cards, workflow_steps, render_decision_summary
+from ui.components import page_header, reset_button, section_title, kpi_cards, workflow_steps, render_decision_summary
 
 
 def _screening_summary(result: dict | None) -> tuple[str, str, list[tuple[str, object]]]:
@@ -29,41 +29,31 @@ def render() -> None:
     import app_2 as _app
     import hybrid_app as _hybrid
 
-    insight_cards([
-        ("01 · INPUT", "Define the reservoir", "Enter the complete ScreenTool v3 reservoir and operating context."),
-        ("02 · GATE", "Test feasibility", "Submit the completed form once; the deterministic gate evaluates every EOR technique."),
-        ("03 · RECORD", "Create a report card", "Every submitted screening is saved with its exact inputs and engineering decision trace."),
-    ])
-    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    page_header(
+        "ENGINEERING WORKSPACE",
+        "EOR Screening",
+        "Run the deterministic EOR Screening Tool 2026 v3 engineering gate against a defined reservoir context, then review and retain its decision record.",
+    )
 
-    result = st.session_state.get("excel_screening_result")
-    last_run = st.session_state.get("screening_last_run")
-    status = "Result available" if result else "Awaiting screening"
-    kpi_cards([
-        ("Workflow", status, "Current page state"),
-        ("Primary input", "Current So", "Core screening parameter"),
-        ("Decision rule", "Excel Gate", "Deterministic engineering layer"),
-        ("Report Card", last_run.get("reference", "Not saved") if last_run else "Not saved", "Persistent screening record"),
-    ])
-
-    inputs_tab, result_tab = st.tabs(["Reservoir Inputs", "Engineering Gate"])
-    with inputs_tab:
-        workflow_steps(["Reservoir basics", "Recovery context", "Engineering review"], current_step=0)
-        action_col, _ = st.columns([1, 4])
-        with action_col:
-            reset_button(
-                "↺ Reset inputs",
-                prefixes="screening_",
-                result_keys=("excel_screening_result", "screening_last_run"),
-                key="screening_reset_inputs",
-            )
-        section_title(
-            "Reservoir Inputs",
-            "Complete the reservoir context first. No engineering gate is executed while individual fields are edited.",
+    action_col, _ = st.columns([1, 5])
+    with action_col:
+        reset_button(
+            "↺ Reset screening inputs",
+            prefixes="screening_",
+            result_keys=("excel_screening_result", "screening_last_run"),
+            key="screening_reset_inputs",
         )
+
+    section_title(
+        "1. Define the reservoir",
+        "Complete the reservoir, recovery and operating context. Editing inputs does not execute the engineering gate.",
+    )
+    with st.container(border=True):
         with st.form("screening_reservoir_form", clear_on_submit=False):
             inputs, formation = _hybrid.render_eor_input_form("screening")
-            st.caption("Complete the form, then submit once to run and save the Engineering Gate.")
+            st.caption(
+                "Submit once when the reservoir context is complete. This page runs the deterministic Excel Gate only; CatBoost and Decision Fusion are handled in Hybrid Intelligence."
+            )
             submitted = st.form_submit_button(
                 "🚀 Run EOR Screening",
                 type="primary",
@@ -83,26 +73,55 @@ def render() -> None:
                 st.error("The engineering screening could not be completed or saved. Check the entered values.")
 
     result = st.session_state.get("excel_screening_result")
-    with result_tab:
-        if not result:
-            st.info("No screening result yet. Complete the Reservoir Inputs tab and submit the Engineering Gate.")
-            return
-        summary_title, summary_body, summary_rows = _screening_summary(result)
-        render_decision_summary(
-            summary_title,
-            summary_body,
-            "Ready" if summary_rows else "Warning",
-            summary_rows,
+    last_run = st.session_state.get("screening_last_run")
+    status = "Result available" if result else "Awaiting submission"
+    report_reference = last_run.get("reference", "Saved") if last_run else "Not saved"
+
+    kpi_cards(
+        [
+            ("Workflow", status, "Current screening state"),
+            ("Decision layer", "Excel Gate", "Deterministic engineering assessment"),
+            ("Execution", "Submit-driven", "No gate execution during field edits"),
+            ("Report card", report_reference, "Persistent record for the latest successful save"),
+        ]
+    )
+
+    completed_steps = 3 if result and last_run else 1 if result else 0
+    workflow_steps(
+        ["Reservoir context", "Engineering Gate", "Audit record"],
+        current_step=completed_steps,
+    )
+
+    st.divider()
+    section_title(
+        "2. Engineering Gate result",
+        "Review technique-level feasibility and the deterministic assessment returned by the existing Excel Screening service.",
+    )
+    if not result:
+        st.info(
+            "No screening result is available yet. Complete the reservoir form above and submit the Engineering Gate to generate the assessment."
         )
-        section_title(
-            "Engineering Gate Result",
-            "This deterministic result is the engineering anchor for the downstream hybrid decision path and is now persisted for audit/history.",
+        return
+
+    summary_title, summary_body, summary_rows = _screening_summary(result)
+    render_decision_summary(
+        summary_title,
+        summary_body,
+        "Ready" if summary_rows else "Warning",
+        summary_rows,
+    )
+    if last_run:
+        st.caption(f"Saved report card: **{last_run['reference']}**")
+    else:
+        st.warning(
+            "The engineering result is available in this session, but no saved report card was confirmed. Check the persistence error before treating this run as an archived record."
         )
-        if last_run := st.session_state.get("screening_last_run"):
-            st.caption(f"Saved report card: **{last_run['reference']}**")
-        with st.expander("Re-run / change inputs", expanded=False):
-            st.caption("Return to Reservoir Inputs, change the reservoir context, and submit the gate again. A new report card will be created.")
-        try:
-            _app.render_excel_screening_result(result)
-        except Exception as exc:
-            st.error(f"Screening result could not be displayed: {exc}")
+
+    section_title(
+        "Technique-level engineering assessment",
+        "The original result renderer is retained so every technique, criterion and result detail continues to come from the existing Excel Gate output.",
+    )
+    try:
+        _app.render_excel_screening_result(result)
+    except Exception as exc:
+        st.error(f"Screening result could not be displayed: {exc}")
