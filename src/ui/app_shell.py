@@ -81,7 +81,6 @@ def _open_search_result(result: dict) -> None:
     # Defer clearing the widget key until the next run, before st.text_input
     # is instantiated. This avoids Streamlit's post-instantiation state guard.
     st.session_state["_clear_atlas_global_search"] = True
-    st.session_state.pop("atlas_global_search_result", None)
     if result.get("kind") == "reservoir":
         # Clear conflicting live filters so the searched record is visible immediately.
         for key in (
