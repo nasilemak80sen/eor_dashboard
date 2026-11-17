@@ -381,3 +381,77 @@ def test_screening_result_summary_and_result_renderer_contracts_are_retained():
     assert 'str(item.get("Status", "")).upper() == "FAIL (CRITICAL)"' in page
     assert "_app.render_excel_screening_result(result)" in page
     assert 'last_run["reference"]' in page
+
+
+
+def test_hybrid_workspace_separates_gate_model_and_fusion_layers():
+    page = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
+    assert '"01 · Engineering feasibility"' in page
+    assert '"02 · CatBoost model signal"' in page
+    assert '"03 · Decision Fusion recommendation"' in page
+    assert 'result.get("screening", {})' in page
+    assert 'result.get("ml_probabilities", {})' in page
+    assert 'result.get("hybrid", {})' in page
+    assert "FAIL (CRITICAL)" in page
+    assert "Model probability" in page
+    assert "Engineering status" in page
+    assert "not a gate pass or an eligibility decision" in page
+    assert "normalized over the displayed Top-N results" in page
+    assert "st.tabs(" not in page
+
+
+def test_hybrid_intelligence_preserves_form_execution_and_persistence_contracts():
+    page = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
+    assert 'st.form("hybrid_reservoir_form", clear_on_submit=False)' in page
+    assert '_hybrid.render_eor_input_form("intel")' in page
+    assert "_hybrid._run_intelligence_from_current_inputs(services, inputs, formation)" in page
+    assert 'st.session_state.get("eor_intelligence_result")' in page
+    assert 'st.session_state["intelligence_last_run"]' in page
+    assert "persist_hybrid_run(result)" in page
+    assert "hybrid_app.render_eor_intelligence_result(result)" in page
+
+
+def test_hybrid_model_execution_and_report_card_persistence_are_submit_guarded():
+    page = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
+    tree = ast.parse(page)
+    render = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "render"
+    )
+    parents = {
+        child: parent
+        for parent in ast.walk(render)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+    def inside_submit_guard(node):
+        current = node
+        while current in parents:
+            current = parents[current]
+            if isinstance(current, ast.If) and ast.dump(current.test) == ast.dump(ast.Name(id="submitted", ctx=ast.Load())):
+                return True
+        return False
+
+    run_calls = [
+        node for node in ast.walk(render)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_run_intelligence_from_current_inputs"
+    ]
+    save_calls = [
+        node for node in ast.walk(render)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "persist_hybrid_run"
+    ]
+    assert len(run_calls) == 1
+    assert len(save_calls) == 1
+    assert inside_submit_guard(run_calls[0])
+    assert inside_submit_guard(save_calls[0])
+    assert run_calls[0].lineno < save_calls[0].lineno
+
+
+def test_hybrid_result_details_remain_available_through_original_renderer():
+    page = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
+    assert 'with st.expander("Full decision trace, ScreenTool context and configuration", expanded=False):' in page
+    assert "hybrid_app.render_eor_intelligence_result(result)" in page
