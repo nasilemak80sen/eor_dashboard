@@ -558,11 +558,14 @@ def _render_wag_injection_model(data: dict) -> None:
 
     gas_slug = _wag_lookup(design, "Gas Slug Size", key_col="Parameter", value_col="Value")
     water_slug = _wag_lookup(design, "Water Slug Size", key_col="Parameter", value_col="Value")
-    if gas_slug is not None and water_slug is not None:
+    if (
+        gas_slug is not None and water_slug is not None
+        and not pd.isna(gas_slug) and not pd.isna(water_slug)
+    ):
         st.caption(
-            f"Slug sizes recorded in the design: gas {float(gas_slug):g} PV and "
-            f"water {float(water_slug):g} PV per cycle. The separate WAG Ratio cell "
-            "is time-formatted and is withheld pending source confirmation."
+            f"Slug sizes recorded in the design: gas {_wag_display(gas_slug, 'PV')} and "
+            f"water {_wag_display(water_slug, 'PV')} per cycle. The separate WAG Ratio "
+            "cell is time-formatted and is withheld pending source confirmation."
         )
     else:
         st.caption("One or both per-cycle slug sizes are not reported. The malformed WAG Ratio cell remains withheld pending source confirmation.")
