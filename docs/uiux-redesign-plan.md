@@ -77,8 +77,21 @@ New visual states must be derived from actual existing service or source metadat
 
 **Protection notes:** Candidate filtering arguments and widget keys remain unchanged. The scatter-chart implementation and both map renderers are not rewritten. The redesigned page changes hierarchy and placement only.
 
+### Phase 2.3 — EOR Screening engineering workspace
+**Implemented on the feature branch; automated validation remains pending.**
+
+- Replaced the nested Reservoir Inputs / Engineering Gate tabs with a single guided page flow: reservoir context, explicit submit action, engineering result and audit-record status.
+- Adopted the shared Engineering Workspace header, reset action, section hierarchy, KPI cards and workflow progression.
+- Kept the existing form identifier `screening_reservoir_form`, the `screening` input prefix and the shared `render_eor_input_form("screening")` schema unchanged.
+- Preserved the explicit `st.form_submit_button` boundary. The Excel Screening service invocation and `persist_engineering_run` call remain inside the existing `if submitted` handler and in the same order.
+- Retained the `excel_screening_result` and `screening_last_run` session-state contracts, existing decision summary and `render_excel_screening_result` renderer.
+- Clarified that this workspace runs the deterministic Excel Gate only; CatBoost and Decision Fusion remain in the separate Hybrid Intelligence workflow.
+- Added source-level regression assertions for the guided layout, form contract, submit-only execution boundary, result summary and result renderer.
+
+**Protection notes:** No Excel Gate criteria, calculation logic, service calls, result schema, input field keys, report-card persistence logic or Hybrid Intelligence code was changed.
+
 ### Remaining Phase 2 work
-Redesign EOR Screening and Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, filters, form keys, service paths, charts and result semantics. Add contextual navigation from candidate discovery to screening only where existing page state can support it safely.
+Redesign Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, form keys, service paths, model behaviour, fusion weights and result semantics.
 
 ## Phase 3 — Knowledge and R&D workspaces
 Redesign EOR Insights, Historical EOR, R&D Laboratory and Challenges & Lessons. Standardise source badges, evidence details, field-level context, report cards and register interactions. Keep shared vs field-attributed evidence visually distinct.
