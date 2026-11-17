@@ -492,3 +492,12 @@ def test_hybrid_result_details_remain_available_through_original_renderer():
     page = (ROOT / "src" / "pages_ui" / "intelligence.py").read_text(encoding="utf-8")
     assert 'with st.expander("Full decision trace, ScreenTool context and configuration", expanded=False):' in page
     assert "hybrid_app.render_eor_intelligence_result(result)" in page
+
+
+
+def test_global_search_defers_query_reset_until_the_next_widget_run():
+    shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
+    assert 'st.session_state["_clear_atlas_global_search"] = True' in shell
+    assert 'if st.session_state.pop("_clear_atlas_global_search", False):' in shell
+    assert 'st.session_state["atlas_global_search_query"] = ""' in shell
+    assert shell.index('if st.session_state.pop("_clear_atlas_global_search", False):') < shell.index('query = st.text_input(')
