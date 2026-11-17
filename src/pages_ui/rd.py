@@ -477,11 +477,31 @@ def _render_wag_performance(data: dict) -> None:
             hover_data=["Oil Recovery (Fraction)", "Injection Phase"],
             labels={"PV Injected": "Pore volumes injected (PV)", "Oil Recovery (%)": "Oil recovery (% OOIP)"},
         )
-        fig.add_hline(y=64, line_dash="dot", annotation_text="Summary waterflood: 64%")
-        fig.add_hline(y=87, line_dash="dash", annotation_text="Reported final recovery: 87%")
+        summary_wf = _wag_lookup(
+            data["recovery_summary"], "Waterflood Recovery",
+            key_col="Recovery Stage", value_col="Value",
+        )
+        summary_final = _wag_lookup(
+            data["recovery_summary"], "IWAG Recovery (Total)",
+            key_col="Recovery Stage", value_col="Value",
+        )
+        if summary_wf is not None:
+            fig.add_hline(
+                y=float(summary_wf), line_dash="dot",
+                annotation_text=f"Summary waterflood: {float(summary_wf):g}%",
+            )
+        if summary_final is not None:
+            fig.add_hline(
+                y=float(summary_final), line_dash="dash",
+                annotation_text=f"Summary final: {float(summary_final):g}%",
+            )
         fig.update_layout(height=370, template="plotly_white", margin=dict(l=35, r=15, t=30, b=40))
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
-        st.caption("The source curve marks 65% at the end of primary waterflood, while the summary reports 64%. Both are retained.")
+        st.caption(
+            "Reference lines come from the coreflood summary. The recovery curve is "
+            "plotted at its reported PV values without rebasing or forcing it to match "
+            "the injection design."
+        )
 
     left, right = st.columns(2)
     with left:
@@ -590,11 +610,42 @@ def _render_wag_field_core(data: dict) -> None:
 
 
 def _render_wag_quality(data: dict) -> None:
+    st.markdown("#### Source-to-source recovery reconciliation")
+    st.caption(
+        "These are separate source claims and arithmetic checks. Values are not "
+        "normalized to a selected preferred recovery figure."
+    )
+    with st.expander("Recovery reconciliation", expanded=True):
+        st.dataframe(
+            data["recovery_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+    with st.expander("Injection-volume / PV reconciliation", expanded=True):
+        st.dataframe(
+            data["pv_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+    with st.expander("Expected versus reported injection-cycle sequence", expanded=True):
+        st.caption(
+            "The expected sequence is built from the design cycle count. Missing stages "
+            "are shown as missing; recovery increments are never invented."
+        )
+        st.dataframe(
+            data["cycle_reconciliation"],
+            use_container_width=True,
+            hide_index=True,
+        )
+
     issues = data["quality_issues"]
     if not issues.empty:
         high = int(issues["Severity"].eq("High").sum())
         review = int(issues["Severity"].eq("Review").sum())
-        st.warning(f"Workbook QA identified {len(issues)} issues: {high} high-priority and {review} requiring review. Source values are preserved, not silently corrected.")
+        st.warning(
+            f"Workbook QA identified {len(issues)} issues: {high} high-priority "
+            f"and {review} requiring review. Source values are preserved, not silently corrected."
+        )
         st.dataframe(issues, use_container_width=True, hide_index=True)
     else:
         st.success("No automated workbook consistency flags were triggered.")
@@ -608,15 +659,23 @@ def _render_wag_quality(data: dict) -> None:
         st.dataframe(data["summary_metrics"], use_container_width=True, hide_index=True)
 
     with st.expander("Raw saturation values · not suitable as a physical profile"):
-        st.caption("Out-of-range saturation values are retained for audit but are not plotted as saturation evolution.")
+        st.caption(
+            "Out-of-range saturation values are retained for audit but are not plotted "
+            "as saturation evolution."
+        )
         st.dataframe(
-            data["recovery_curve"][["PV Injected", "Oil Saturation (%)", "Water Saturation (%)", "Gas Saturation (%)"]],
+            data["recovery_curve"][[
+                "PV Injected", "Oil Saturation (%)",
+                "Water Saturation (%)", "Gas Saturation (%)",
+            ]],
             use_container_width=True, hide_index=True,
         )
     with st.expander("Material balance and source details"):
         st.dataframe(data["material_balance"], use_container_width=True, hide_index=True)
         st.write({
             "Workbook": data["metadata"]["workbook_name"],
+            "Workbook SHA-256": data["metadata"]["workbook_sha256"],
+            "Workbook source mode": data["metadata"]["workbook_source_kind"],
             "Source report": data["metadata"]["source_report"],
             "Worksheets": data["metadata"]["sheets"],
             "Gas composition total (excluding Total row)": data["metadata"]["gas_composition_total_mol_pct"],
