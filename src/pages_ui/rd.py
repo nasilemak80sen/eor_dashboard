@@ -556,7 +556,16 @@ def _render_wag_injection_model(data: dict) -> None:
         value = _wag_lookup(design, key, key_col="Parameter", value_col="Value")
         cols[i % 4].metric(label, _wag_display(value, unit))
 
-    st.caption("Equal 0.2 PV gas and water slugs imply a 1:1 per-cycle slug-size ratio. The separate WAG Ratio cell is time-formatted and is withheld pending source confirmation.")
+    gas_slug = _wag_lookup(design, "Gas Slug Size", key_col="Parameter", value_col="Value")
+    water_slug = _wag_lookup(design, "Water Slug Size", key_col="Parameter", value_col="Value")
+    if gas_slug is not None and water_slug is not None:
+        st.caption(
+            f"Slug sizes recorded in the design: gas {float(gas_slug):g} PV and "
+            f"water {float(water_slug):g} PV per cycle. The separate WAG Ratio cell "
+            "is time-formatted and is withheld pending source confirmation."
+        )
+    else:
+        st.caption("One or both per-cycle slug sizes are not reported. The malformed WAG Ratio cell remains withheld pending source confirmation.")
 
     gas = data["gas_composition"]
     if not gas.empty:
@@ -653,9 +662,9 @@ def _render_wag_reconciliation_overview(data: dict) -> None:
         return "Not reported" if value is None or pd.isna(value) else f"{float(value):.2f} PV"
 
     st.markdown("#### Reconciliation at a glance")
-    a, b, c = st.columns(3)
+    a, b, c, d = st.columns(4)
     a.metric(
-        "Recovery increment · summary / IWAG / cycles",
+        "Recovery claims · summary / IWAG / cycles",
         " / ".join([
             pp(snapshot["summary_increment"]).replace(" pp", ""),
             pp(snapshot["iwag_results_increment"]).replace(" pp", ""),
@@ -671,7 +680,7 @@ def _render_wag_reconciliation_overview(data: dict) -> None:
         if design_total is not None and curve_total is not None else None
     )
     b.metric(
-        "Design total / recovery-curve endpoint",
+        "Design total / curve endpoint",
         f"{pv(design_total)} / {pv(curve_total)}",
         delta=f"{delta:+.2f} PV at curve endpoint" if delta is not None else None,
         help="The design-derived total is compared with the recorded curve endpoint; the PV axis is not rescaled.",
@@ -684,6 +693,11 @@ def _render_wag_reconciliation_overview(data: dict) -> None:
             if snapshot["missing_stages"] else "All expected stages present"
         ),
         help="Expected stages are derived from the WAG cycle count and include one gas and one water stage per cycle.",
+    )
+    d.metric(
+        "Cycle start-label conflicts",
+        str(snapshot["phase_conflicts"]),
+        help="Counts rows where the cycle-table start and recovery-curve phase disagree by gas/water type or cycle ordinal.",
     )
 
     if snapshot["phase_conflicts"]:
