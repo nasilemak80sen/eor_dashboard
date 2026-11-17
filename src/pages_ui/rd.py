@@ -70,8 +70,12 @@ def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
         work.sort_values("Shear rate (1/sec)"),
         x="Shear rate (1/sec)",
         y="Apparent viscosity (cP)",
-        color="Salinity (mg/L TDS)",
+        color="Polymer",
         line_dash="Concentration (ppm)",
+        symbol="Salinity (mg/L TDS)",
+        line_group=[
+            "Year", "Polymer", "Salinity (mg/L TDS)", "Concentration (ppm)"
+        ],
         facet_col="Year" if year == "All" else None,
         markers=True,
         hover_data=["Polymer", "Year", "Salinity (mg/L TDS)", "Concentration (ppm)"],
@@ -82,12 +86,14 @@ def _render_rheology(df: pd.DataFrame, meta: dict) -> None:
     )
     fig.update_layout(
         height=340, margin=dict(l=35, r=15, t=35, b=45),
-        legend_title="Salinity / concentration", template="plotly_white",
+        legend_title="Polymer / test condition", template="plotly_white",
     )
     st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
     st.caption(
-        f"{len(work):,} plotted observations. {meta['rheology_missing_shear_rate_rows']} "
-        "source rows lack shear rate and are not included in this curve."
+        f"{len(work):,} plotted observations. Each curve is grouped by polymer, year, "
+        "salinity and concentration. "
+        f"{meta['rheology_missing_shear_rate_rows']} source rows lack shear rate and "
+        "are not included in this curve."
     )
 
 
@@ -192,19 +198,34 @@ def _render_ift_chart(df: pd.DataFrame, title: str) -> None:
         ("IFT low (source)", "IFT low (as labelled in source)", "circle"),
         ("IFT high (source)", "IFT high (as labelled in source)", "triangle-up"),
     ):
-        part = df.dropna(subset=[column])
-        custom = part[["IFT low raw", "IFT high raw", "IFT high is censored"]].astype(str).to_numpy()
-        fig.add_trace(go.Scatter(
-            x=part[column], y=part["Material"], mode="markers", name=label,
-            marker={"size": 10, "symbol": symbol},
-            customdata=custom,
-            hovertemplate=(
-                "%{y}<br>Plotted value: %{x:.5g} dynes/cm"
-                "<br>Source low: %{customdata[0]}"
-                "<br>Source high: %{customdata[1]}"
-                "<br>High value censored: %{customdata[2]}<extra></extra>"
-            ),
-        ))
+        part = df.dropna(subset=[column]).copy()
+        if column == "IFT high (source)":
+            censored = part["IFT high is censored"].fillna(False).astype(bool)
+            groups = (
+                (part.loc[~censored], label, symbol),
+                (part.loc[censored], f"{label} · detection limit", "triangle-up-open"),
+            )
+        else:
+            groups = ((part, label, symbol),)
+
+        for plotted, trace_label, trace_symbol in groups:
+            if plotted.empty:
+                continue
+            custom = plotted[
+                ["IFT low raw", "IFT high raw", "IFT high is censored"]
+            ].astype(str).to_numpy()
+            fig.add_trace(go.Scatter(
+                x=plotted[column], y=plotted["Material"], mode="markers",
+                name=trace_label,
+                marker={"size": 10, "symbol": trace_symbol},
+                customdata=custom,
+                hovertemplate=(
+                    "%{y}<br>Plotted limit/value: %{x:.5g} dynes/cm"
+                    "<br>Source low: %{customdata[0]}"
+                    "<br>Source high: %{customdata[1]}"
+                    "<br>High value censored: %{customdata[2]}<extra></extra>"
+                ),
+            ))
     fig.update_xaxes(type="log", title="IFT (dynes/cm)")
     fig.update_yaxes(title="")
     fig.update_layout(
@@ -232,8 +253,8 @@ def _render_ift(data: dict) -> None:
     if data["ift_surfactant"]["IFT high is censored"].any():
         st.caption(
             "At least one surfactant IFT result is reported as a detection limit "
-            "(for example, '<0.001'). The marker is placed at the stated limit and "
-            "retains the original text in its hover details."
+            "(for example, '<0.001'). It is shown with an open marker at the stated "
+            "limit, not as an exact measured value; the raw source text remains in hover details."
         )
 
 
@@ -769,32 +790,17 @@ def _render_field_register(data: dict, field: str) -> None:
 
 
 def _load_st_jos_supplement() -> dict | None:
-    """Load St. Joseph evidence only when its field is selected."""
+    """Load the repository-pinned St. Joseph workbook; do not substitute uploads."""
     try:
         return load_st_jos_ceor()
     except FileNotFoundError:
-        uploaded = st.file_uploader(
-            "Upload the St. Joseph supplemental CEOR workbook",
-            type=["xlsx"],
-            key="rd_st_jos_upload",
-            help="Used only for St. Joseph. The primary CEOR workbook remains the repository dataset.",
+        st.error(
+            "The repository-pinned St. Joseph CEOR workbook is missing from data/. "
+            "Restore the approved repository source rather than substituting an upload."
         )
-        if uploaded is None:
-            st.info(
-                "St. Joseph is present in the field register, but its supplemental workbook "
-                "is not available in this checkout. Upload the St. Joseph workbook to show "
-                "its additional field-specific measurements."
-            )
-            return None
-        try:
-            return load_st_jos_ceor(uploaded.getvalue())
-        except Exception as exc:
-            st.error("The St. Joseph supplemental workbook could not be loaded.")
-            with st.expander("Technical detail"):
-                st.exception(exc)
-            return None
+        return None
     except Exception as exc:
-        st.error("The St. Joseph supplemental workbook could not be loaded.")
+        st.error("The repository-pinned St. Joseph CEOR workbook could not be loaded.")
         with st.expander("Technical detail"):
             st.exception(exc)
         return None
