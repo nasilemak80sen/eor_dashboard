@@ -7,7 +7,15 @@ import pandas as pd
 import streamlit as st
 
 from data.screening_history import persist_hybrid_run
-from ui.components import page_header, reset_button, section_title, kpi_cards, metric_cards, workflow_steps, render_decision_summary
+from ui.components import (
+    page_header,
+    reset_button,
+    section_title,
+    kpi_cards,
+    metric_cards,
+    workflow_steps,
+    render_decision_summary,
+)
 
 
 def _hybrid_summary(result: dict | None) -> tuple[str, str, list[tuple[str, object]]]:
