@@ -827,16 +827,23 @@ def _render_wag_quality(data: dict) -> None:
 
 def _render_wag() -> None:
     st.markdown("### Baronia · Water Alternating Gas (IWAG)")
-    st.caption("Baronia workbook supplied: WAG_Copy.xlsx · Original workbook reference: Baronia_WAG_Data_EOR_ATLAS 1.xlsx")
+    st.caption(
+        "The WAG workbook is supplied as a local or session-only input. "
+        "It is intentionally excluded from the public repository."
+    )
     try:
         data = load_baronia_wag()
     except FileNotFoundError:
-        st.info("The unlocked workbook is not stored in this public repository. Upload your working copy below, or place it at data/WAG_Copy.xlsx locally.")
+        st.info(
+            "The approved Baronia workbook is not configured locally. Set "
+            "BARONIA_WAG_WORKBOOK to a file outside the repository, or upload the "
+            "workbook for this session. The uploaded bytes are not written to disk."
+        )
         uploaded = st.file_uploader(
-            "Upload the unlocked Baronia WAG workbook",
+            "Select the approved Baronia WAG workbook",
             type=["xlsx"],
             key="rd_baronia_wag_upload",
-            help="The workbook is read for this session and is not committed to GitHub.",
+            help="Read for this Streamlit session only. The file is not saved to or committed from this app.",
         )
         if uploaded is None:
             return
@@ -860,7 +867,14 @@ def _render_wag() -> None:
     final = _wag_lookup(data["recovery_summary"], "IWAG Recovery (Total)", key_col="Recovery Stage", value_col="Value")
     increment = _wag_lookup(data["recovery_summary"], "IWAG Incremental Recovery", key_col="Recovery Stage", value_col="Value")
 
-    st.caption(f"{field_name or 'Baronia'} · {target or 'RV2'} reservoir · Source: {data['metadata']['source_report']}")
+    st.caption(
+        f"{field_name or 'Baronia'} · {target or 'RV2'} reservoir · "
+        f"Source: {data['metadata']['source_report']}"
+    )
+    st.caption(
+        f"Input mode: {data['metadata']['workbook_source_kind']} · "
+        f"SHA-256: {data['metadata']['workbook_sha256'][:16]}…"
+    )
     kpis = st.columns(5)
     kpis[0].metric("STOIIP", _wag_display(stoiip))
     kpis[1].metric("Waterflood recovery", _wag_display(wf, "% OOIP"))
