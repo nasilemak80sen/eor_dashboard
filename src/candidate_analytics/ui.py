@@ -8,7 +8,13 @@ import streamlit as st
 
 from .analysis import CandidateAnalysis, GROUP_COLUMNS
 from .repository import CandidateRepository, CandidateDataError
-from ui.components import render_detail_drawer, render_saved_filter_controls
+from ui.components import (
+    kpi_cards,
+    metric_cards,
+    render_detail_drawer,
+    render_saved_filter_controls,
+    section_title,
+)
 
 
 @st.cache_resource(show_spinner=False)
@@ -87,7 +93,7 @@ def _render_summary_cards(
     analysis: CandidateAnalysis,
     dataframe: pd.DataFrame,
 ) -> None:
-
+    """Show descriptive portfolio indicators for the active filtered population."""
     summary = analysis.opportunity_summary(dataframe)
 
     candidate_reservoirs = summary.get("reservoirs", 0)
@@ -95,79 +101,36 @@ def _render_summary_cards(
     stoiip = summary.get("STOIIP_total")
     cr_potential = summary.get("CR potential_total")
 
-    c1, c2, c3, c4 = st.columns(4)
-
-    with c1:
-        st.markdown(
-            f"""
-            <div class="exec-kpi-card">
-                <div class="exec-kpi-label">
-                    🛢️ Candidate Reservoirs
-                </div>
-                <div class="exec-kpi-value">
-                    {candidate_reservoirs:,}
-                </div>
-                <div class="exec-kpi-subtext">
-                    Reservoirs in current portfolio
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with c2:
-        st.markdown(
-            f"""
-            <div class="exec-kpi-card">
-                <div class="exec-kpi-label">
-                    🗺️ Fields
-                </div>
-                <div class="exec-kpi-value">
-                    {fields:,}
-                </div>
-                <div class="exec-kpi-subtext">
-                    Fields represented
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with c3:
-        st.markdown(
-            f"""
-            <div class="exec-kpi-card">
-                <div class="exec-kpi-label">
-                    📦 STOIIP
-                </div>
-                <div class="exec-kpi-value">
-                    {_safe_metric_value(stoiip)}
-                </div>
-                <div class="exec-kpi-subtext">
-                    MMSTB in current dataset
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with c4:
-        st.markdown(
-            f"""
-            <div class="exec-kpi-card">
-                <div class="exec-kpi-label">
-                    🚀 CR Volume Potential
-                </div>
-                <div class="exec-kpi-value">
-                    {_safe_metric_value(cr_potential)}
-                </div>
-                <div class="exec-kpi-subtext">
-                    MMSTB potential opportunity
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    kpi_cards(
+        [
+            (
+                "Candidate reservoirs",
+                f"{candidate_reservoirs:,}",
+                "Records in the current filtered portfolio",
+            ),
+            (
+                "Fields represented",
+                f"{fields:,}",
+                "Distinct fields in the current filtered portfolio",
+            ),
+        ]
+    )
+    metric_cards(
+        [
+            (
+                "STOIIP",
+                _safe_metric_value(stoiip),
+                "MMSTB · current filtered portfolio",
+            ),
+            (
+                "CR volume potential",
+                _safe_metric_value(cr_potential),
+                "MMSTB · descriptive opportunity measure",
+            ),
+        ],
+        columns=2,
+        tone="blue",
+    )
 
 
 def _render_scatter(
@@ -422,15 +385,18 @@ def _render_detail_panel(dataframe: pd.DataFrame) -> None:
 
 def render_field_reservoir_parameters_tab(
     workbook_path: str | None = None,
+    *,
+    show_header: bool = True,
 ) -> None:
     """Field / Reservoir Candidate Analytics feature."""
     path = str(workbook_path or CandidateRepository().workbook_path)
 
-    st.header("🎯 EOR Candidate Screening")
-    st.caption(
-        "Standalone portfolio exploration of field and reservoir properties. "
-        "This module does not run EOR screening, fuzzy suitability, or machine learning."
-    )
+    if show_header:
+        st.header("🎯 EOR Candidate Screening")
+        st.caption(
+            "Standalone portfolio exploration of field and reservoir properties. "
+            "This module does not run EOR screening, fuzzy suitability, or machine learning."
+        )
 
     try:
         dataframe = load_candidate_dataframe(path)
@@ -442,29 +408,30 @@ def render_field_reservoir_parameters_tab(
         return
 
     analysis = CandidateAnalysis(dataframe)
-    _render_summary_cards(analysis, dataframe)
 
-    st.divider()
-    st.subheader("Candidate Filters")
-    render_saved_filter_controls(
-        "candidate_portfolio",
-        widget_keys=(
-            "candidate_injected_fluid", "candidate_status", "candidate_api",
-            "candidate_porosity", "candidate_perm", "candidate_temperature",
-            "candidate_oil_column", "candidate_viscosity",
-        ),
+    section_title(
+        "Portfolio filters",
+        "Start with fluid and production state, then expand engineering ranges for a tighter discovery set.",
     )
+    with st.container(border=True):
+        render_saved_filter_controls(
+            "candidate_portfolio",
+            widget_keys=(
+                "candidate_injected_fluid", "candidate_status", "candidate_api",
+                "candidate_porosity", "candidate_perm", "candidate_temperature",
+                "candidate_oil_column", "candidate_viscosity",
+            ),
+        )
 
-    with st.expander("Filter candidates", expanded=True):
-        row1 = st.columns(2)
-        with row1[0]:
+        categorical_row = st.columns(2)
+        with categorical_row[0]:
             fluids = _multiselect(
                 analysis,
                 "Injected Fluid",
                 "Injected Fluid",
                 "candidate_injected_fluid",
             )
-        with row1[1]:
+        with categorical_row[1]:
             statuses = _multiselect(
                 analysis,
                 "Reservoir Producing Status",
@@ -472,43 +439,44 @@ def render_field_reservoir_parameters_tab(
                 "candidate_status",
             )
 
-        row2 = st.columns(3)
-        with row2[0]:
-            api_range = _range_slider(analysis, "Oil API", "Oil API", "candidate_api")
-        with row2[1]:
-            porosity_range = _range_slider(
-                analysis, "Avg Porosity", "Avg Porosity", "candidate_porosity"
-            )
-        with row2[2]:
-            permeability_range = _range_slider(
-                analysis,
-                "Avg Permeability (mD)",
-                "Avg Permeability (mD)",
-                "candidate_perm",
-            )
+        with st.expander("Engineering property ranges", expanded=False):
+            row2 = st.columns(3)
+            with row2[0]:
+                api_range = _range_slider(analysis, "Oil API", "Oil API", "candidate_api")
+            with row2[1]:
+                porosity_range = _range_slider(
+                    analysis, "Avg Porosity", "Avg Porosity", "candidate_porosity"
+                )
+            with row2[2]:
+                permeability_range = _range_slider(
+                    analysis,
+                    "Avg Permeability (mD)",
+                    "Avg Permeability (mD)",
+                    "candidate_perm",
+                )
 
-        row3 = st.columns(3)
-        with row3[0]:
-            temperature_range = _range_slider(
-                analysis,
-                "Temperature (°C)",
-                "Temp (deg C)",
-                "candidate_temperature",
-            )
-        with row3[1]:
-            oil_column_range = _range_slider(
-                analysis,
-                "Oil Column (ft)",
-                "Oil Column (ft)",
-                "candidate_oil_column",
-            )
-        with row3[2]:
-            viscosity_range = _range_slider(
-                analysis,
-                "Oil Viscosity (cP)",
-                "Oil Viscosity (cP)",
-                "candidate_viscosity",
-            )
+            row3 = st.columns(3)
+            with row3[0]:
+                temperature_range = _range_slider(
+                    analysis,
+                    "Temperature (°C)",
+                    "Temp (deg C)",
+                    "candidate_temperature",
+                )
+            with row3[1]:
+                oil_column_range = _range_slider(
+                    analysis,
+                    "Oil Column (ft)",
+                    "Oil Column (ft)",
+                    "candidate_oil_column",
+                )
+            with row3[2]:
+                viscosity_range = _range_slider(
+                    analysis,
+                    "Oil Viscosity (cP)",
+                    "Oil Viscosity (cP)",
+                    "candidate_viscosity",
+                )
 
     filtered = analysis.filter(
         injected_fluids=fluids,
@@ -524,60 +492,75 @@ def render_field_reservoir_parameters_tab(
     st.caption(f"Showing **{len(filtered):,}** of **{len(dataframe):,}** reservoirs")
 
     if filtered.empty:
-        st.warning("No reservoirs match the selected filters.")
+        _render_summary_cards(analysis, filtered)
+        st.warning("No reservoirs match the selected filters. Widen the filters to restore the portfolio.")
         return
 
     st.divider()
-    graph_tab, location_tab = st.tabs(["Relationship Explorer", "Candidate Location"])
-
-    with graph_tab:
-        st.subheader("Graph Properties")
-        controls = st.columns(3)
-        axis_options = analysis.axis_options()
-
-        default_x = "Temp (deg C)" if "Temp (deg C)" in axis_options else axis_options[0]
-        default_y = (
-            "CR volume potential = RF Gap x STOIIP  (MMSTB)"
-            if "CR volume potential = RF Gap x STOIIP  (MMSTB)" in axis_options
-            else axis_options[min(1, len(axis_options) - 1)]
-        )
-
-        with controls[0]:
-            x_column = st.selectbox(
-                "X-Axis Parameter",
-                axis_options,
-                index=axis_options.index(default_x),
-                format_func=analysis.axis_label,
-                key="candidate_x_axis",
-            )
-        with controls[1]:
-            y_column = st.selectbox(
-                "Y-Axis Parameter",
-                axis_options,
-                index=axis_options.index(default_y),
-                format_func=analysis.axis_label,
-                key="candidate_y_axis",
-            )
-        with controls[2]:
-            group_by = st.selectbox(
-                "Z Axis / Group",
-                list(GROUP_COLUMNS.keys()),
-                index=list(GROUP_COLUMNS.keys()).index("Field"),
-                key="candidate_group_by",
-                help="Field is the recommended grouping when you want the relationship chart and location map to read consistently.",
-            )
-
-        st.caption(
-            "Marker size represents CR volume potential. Use the legend to focus the selected Field/Reservoir grouping. "
-            "For a field-to-location comparison, keep Z Axis / Group = Field."
-        )
-        _render_scatter(analysis, filtered, x_column, y_column, group_by)
-
-    with location_tab:
-        _render_candidate_map(filtered)
+    section_title(
+        "Portfolio snapshot",
+        "Descriptive inventory measures for the filtered population. These are not suitability scores or screening results.",
+    )
+    _render_summary_cards(analysis, filtered)
 
     st.divider()
-    st.subheader("Candidate Reservoir Table")
+    section_title(
+        "Portfolio geography",
+        "Explore reservoir locations in context. The map and field summary use the same filtered candidate set.",
+    )
+    _render_candidate_map(filtered)
+
+    st.divider()
+    section_title(
+        "Relationship explorer",
+        "Compare reservoir properties and group the observations by the selected field or reservoir attribute.",
+    )
+    controls = st.columns(3)
+    axis_options = analysis.axis_options()
+
+    default_x = "Temp (deg C)" if "Temp (deg C)" in axis_options else axis_options[0]
+    default_y = (
+        "CR volume potential = RF Gap x STOIIP  (MMSTB)"
+        if "CR volume potential = RF Gap x STOIIP  (MMSTB)" in axis_options
+        else axis_options[min(1, len(axis_options) - 1)]
+    )
+
+    with controls[0]:
+        x_column = st.selectbox(
+            "X-Axis Parameter",
+            axis_options,
+            index=axis_options.index(default_x),
+            format_func=analysis.axis_label,
+            key="candidate_x_axis",
+        )
+    with controls[1]:
+        y_column = st.selectbox(
+            "Y-Axis Parameter",
+            axis_options,
+            index=axis_options.index(default_y),
+            format_func=analysis.axis_label,
+            key="candidate_y_axis",
+        )
+    with controls[2]:
+        group_by = st.selectbox(
+            "Z Axis / Group",
+            list(GROUP_COLUMNS.keys()),
+            index=list(GROUP_COLUMNS.keys()).index("Field"),
+            key="candidate_group_by",
+            help="Field is the recommended grouping when you want the relationship chart and location map to read consistently.",
+        )
+
+    st.caption(
+        "Marker size represents CR volume potential. Use the legend to focus the selected Field/Reservoir grouping. "
+        "For a field-to-location comparison, keep Z Axis / Group = Field."
+    )
+    _render_scatter(analysis, filtered, x_column, y_column, group_by)
+
+    st.divider()
+    section_title(
+        "Reservoir register",
+        "Review the filtered records, then select one reservoir to inspect its key properties and full source row.",
+    )
     table = analysis.table_view(filtered)
     st.dataframe(
         analysis.format_for_display(table),
@@ -593,9 +576,9 @@ def render_field_reservoir_parameters_tab(
         repository = get_candidate_repository(path)
         source = repository.source_summary(dataframe)
         st.write(
-            f"Source workbook: **{source['workbook']}**  \n"
-            f"Primary sheet: **{source['primary_sheet']}**  \n"
-            f"Coordinate enrichment: **{source['coordinate_sheet']}**  \n"
+            f"Source workbook: **{source['workbook']}**  \\n"
+            f"Primary sheet: **{source['primary_sheet']}**  \\n"
+            f"Coordinate enrichment: **{source['coordinate_sheet']}**  \\n"
             f"Records: **{source['rows']:,}**  |  "
             f"Fields: **{source['fields']:,}**  |  "
             f"Records with coordinates: **{source['coordinates']:,}**"
