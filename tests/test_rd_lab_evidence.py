@@ -134,7 +134,7 @@ def test_wag_reconciliation_snapshot_summarises_source_disagreements():
     assert snapshot["cycle_increment"] == 22
     assert snapshot["design_total_pv"] == pytest.approx(2.6)
     assert snapshot["curve_total_pv"] == pytest.approx(2.0)
-    assert snapshot["expected_stages"] == 3
-    assert snapshot["present_stages"] == 2
+    assert snapshot["expected_stages"] == 4
+    assert snapshot["present_stages"] == 3
     assert snapshot["missing_stages"] == 1
     assert snapshot["phase_conflicts"] == 1
