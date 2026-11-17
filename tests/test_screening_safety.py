@@ -16,9 +16,10 @@ def make_valid_values():
 def test_validator_rejects_invalid_physical_ranges():
     values = make_valid_values()
     values["depth_ft"] = -100
-    valid, errors = InputValidator.validate_inputs(values)
+    valid, errors, warnings = InputValidator.validate_inputs(values)
     assert valid is False
     assert any("depth_ft" in error for error in errors)
+    assert warnings == []
 
 
 def test_validator_marks_missing_evidence_as_insufficient_data():
