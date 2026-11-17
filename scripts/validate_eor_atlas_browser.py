@@ -142,7 +142,23 @@ def main() -> None:
             # Global search must hand off to the chosen destination.
             search = page.locator('input[placeholder="Search pages, fields or reservoirs..."]')
             search.fill("EOR Screening")
-            page.get_by_role("button", name="Open result").wait_for(timeout=20_000)
+            # Commit the text-input edit and wait for Streamlit's rerun to
+            # publish the search result. Checking the selected label makes
+            # the failure diagnostic if the catalogue/query contract breaks.
+            search.press("Enter")
+            search_value = "Page · EOR Screening"
+            try:
+                page.get_by_text(search_value, exact=True).wait_for(timeout=30_000)
+                page.get_by_role("button", name="Open result").wait_for(timeout=15_000)
+            except Exception:
+                REPORTS.mkdir(exist_ok=True)
+                (REPORTS / "browser-search-debug.txt").write_text(
+                    "Search value: " + search.input_value() + "\\n\\n"
+                    + page.locator("body").inner_text(),
+                    encoding="utf-8",
+                )
+                page.screenshot(path=str(REPORTS / "eor-atlas-search-debug.png"), full_page=True)
+                raise
             page.get_by_role("button", name="Open result").click()
             _assert_workspace(page, "EOR Screening", "eor-atlas-screening.png")
             completed.append("Global search: EOR Screening route handoff")
