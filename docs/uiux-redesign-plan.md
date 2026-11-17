@@ -90,8 +90,23 @@ New visual states must be derived from actual existing service or source metadat
 
 **Protection notes:** No Excel Gate criteria, calculation logic, service calls, result schema, input field keys, report-card persistence logic or Hybrid Intelligence code was changed.
 
+### Phase 2.4 — Hybrid Intelligence decision workspace
+**Implemented on the feature branch; automated validation remains pending.**
+
+- Replaced the nested Reservoir Inputs / Hybrid Decision tabs with one guided page flow that retains the existing reservoir form and submit-driven execution boundary.
+- Adopted the shared Engineering + Machine Learning header, reset action, workspace hierarchy, state KPIs and workflow progression.
+- Kept the existing form identifier `hybrid_reservoir_form`, the `intel` form prefix, `_run_intelligence_from_current_inputs(services, inputs, formation)`, and the `eor_intelligence_result` / `intelligence_last_run` session-state contracts.
+- Preserved `persist_hybrid_run(result)` after the existing hybrid execution function, inside the explicit `if submitted` handler.
+- Split the result presentation into three separate layers: technique-level deterministic engineering gate outcomes, CatBoost class probabilities, and the final Decision Fusion recommendation/ranking.
+- Explicitly label CatBoost values as class-level model probabilities, not engineering feasibility or eligibility. The gate section distinguishes PASS, CONDITIONAL and FAIL/FAIL (CRITICAL) outcomes.
+- Clarified that Hybrid rank score is normalized over the displayed Top-N ranking and is not a CatBoost probability or an independent estimate of technical success.
+- Kept the original `render_eor_intelligence_result` renderer available inside a collapsed detail expander for the full ScreenTool context, model information and fusion configuration.
+- Added source-level regression assertions for layer separation, form keys, submit-only model execution and persistence, and the original result renderer.
+
+**Protection notes:** No CatBoost feature engineering, model loading/inference, technique taxonomy mapping, Excel Gate execution, Decision Fusion weights, hard-failure exclusion, ranking calculation or report-card persistence implementation was changed.
+
 ### Remaining Phase 2 work
-Redesign Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, form keys, service paths, model behaviour, fusion weights and result semantics.
+Phase 2 core engineering workspace layouts are implemented. Proceed to validation, responsive/accessibility review and release hardening before treating the redesign as regression-tested.
 
 ## Phase 3 — Knowledge and R&D workspaces
 Redesign EOR Insights, Historical EOR, R&D Laboratory and Challenges & Lessons. Standardise source badges, evidence details, field-level context, report cards and register interactions. Keep shared vs field-attributed evidence visually distinct.
