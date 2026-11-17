@@ -201,9 +201,10 @@ def _build_cycle_reconciliation(
                 selected = after_start.iloc[0] if not after_start.empty else None
             if selected is not None:
                 phase = str(selected.get("Injection Phase", "")).strip()
-                expected_kind = "gas" if "gas" in expected.casefold() else "water"
+                expected_ordinal, expected_name = expected.casefold().split(maxsplit=1)
+                expected_kind = "gas" if "gas" in expected_name else "water"
                 phase_text = phase.casefold()
-                if expected_kind in phase_text:
+                if expected_kind in phase_text and expected_ordinal in phase_text:
                     alignment = "Aligned"
                 elif "gas" in phase_text or "water" in phase_text:
                     alignment = "Conflict"
