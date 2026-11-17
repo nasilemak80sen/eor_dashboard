@@ -49,7 +49,23 @@ New visual states must be derived from actual existing service or source metadat
 - Shell tests, UI import tests and relevant page tests pass.
 
 ## Phase 2 — Core engineering workspace layouts
-Redesign Overview, Candidates, EOR Screening and Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, filters, form keys, service paths, charts and result semantics. Add contextual navigation from candidate discovery to screening only where the existing page state can support it safely.
+
+### Phase 2.1 — Executive Overview visual benchmark
+**Implemented on the feature branch; automated validation remains pending.**
+
+- Rebalanced portfolio KPIs into three primary indicators (Fields, Reservoirs, RF Gap) and two supporting coverage indicators (Mapped fields, EOR methods).
+- Replaced oversized readiness cards with compact workbook and coordinate availability states.
+- Promoted the 3D portfolio map into a dedicated, always-visible workspace with its field-focus control immediately above it.
+- Kept the existing OpenGlobus field payload, detail mapping, camera-height rules, 620px rendering height and quiet-marker option.
+- Separated EOR method coverage from map controls and added a clear source-map interpretation note.
+- Retained the existing RF Gap aggregation, Altair encodings, tooltip, chart height and rendering call; only page placement and explanatory hierarchy changed.
+- Replaced the tabbed decision-journey table with direct workflow shortcuts to Candidates, EOR Screening and Hybrid Intelligence. These buttons only change the existing page route; they do not execute engineering or ML services.
+- Added responsive styling for status rows, field-focus context and workflow action cards.
+
+**Protection notes:** Workbook loading, KPI calculations, `_map_summary`, OpenGlobus rendering parameters, RF Gap aggregation and chart rendering semantics are preserved.
+
+### Remaining Phase 2 work
+Redesign Candidates, EOR Screening and Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, filters, form keys, service paths, charts and result semantics. Add contextual navigation from candidate discovery to screening only where existing page state can support it safely.
 
 ## Phase 3 — Knowledge and R&D workspaces
 Redesign EOR Insights, Historical EOR, R&D Laboratory and Challenges & Lessons. Standardise source badges, evidence details, field-level context, report cards and register interactions. Keep shared vs field-attributed evidence visually distinct.

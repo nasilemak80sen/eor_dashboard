@@ -198,3 +198,40 @@ def test_global_reservoir_search_clears_only_candidate_live_filters():
     assert '"candidate_injected_fluid"' in shell
     assert '"candidate_analytics_selected_reservoir"' in shell
     assert 'st.session_state["candidate_global_search_selection"]' in shell
+
+
+
+def test_executive_overview_uses_hierarchical_kpis_and_clear_workflow_shortcuts():
+    page = (ROOT / "src" / "pages_ui" / "overview.py").read_text(encoding="utf-8")
+    assert "def _render_primary_kpis(" in page
+    assert '"Fields", fields, "Portfolio coverage"' in page
+    assert '"Reservoirs", reservoirs, "Screening universe"' in page
+    assert '"RF Gap",' in page
+    assert "Mapped fields" in page
+    assert "EOR methods" in page
+    assert "def _render_workflow_shortcuts(" in page
+    assert '"screening",' in page
+    assert '"intelligence",' in page
+
+
+def test_executive_overview_keeps_existing_openglobus_configuration_and_full_visibility():
+    page = (ROOT / "src" / "pages_ui" / "overview.py").read_text(encoding="utf-8")
+    assert "render_openglobus_map(" in page
+    assert 'latitude="Latitude"' in page
+    assert 'longitude="Longitude"' in page
+    assert 'name="Field"' in page
+    assert 'value="Methods"' in page
+    assert "height=620" in page
+    assert "show_labels=False" in page
+    assert "st.tabs(" not in page
+
+
+def test_executive_overview_retains_rf_gap_chart_definition_and_rendering():
+    page = (ROOT / "src" / "pages_ui" / "overview.py").read_text(encoding="utf-8")
+    assert 'temp = df[["Field", "RF Gap"]].copy()' in page
+    assert 'temp["RF Gap"] = pd.to_numeric(temp["RF Gap"], errors="coerce")' in page
+    assert 'ranked = temp.dropna().groupby("Field")["RF Gap"].sum().sort_values(ascending=False).reset_index()' in page
+    assert 'x=alt.X("RF Gap:Q", title="Aggregate RF Gap")' in page
+    assert 'y=alt.Y("Field:N", sort="-x", title=None)' in page
+    assert "st.altair_chart(chart, use_container_width=True)" in page
+    assert ".properties(height=440).interactive()" in page
