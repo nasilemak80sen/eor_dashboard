@@ -105,3 +105,36 @@ def test_censored_ift_is_displayed_as_an_open_detection_limit_marker(monkeypatch
     limit_trace = next(trace for trace in captured[0].data if "detection limit" in trace.name)
     assert limit_trace.marker.symbol == "triangle-up-open"
     assert list(limit_trace.x) == [0.001]
+
+
+def test_wag_reconciliation_snapshot_summarises_source_disagreements():
+    data = {
+        "recovery_reconciliation": pd.DataFrame([
+            {"Measure": "IWAG incremental recovery", "Value": 23},
+            {"Measure": "IWAG Results increment", "Value": 17},
+            {"Measure": "Cycle increments summed", "Value": 22},
+        ]),
+        "pv_reconciliation": pd.DataFrame([
+            {"Measure": "Expected total injection", "Value": 2.6},
+            {"Measure": "Material-balance total injected", "Value": 2.6},
+            {"Measure": "Recovery-curve PV endpoint", "Value": 2.0},
+        ]),
+        "cycle_reconciliation": pd.DataFrame([
+            {"Expected stage": "1st Gas Cycle", "Presence": "Present", "Phase alignment": "Aligned"},
+            {"Expected stage": "1st Water Cycle", "Presence": "Present", "Phase alignment": "Aligned"},
+            {"Expected stage": "4th Water Cycle", "Presence": "Missing", "Phase alignment": "Not checked"},
+            {"Expected stage": "4th Gas Cycle", "Presence": "Present", "Phase alignment": "Conflict"},
+        ]),
+    }
+
+    snapshot = rd._wag_reconciliation_snapshot(data)
+
+    assert snapshot["summary_increment"] == 23
+    assert snapshot["iwag_results_increment"] == 17
+    assert snapshot["cycle_increment"] == 22
+    assert snapshot["design_total_pv"] == pytest.approx(2.6)
+    assert snapshot["curve_total_pv"] == pytest.approx(2.0)
+    assert snapshot["expected_stages"] == 3
+    assert snapshot["present_stages"] == 2
+    assert snapshot["missing_stages"] == 1
+    assert snapshot["phase_conflicts"] == 1
