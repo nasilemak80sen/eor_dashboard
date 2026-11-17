@@ -64,8 +64,21 @@ New visual states must be derived from actual existing service or source metadat
 
 **Protection notes:** Workbook loading, KPI calculations, `_map_summary`, OpenGlobus rendering parameters, RF Gap aggregation and chart rendering semantics are preserved.
 
+### Phase 2.2 — Candidates portfolio discovery
+**Implemented on the feature branch; automated validation remains pending.**
+
+- Aligned Candidates with the Executive Overview header and page hierarchy; removed the nested page tabs so the discovery workspace reads as one continuous portfolio experience.
+- Reorganised filters into a compact portfolio control surface. Existing multiselects, engineering range sliders, saved-filter snapshots and widget/session-state keys are retained.
+- Promoted filtered-population indicators into a clear portfolio snapshot. Reservoir and field counts are primary; STOIIP and CR volume potential are supporting descriptive measures, not suitability or screening scores.
+- Promoted the reactive OpenGlobus candidate map into the primary discovery flow, using the same filtered candidate population and preserving its marker payload, detail mapping, field-focus behaviour and camera configuration.
+- Kept the relationship scatter chart, axis/group controls and legend interaction intact, with the chart placed after the map as a complementary analytical view.
+- Retained the reservoir register, selected-reservoir detail drawer, full engineering record and source/quality disclosure.
+- Preserved the existing global-search reservoir hand-off and reset scope. No Excel Gate, fuzzy suitability, CatBoost, or Decision Fusion path is invoked by this page.
+
+**Protection notes:** Candidate filtering arguments and widget keys remain unchanged. The scatter-chart implementation and both map renderers are not rewritten. The redesigned page changes hierarchy and placement only.
+
 ### Remaining Phase 2 work
-Redesign Candidates, EOR Screening and Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, filters, form keys, service paths, charts and result semantics. Add contextual navigation from candidate discovery to screening only where existing page state can support it safely.
+Redesign EOR Screening and Hybrid Intelligence page hierarchy and action placement. Preserve all current widgets, filters, form keys, service paths, charts and result semantics. Add contextual navigation from candidate discovery to screening only where existing page state can support it safely.
 
 ## Phase 3 — Knowledge and R&D workspaces
 Redesign EOR Insights, Historical EOR, R&D Laboratory and Challenges & Lessons. Standardise source badges, evidence details, field-level context, report cards and register interactions. Keep shared vs field-attributed evidence visually distinct.
