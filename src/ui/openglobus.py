@@ -169,6 +169,8 @@ const detailRows = document.getElementById("detailRows");
 let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
+let initStage = "module setup";
+let entityBuildIndex = -1;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
 let webglCanvas = null;
@@ -224,7 +226,12 @@ function renderDetails(record){
 
 function renderLayer(){
   if(!markerLayer) return;
-  const entities = records.map(record => {
+  initStage = "build marker entities (" + records.length + " records)";
+  entityBuildIndex = -1;
+  const entities = [];
+  for(let index = 0; index < records.length; index++){
+    entityBuildIndex = index;
+    const record = records[index];
     const selected = selectedRecord &&
       selectedRecord.name === record.name &&
       selectedRecord.latitude === record.latitude &&
@@ -246,9 +253,11 @@ function renderLayer(){
         outline: 2
       };
     }
-    return new Entity(entityOptions);
-  });
+    entities.push(new Entity(entityOptions));
+  }
+  initStage = "Vector.setEntities (" + entities.length + " entities)";
   markerLayer.setEntities(entities);
+  initStage = "Vector.setEntities complete";
 }
 
 function flyToRecord(record){
@@ -284,6 +293,7 @@ const osm = new OpenStreetMap("OpenStreetMap",{
 });
 
 try{
+  initStage = "create OpenGlobus globe";
   globe = new Globe({
     target:"globus",
     name:"EOR Atlas",
@@ -300,6 +310,7 @@ try{
     navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}
   });
 
+  initStage = "verify WebGL canvas";
   webglCanvas = document.querySelector("#globus canvas");
   if(!webglCanvas){
     throw new Error("OpenGlobus created no WebGL canvas.");
@@ -315,11 +326,13 @@ try{
     console.info("OpenGlobus WebGL context restored");
   });
 
+  initStage = "create vector layer";
   markerLayer = new Vector("EOR Atlas Records",{
     entities:[],
     pickingEnabled:true,
     async:true
   });
+  initStage = "attach vector layer to planet";
   markerLayer.addTo(globe.planet);
 
   if(control.KeyboardNavigation){
@@ -333,8 +346,10 @@ try{
     flyToRecord(picked.properties);
   });
 
+  initStage = "prepare reservoir marker layer";
   renderLayer();
 
+  initStage = "verify marker count";
   if(markerLayer.getEntities().length !== records.length){
     throw new Error(
       "EOR Atlas vector layer entity count mismatch: " +
@@ -344,7 +359,9 @@ try{
 
   // OpenGlobus 0.28.7 does not activate the renderer by default.
   // Starting it explicitly is required for the planet and vector layer to draw.
+  initStage = "start OpenGlobus renderer";
   globe.start();
+  initStage = "schedule initial camera";
   const resizeRenderer = () => {
     if(globe && globe.renderer && globe.renderer.isInitialized()){
       globe.renderer.resize();
@@ -365,7 +382,9 @@ try{
     "<b>3D Earth could not be initialized</b><br>" +
     "<span style='font-size:11px'>" +
     escapeHtml(error && error.message ? error.message : String(error)) +
-    "</span>";
+    "</span><br><span style='font-size:10px'>Diagnostic: " +
+    escapeHtml(initStage) + " · entity index " + entityBuildIndex +
+    " · records " + records.length + "</span>";
 }
 </script>
 </body>
