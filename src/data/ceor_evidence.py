@@ -239,6 +239,7 @@ def _normalise_adsorption(frame: pd.DataFrame) -> pd.DataFrame:
             "Adsorption c/cO": _numeric(frame, _first_column(frame, ("Adsorption c/cO", "Adsorption", "Adsorption ratio"))),
             "Temperature": _numeric(frame, temperature_col),
             "Polymer Type": _text(frame, polymer_col) if polymer_col else pd.Series(pd.NA, index=frame.index, dtype="string"),
+            "Sample No": _numeric(frame, _first_column(frame, ("Sample No", "Sample Number"))),
         }
     )
     return out.dropna(subset=["Days", "Adsorption c/cO"]).reset_index(drop=True)
