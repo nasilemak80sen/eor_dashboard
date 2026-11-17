@@ -156,6 +156,7 @@ def test_injection_cycle_reconciliation_detects_missing_stage_and_phase_conflict
 
     assert result.loc[result["Expected stage"].eq("4th Water Cycle"), "Presence"].iloc[0] == "Missing"
     assert result.loc[result["Workbook stage"].eq("4th Gas Cycle"), "Phase alignment"].iloc[0] == "Conflict"
+    assert result.loc[result["Workbook stage"].eq("3rd Water Cycle"), "Phase alignment"].iloc[0] == "Conflict"
     assert result["Presence"].eq("Present").sum() == 7
 
 
