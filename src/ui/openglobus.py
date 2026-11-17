@@ -86,6 +86,31 @@ def _normalise_records(
     return records
 
 
+def _marker_node_capacity(
+    records: Iterable[Mapping[str, Any]],
+    minimum_capacity: int = 60,
+) -> int:
+    """Keep colocated records in one quadtree leaf to prevent infinite subdivision.
+
+    OpenGlobus 0.28.7 recursively subdivides a vector node while its entity count
+    exceeds nodeCapacity. Reservoir records may intentionally share field-level
+    coordinates, so the capacity must be at least the largest coordinate cluster.
+    Six decimal places groups sub-metre coordinate jitter without changing markers.
+    """
+    coordinate_counts: dict[tuple[float, float], int] = {}
+    max_multiplicity = 0
+    for record in records:
+        latitude = _safe_float(record.get("latitude"))
+        longitude = _safe_float(record.get("longitude"))
+        if latitude is None or longitude is None:
+            continue
+        key = (round(latitude, 6), round(longitude, 6))
+        count = coordinate_counts.get(key, 0) + 1
+        coordinate_counts[key] = count
+        max_multiplicity = max(max_multiplicity, count)
+    return max(int(minimum_capacity), max_multiplicity + 1)
+
+
 def _build_openglobus_html(
     records: Iterable[Mapping[str, Any]],
     *,
@@ -102,6 +127,7 @@ def _build_openglobus_html(
     payload = json.dumps(record_list, ensure_ascii=False, separators=(",", ":")).replace(
         "</", "<\\/"
     )
+    node_capacity = _marker_node_capacity(record_list)
 
     template = r"""<!doctype html>
 <html lang="en">
@@ -330,7 +356,8 @@ try{
   markerLayer = new Vector("EOR Atlas Records",{
     entities:[],
     pickingEnabled:true,
-    async:true
+    async:true,
+    nodeCapacity: __NODE_CAPACITY__
   });
   initStage = "attach vector layer to planet";
   markerLayer.addTo(globe.planet);
@@ -400,6 +427,7 @@ try{
         .replace("__CENTER_LON__", str(float(center_lon)))
         .replace("__CAMERA_HEIGHT__", str(float(camera_height)))
         .replace("__SHOW_LABELS__", "true" if show_labels else "false")
+        .replace("__NODE_CAPACITY__", str(node_capacity))
         .replace("__TITLE__", _safe_text(title, "EOR Atlas Globe"))
         .replace("__SUBTITLE__", _safe_text(subtitle, "Interactive OpenGlobus map"))
         .replace("__PAYLOAD__", payload)
