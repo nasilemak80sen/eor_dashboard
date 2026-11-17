@@ -185,3 +185,16 @@ def test_r_and_d_pages_render_source_provenance_without_rewriting_charts():
     assert "def _render_wag_performance(" in page
     assert "def _render_fluid_fluid(" in page
     assert 'st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})' in page
+
+
+
+def test_ceor_provenance_uses_the_loader_sheet_names_metadata():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert 'worksheets=metadata.get("sheet_names") or metadata.get("sheets")' in page
+
+
+def test_global_reservoir_search_clears_only_candidate_live_filters():
+    shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
+    assert '"candidate_injected_fluid"' in shell
+    assert '"candidate_analytics_selected_reservoir"' in shell
+    assert 'st.session_state["candidate_global_search_selection"]' in shell

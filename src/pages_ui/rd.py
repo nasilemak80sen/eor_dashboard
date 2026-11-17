@@ -886,7 +886,7 @@ def _render_wag() -> None:
     metadata = data.get("metadata", {}) or {}
     render_evidence_provenance(
         source_name=metadata.get("workbook_name") or "Baronia WAG workbook",
-        worksheets=metadata.get("sheets"),
+        worksheets=metadata.get("sheet_names") or metadata.get("sheets"),
         evidence_scope="Baronia IWAG field and core evidence",
         field_attribution="Source report and target reservoir as recorded in the workbook",
         source_reference=metadata.get("workbook_sha256"),

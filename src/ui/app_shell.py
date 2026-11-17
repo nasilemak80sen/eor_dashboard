@@ -79,6 +79,14 @@ def _search_catalog(query: str, services: dict | None) -> list[dict]:
 def _open_search_result(result: dict) -> None:
     st.session_state["atlas_page"] = result["page"]
     if result.get("kind") == "reservoir":
+        # Clear conflicting live filters so the searched record is visible immediately.
+        for key in (
+            "candidate_injected_fluid", "candidate_status", "candidate_api",
+            "candidate_porosity", "candidate_perm", "candidate_temperature",
+            "candidate_oil_column", "candidate_viscosity",
+            "candidate_analytics_selected_reservoir",
+        ):
+            st.session_state.pop(key, None)
         st.session_state["candidate_global_search_selection"] = {
             "field": result.get("field"), "reservoir": result.get("reservoir"),
         }
