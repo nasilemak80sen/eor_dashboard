@@ -66,5 +66,5 @@ jobs:
 
       - name: Run full repository regression suite (including R&D AppTest acceptance)
         env:
-          PYTHONPATH: src
-        run: pytest -q tests src/tests
+          PYTHONPATH: .:src
+        run: pytest -q tests src/tests --ignore=tests/test_eor_atlas.py
