@@ -78,7 +78,11 @@ def test_rheology_figure_keeps_polymer_experiments_in_separate_traces():
     figure = rd._build_rheology_figure(work, 2013)
 
     assert len(figure.data) == 2
-    assert {trace.name for trace in figure.data} == {"Polymer A, 1000", "Polymer B, 1000"}
+    assert {trace.name for trace in figure.data} == {
+        "Polymer A, 1000, 10000",
+        "Polymer B, 1000, 10000",
+    }
+    assert all(len(trace.x) == 2 for trace in figure.data)
 
 
 def test_censored_ift_is_displayed_as_an_open_detection_limit_marker(monkeypatch):
