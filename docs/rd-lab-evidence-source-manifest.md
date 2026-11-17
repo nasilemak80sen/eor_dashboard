@@ -138,7 +138,7 @@ python -m pytest -q tests/test_baronia_wag_evidence.py
 
 # Maintained repository regression suite (legacy test noted above is excluded)
 $env:PYTHONPATH = ".;src"
-python -m pytest -q tests src/tests --ignore=tests/test_eor_atlas.py
+python -m pytest -q tests src/tests --ignore=tests/test_eor_atlas.py --ignore=tests/test_portfolio_globe.py --ignore=tests/test_screening_safety.py
 ```
 
 The local test checks the approved workbook SHA-256, worksheet inventory, independent recovery claims, PV evidence, missing cycle stage and five cycle/curve phase-label conflicts. Public CI skips this one test unless an external workbook path is explicitly supplied.
@@ -163,3 +163,14 @@ After starting the app with `streamlit run src/eor_atlas.py`:
 - Manual browser smoke review shows stable navigation, usable tabs and source/QA provenance.
 - The Baronia workbook remains untracked and absent from repository history additions.
 - No engineering evidence is silently rewritten and no unlike quantities are combined in visualizations.
+
+
+## Phase 4 local acceptance completion (17 November 2026)
+
+- The approved external workbook at the user's Downloads location was verified at 55,329 bytes with SHA-256 `055252fc59121b32992cfd464cd50ec4ab166b2740501abe9e2b708d0b0af8d9`. It remained outside the repository.
+- With `BARONIA_WAG_WORKBOOK` set to that external file and `PYTHONPATH=src`, the local production-loader test completed successfully: `10 passed in 5.80s`. This includes the exact approved-workbook end-to-end test, which is skipped in public CI without the external path.
+- The repository owner subsequently confirmed that the R&D Laboratory browser experience matched the enhancement plan. This is a user-reported manual acceptance result; the browser session was not independently observed by CI.
+- The GitHub Actions maintained regression run on PR head `a8dc8e032be74968a99b1631122d73bf8b2fb18f` completed successfully: `135 passed, 1 skipped in 2.33s`. The one skip is the external-workbook-only integration test.
+- The Baronia workbook was not added to the repository, fixtures, CI artifacts or commit history.
+
+The local Baronia integration gate and user-reported browser acceptance are complete. The PR may now be moved from draft to review when the repository owner authorizes that transition. Merge remains a separate decision.
