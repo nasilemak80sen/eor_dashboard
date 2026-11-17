@@ -51,7 +51,9 @@ def test_portfolio_globe_preserves_field_hover_payload():
     assert trace.customdata[0][0] == "Angsi"
     assert trace.customdata[0][1] == 3
     assert trace.customdata[0][2] == "CO2, WAG, Steam"
-    assert "Angsi" in (trace.hovertemplate or "")
+    assert "%{customdata[0]}" in (trace.hovertemplate or "")
+    assert "%{customdata[1]}" in (trace.hovertemplate or "")
+    assert "%{customdata[2]}" in (trace.hovertemplate or "")
 
 
 def test_portfolio_globe_config_is_lightweight():
