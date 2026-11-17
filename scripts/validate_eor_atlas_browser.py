@@ -250,12 +250,39 @@ def main() -> None:
                 raise AssertionError(
                     "Hybrid report card was saved without CatBoost probability rows."
                 )
-            if page.get_by_text("CatBoost class", exact=True).count() == 0:
-                raise AssertionError("Hybrid workspace did not display CatBoost class probabilities.")
-            if page.get_by_text("01 · Engineering feasibility", exact=True).count() == 0:
-                raise AssertionError("Hybrid workspace did not display the engineering feasibility layer.")
-            if page.get_by_text("03 · Decision Fusion recommendation", exact=True).count() == 0:
-                raise AssertionError("Hybrid workspace did not display the Decision Fusion layer.")
+
+            # Streamlit's dataframe grid is not exposed as ordinary exact body
+            # text in every browser build. Assert the model layer itself, its
+            # explanatory copy, and the absence of the explicit unavailable state.
+            for layer_heading in (
+                "01 · Engineering feasibility",
+                "02 · CatBoost model signal",
+                "03 · Decision Fusion recommendation",
+            ):
+                page.get_by_text(layer_heading, exact=True).wait_for(
+                    state="visible", timeout=30_000
+                )
+            page.get_by_text(
+                re.compile("Class-level model probabilities are shown independently"),
+            ).wait_for(state="visible", timeout=20_000)
+            if page.get_by_text(
+                "CatBoost probabilities are unavailable for this run.",
+                exact=True,
+            ).count():
+                raise AssertionError(
+                    "Hybrid result contains persisted ML rows, but the CatBoost layer "
+                    "reported that probabilities were unavailable."
+                )
+            REPORTS.mkdir(exist_ok=True)
+            page.locator("text=02 · CatBoost model signal").scroll_into_view_if_needed()
+            page.screenshot(
+                path=str(REPORTS / "eor-atlas-hybrid-results.png"),
+                full_page=True,
+            )
+            (REPORTS / "hybrid-result-body.txt").write_text(
+                page.locator("body").inner_text(),
+                encoding="utf-8",
+            )
 
             references["hybrid"] = _assert_report_reference(page, "Saved hybrid report card")
             completed.append(
