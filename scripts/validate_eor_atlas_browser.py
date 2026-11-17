@@ -139,8 +139,16 @@ def main() -> None:
             _verify_openglobus(page, "Executive Overview")
             completed.append("Executive Overview: page and OpenGlobus canvas")
 
-            # Global search must hand off to the chosen destination.
+            # Empty-result state should be explicit before a valid query is handed off.
             search = page.locator('input[placeholder="Search pages, fields or reservoirs..."]')
+            search.fill("no-such-page-or-reservoir-xyz")
+            search.press("Enter")
+            page.get_by_text(
+                "No matching pages, fields or reservoirs were found in the currently loaded portfolio register.",
+                exact=True,
+            ).wait_for(timeout=20_000)
+
+            # Global search must hand off to the chosen destination.
             search.fill("EOR Screening")
             # Commit the text-input edit and wait for Streamlit's rerun to
             # publish the search result. Checking the selected label makes
@@ -161,7 +169,11 @@ def main() -> None:
                 raise
             page.get_by_role("button", name="Open result").click()
             _assert_workspace(page, "EOR Screening", "eor-atlas-screening.png")
-            completed.append("Global search: EOR Screening route handoff")
+            if search.input_value().strip():
+                raise AssertionError("Global search query was not cleared after route handoff.")
+            if page.get_by_role("button", name="Open result").count():
+                raise AssertionError("Global search result controls remained open after route handoff.")
+            completed.append("Global search: empty state, route handoff and query reset")
 
             # Submitting a valid default engineering case must persist exactly one run.
             before_engineering = _run_count()
@@ -186,7 +198,7 @@ def main() -> None:
             # Candidate discovery, filter controls and session-scoped saved presets.
             _navigate_sidebar(page, "Portfolio Explorer", "Candidates", "eor-atlas-candidates.png")
             page.get_by_text("Portfolio filters", exact=True).wait_for(timeout=30_000)
-            page.get_by_role("button", name=re.compile("Saved filters")).click()
+            page.locator("summary").filter(has_text=re.compile("Saved filters", re.IGNORECASE)).click()
             page.get_by_label("Preset name").fill("EOR Atlas CI smoke")
             page.get_by_role("button", name="Save current filters").click()
             page.get_by_text("Saved filter preset: EOR Atlas CI smoke").wait_for(
@@ -196,8 +208,13 @@ def main() -> None:
             page.locator(".page-title").filter(has_text="Candidates").last.wait_for(
                 state="visible", timeout=30_000
             )
+            # Saved filters must survive an in-session workspace transition.
+            _navigate_sidebar(page, "Overview", "Executive Overview", "eor-atlas-overview-return.png")
+            _navigate_sidebar(page, "Portfolio Explorer", "Candidates", "eor-atlas-candidates-return.png")
+            page.locator("summary").filter(has_text=re.compile("Saved filters", re.IGNORECASE)).click()
+            page.get_by_text("EOR Atlas CI smoke", exact=True).wait_for(timeout=20_000)
             _verify_openglobus(page, "Candidates")
-            completed.append("Candidates: filters, save/apply preset and OpenGlobus canvas")
+            completed.append("Candidates: filters, save/apply, session persistence and OpenGlobus canvas")
 
             # Hybrid execution must keep the three result layers visible and persist model data.
             _navigate_sidebar(page, "Hybrid Intelligence", "Hybrid Intelligence", "eor-atlas-hybrid.png")
