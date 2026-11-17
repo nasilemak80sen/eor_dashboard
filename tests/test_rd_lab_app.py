@@ -49,11 +49,18 @@ def _tab_labels(app_test: AppTest) -> list[str]:
     return [tab.label for tab in app_test.tabs]
 
 
+def _run_rd_page() -> None:
+    """AppTest entrypoint with imports available in its isolated script module."""
+    from pages_ui import rd as page
+
+    page.render()
+
+
 def test_ceor_all_fields_renders_both_method_tabs(monkeypatch):
     calls: list[str] = []
     _install_ceor_fakes(monkeypatch, calls)
 
-    app = AppTest.from_function(rd.render).run()
+    app = AppTest.from_function(_run_rd_page).run()
 
     assert not app.exception
     assert app.radio(key="rd_method").value == "CEOR"
@@ -79,7 +86,7 @@ def test_ceor_st_joseph_field_selection_renders_supplemental_evidence(monkeypatc
         rd, "_render_fluid_rock", _panel(calls, "St. Joseph supplemental Fluid–Rock")
     )
 
-    app = AppTest.from_function(rd.render).run()
+    app = AppTest.from_function(_run_rd_page).run()
     calls.clear()
     app.selectbox(key="rd_ceor_field").select("St. Joseph").run()
 
@@ -134,7 +141,7 @@ def test_wag_method_renders_all_four_workspace_tabs(monkeypatch):
         rd, "_render_wag_quality", _panel(calls, "Data Quality")
     )
 
-    app = AppTest.from_function(rd.render).run()
+    app = AppTest.from_function(_run_rd_page).run()
     calls.clear()
     app.radio(key="rd_method").set_value("WAG").run()
 
