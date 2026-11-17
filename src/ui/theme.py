@@ -144,6 +144,15 @@ def inject_theme() -> None:
         .exec-kpi-card {{ background:#fff !important;border:1px solid var(--atlas-border);border-radius:16px;padding:1rem 1.05rem;min-height:112px;box-shadow:0 5px 18px rgba(16,24,40,.035);border-left:4px solid var(--petronas-green); }}
         .exec-kpi-label {{ color:#667085 !important;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.45rem; }}
         .exec-kpi-value {{ color:#101828 !important;font-size:1.65rem;font-weight:700;line-height:1.05; }} .exec-kpi-subtext {{ color:#667085 !important;font-size:.74rem;margin-top:.42rem; }}
+        .nav-section-label {{ margin:.95rem .2rem .42rem;font-size:.64rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:rgba(234,247,246,.48); }}
+        .atlas-sidebar-caption {{ color:rgba(234,247,246,.48);font-size:.58rem;font-weight:700;letter-spacing:.11em;margin:-.6rem .25rem .7rem; }}
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button {{ min-height:2.55rem;border-radius:10px;text-align:left !important;padding:.5rem .75rem;font-size:.82rem;font-weight:600; }}
+        .atlas-detail-label {{ color:#667085;font-size:.64rem;font-weight:750;letter-spacing:.06em;text-transform:uppercase;margin:.35rem 0 .12rem; }}
+        .atlas-detail-value {{ color:#172B33;font-size:.9rem;font-weight:650;line-height:1.35;overflow-wrap:anywhere; }}
+        @media(max-width:900px) {{
+            .atlas-brand-subtitle {{ font-size:.65rem; }}
+            [data-testid="stSidebar"] div[data-testid="stButton"] > button {{ min-height:2.35rem;font-size:.78rem; }}
+        }}
         </style>
         """,
         unsafe_allow_html=True,

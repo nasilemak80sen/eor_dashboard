@@ -87,9 +87,9 @@ def test_top_navigation_uses_buttons_not_radio():
     assert "render_top_nav()" in shell
 
 
-def test_sidebar_starts_collapsed():
+def test_sidebar_starts_expanded_for_primary_navigation():
     settings = (ROOT / "src" / "config" / "settings.py").read_text(encoding="utf-8")
-    assert '"initial_sidebar_state": "collapsed"' in settings
+    assert '"initial_sidebar_state": "expanded"' in settings
 
 
 def test_r_and_d_navigation_routes_to_new_page():
@@ -143,3 +143,45 @@ def test_ceor_all_fields_view_keeps_each_field_and_source_separate():
     assert "_render_thermal_all_fields(thermal)" in page
     assert "Colour identifies the source field" in page
     assert "EOR_Screening_Tool_2026.xlsx. Records are kept separate" in page
+
+
+
+def test_sidebar_navigation_is_grouped_and_preserves_route_keys():
+    navigation = (ROOT / "src" / "ui" / "navigation.py").read_text(encoding="utf-8")
+    assert "NAV_GROUPS" in navigation
+    assert '"WORKSPACE"' in navigation
+    assert '"ENGINEERING"' in navigation
+    assert '"KNOWLEDGE & R&D"' in navigation
+    assert '"GOVERNANCE"' in navigation
+    assert 'st.session_state["atlas_page"] = selected' in navigation
+
+
+def test_global_search_uses_loaded_workbook_and_does_not_initialize_backend():
+    shell = (ROOT / "src" / "ui" / "app_shell.py").read_text(encoding="utf-8")
+    assert "def _search_catalog(" in shell
+    assert 'workbook.get("PROP_updatedNov25_v2")' in shell
+    assert 'st.session_state["candidate_global_search_selection"]' in shell
+    assert "render_shell_header(services)" in (ROOT / "src" / "eor_atlas.py").read_text(encoding="utf-8")
+
+
+def test_shared_ux_primitives_exist_and_saved_filters_are_session_scoped():
+    components = (ROOT / "src" / "ui" / "components.py").read_text(encoding="utf-8")
+    assert "def render_detail_drawer(" in components
+    assert "def render_evidence_provenance(" in components
+    assert "def render_saved_filter_controls(" in components
+    assert "session-scoped" in components
+
+
+def test_candidate_filter_presets_and_detail_drawer_are_integrated():
+    candidate = (ROOT / "src" / "candidate_analytics" / "ui.py").read_text(encoding="utf-8")
+    assert "render_saved_filter_controls(" in candidate
+    assert "render_detail_drawer(" in candidate
+    assert "candidate_global_search_selection" in candidate
+
+
+def test_r_and_d_pages_render_source_provenance_without_rewriting_charts():
+    page = (ROOT / "src" / "pages_ui" / "rd.py").read_text(encoding="utf-8")
+    assert "render_evidence_provenance(" in page
+    assert "def _render_wag_performance(" in page
+    assert "def _render_fluid_fluid(" in page
+    assert 'st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})' in page

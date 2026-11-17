@@ -8,6 +8,7 @@ import streamlit as st
 
 from .analysis import CandidateAnalysis, GROUP_COLUMNS
 from .repository import CandidateRepository, CandidateDataError
+from ui.components import render_detail_drawer, render_saved_filter_controls
 
 
 @st.cache_resource(show_spinner=False)
@@ -362,48 +363,52 @@ def _render_detail_panel(dataframe: pd.DataFrame) -> None:
         return
 
     st.subheader("Selected Reservoir Detail")
-    labels = dataframe["Field & Reservoir "].fillna("").astype(str).tolist()
-    selected_label = st.selectbox(
-        "Select a reservoir",
-        labels,
-        key="candidate_analytics_selected_reservoir",
-    )
+    pending = st.session_state.pop("candidate_global_search_selection", None)
+    if pending and {"Field", "Reservoir", "Field & Reservoir "}.issubset(dataframe.columns):
+        matches = dataframe.loc[
+            dataframe["Field"].astype(str).str.casefold().eq(str(pending.get("field", "")).casefold())
+            & dataframe["Reservoir"].astype(str).str.casefold().eq(str(pending.get("reservoir", "")).casefold())
+        ]
+        if not matches.empty:
+            st.session_state["candidate_analytics_selected_reservoir"] = str(matches.iloc[0]["Field & Reservoir "])
 
-    selected = dataframe.loc[
-        dataframe["Field & Reservoir "].astype(str) == selected_label
-    ].head(1)
+    labels = dataframe["Field & Reservoir "].fillna("").astype(str).tolist()
+    selector_col, detail_col = st.columns([1, 2.2])
+    with selector_col:
+        selected_label = st.selectbox("Select a reservoir", labels, key="candidate_analytics_selected_reservoir")
+
+    selected = dataframe.loc[dataframe["Field & Reservoir "].astype(str) == selected_label].head(1)
     if selected.empty:
         return
-
     row = selected.iloc[0]
-    cols = st.columns(4)
     detail_fields = [
-        ("Field", "Field"),
-        ("Reservoir", "Reservoir"),
-        ("Temperature (°C)", "Temp (deg C)"),
-        ("Oil API", "Oil API"),
-        ("Avg Porosity", "Avg Porosity"),
-        ("Avg Permeability (mD)", "Avg Permeability (mD)"),
-        ("Oil Viscosity (cP)", "Oil Viscosity (cP)"),
-        ("Oil Column (ft)", "Oil Column (ft)"),
-        ("STOIIP (MMSTB)", "STOIIP_ARPR 1.1.2025"),
-        ("EUR (MMSTB)", "EUR_ARPR 1.1.2026"),
+        ("Field", "Field"), ("Reservoir", "Reservoir"),
+        ("Temperature (°C)", "Temp (deg C)"), ("Oil API", "Oil API"),
+        ("Avg Porosity", "Avg Porosity"), ("Avg Permeability (mD)", "Avg Permeability (mD)"),
+        ("Oil Viscosity (cP)", "Oil Viscosity (cP)"), ("Oil Column (ft)", "Oil Column (ft)"),
+        ("STOIIP (MMSTB)", "STOIIP_ARPR 1.1.2025"), ("EUR (MMSTB)", "EUR_ARPR 1.1.2026"),
         ("RF Gap (%)", "RF Gap =Benchmark  RF - Field RF (%) "),
         ("CR Potential (MMSTB)", "CR volume potential = RF Gap x STOIIP  (MMSTB)"),
-        ("Oil Producers", "Oil Producers"),
-        ("Injectors", "Injectors"),
-        ("Injected Fluid", "Injected Fluid"),
-        ("Status", "Reservoir Producing Status"),
+        ("Oil Producers", "Oil Producers"), ("Injectors", "Injectors"),
+        ("Injected Fluid", "Injected Fluid"), ("Status", "Reservoir Producing Status"),
     ]
-
-    for index, (label, column) in enumerate(detail_fields):
-        with cols[index % 4]:
-            value = row.get(column)
-            if isinstance(value, (int, float)) and not pd.isna(value):
-                st.metric(label, f"{value:,.2f}")
-            else:
-                st.metric(label, "—" if pd.isna(value) else str(value))
-
+    details = []
+    for label, column in detail_fields:
+        value = row.get(column)
+        if pd.isna(value):
+            value = "—"
+        elif isinstance(value, (int, float)):
+            value = f"{value:,.2f}"
+        else:
+            value = str(value)
+        details.append((label, value))
+    with detail_col:
+        render_detail_drawer(
+            "Reservoir snapshot",
+            "Selected portfolio record. Open the full engineering record for all source columns.",
+            details,
+            columns=2,
+        )
     with st.expander("Full engineering record", expanded=False):
         st.dataframe(
             pd.DataFrame([row]).drop(
@@ -441,6 +446,14 @@ def render_field_reservoir_parameters_tab(
 
     st.divider()
     st.subheader("Candidate Filters")
+    render_saved_filter_controls(
+        "candidate_portfolio",
+        widget_keys=(
+            "candidate_injected_fluid", "candidate_status", "candidate_api",
+            "candidate_porosity", "candidate_perm", "candidate_temperature",
+            "candidate_oil_column", "candidate_viscosity",
+        ),
+    )
 
     with st.expander("Filter candidates", expanded=True):
         row1 = st.columns(2)
