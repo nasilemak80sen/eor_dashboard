@@ -250,6 +250,10 @@ def main() -> None:
                 raise AssertionError(
                     "Hybrid report card was saved without CatBoost probability rows."
                 )
+            if fusion_rows <= 0:
+                raise AssertionError(
+                    "Hybrid report card was saved without Decision Fusion result rows."
+                )
 
             # Streamlit's dataframe grid is not exposed as ordinary exact body
             # text in every browser build. Assert the model layer itself, its
