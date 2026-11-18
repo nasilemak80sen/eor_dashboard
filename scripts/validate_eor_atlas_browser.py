@@ -198,7 +198,7 @@ def _verify_candidate_scatter_interactions(page) -> None:
 
     svg = chart_frame.locator(".vega-embed svg").first
     svg.wait_for(state="visible", timeout=15_000)
-    marks = svg.locator(".mark-symbol")
+    marks = svg.locator(".mark-symbol.role-mark")
     marks.first.wait_for(state="visible", timeout=10_000)
     mark_count_before = marks.count()
     if mark_count_before < 2:
