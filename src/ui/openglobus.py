@@ -373,9 +373,11 @@ try{
     flyToRecord(picked.properties);
   });
 
-  // Non-visual browser-test bridge. It dispatches the same renderer event used
-  // by OpenGlobus picking, allowing CI to target a specific entity deterministically.
-  window.__eorAtlasMapTest = Object.freeze({
+  // Test-only bridge, enabled by Playwright before the iframe loads. It dispatches
+  // the same renderer event used by OpenGlobus picking, without exposing test hooks
+  // during normal dashboard sessions.
+  if(window.__EOR_ATLAS_TEST__ === true) {
+    window.__eorAtlasMapTest = Object.freeze({
     markerCount: () => markerLayer ? markerLayer.getEntities().length : 0,
     markerInfo: index => {
       const entity = markerLayer && markerLayer.getEntities()[Number(index)];
@@ -397,7 +399,8 @@ try{
       events.dispatch(events.lclick,{pickingObject:entity});
       return selectedRecord === entity.properties;
     }
-  });
+    });
+  }
 
   initStage = "prepare reservoir marker layer";
   renderLayer();
