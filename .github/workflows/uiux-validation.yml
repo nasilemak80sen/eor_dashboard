@@ -111,6 +111,7 @@ jobs:
             reports/pytest-results.xml
             /tmp/eor-atlas-streamlit.log
             reports/browser-validation.json
+            reports/candidate-chart-interaction-debug.json
             reports/browser-search-debug.txt
             reports/eor-atlas-*.png
           if-no-files-found: warn
