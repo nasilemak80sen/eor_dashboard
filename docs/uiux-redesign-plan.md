@@ -120,3 +120,26 @@ Phase 1 presets are deliberately session-scoped to avoid introducing a new persi
 ## Suggested validation commands
     python -m py_compile src/eor_atlas.py src/ui/navigation.py src/ui/app_shell.py src/ui/components.py src/candidate_analytics/ui.py src/pages_ui/rd.py
     PYTHONPATH=src pytest -q tests/test_ui_shell.py tests/test_candidate_analytics.py tests/test_rd_lab_app.py tests/test_rd_lab_evidence.py tests/test_ceor_evidence.py
+
+## Evidence close-out review — 18 November 2026
+
+### Approved Baronia IWAG workbook
+
+- Approved Library workbook: `WAG_Copy.xlsx`; SHA-256 `055252fc59121b32992cfd464cd50ec4ab166b2740501abe9e2b708d0b0af8d9`.
+- All five required worksheets are present. The workbook has 21 recovery-curve rows, 21 production-curve rows, and eight labelled injection-cycle rows.
+- Independent source-table extraction confirms: design-derived total injection = 2.6 PV; material-balance water + gas = 2.6 PV; source-reported total fluid injected = approximately 2.0 PV; summary and curve endpoints = 2.0 PV; observed WAG span after the waterflood endpoint = 1.3 PV.
+- Recovery evidence also conflicts: summary incremental recovery = 23 percentage points; IWAG Results increment = 17 points; cycle increments and the recovery-curve increment = 22 points. One expected stage (4th Water Cycle) is absent, and five cycle/curve phase labels conflict.
+- The existing `test_approved_library_baronia_workbook_end_to_end` acceptance test encodes these source values and expects the discrepancies to remain visible. It was **not executed through the application loader in this environment**: Streamlit is not installed in this local runner, and the approved workbook is intentionally not committed to the repository. Do not report the loader acceptance test as passed until it is run with `BARONIA_WAG_WORKBOOK` set in a full application environment.
+
+### Approved reservoir numeric reference
+
+- Added `tests/fixtures/approved_reservoir_cases.json` from page 2 of the historical `eor_latest.pdf` Library snapshot, with a regression test that preserves the displayed input/output values and explicitly records undisclosed inputs as null.
+- The screenshot reports OOIP = 111 MMstb, incremental recovery factor = 16.50%, and incremental CR = 56.84 MMstb. A simple OOIP × incremental-RF calculation gives 18.315 MMstb, a 38.525 MMstb difference from the displayed CR.
+- This is a **review-required legacy reference**, not a pass/fail parity fixture for the current Hybrid Intelligence pipeline: key gate inputs are not visible and the source has no technique rows, CatBoost probabilities or Decision Fusion ranking. Current pipeline values must not be backfilled with Streamlit defaults and compared as though they were source facts.
+
+### Browser interaction coverage
+
+- Added a non-visual test bridge in the OpenGlobus iframe that dispatches the same renderer `lclick` event used by the entity picker.
+- Expanded the Playwright browser check to select two distinct candidate reservoir entities, verify their individual detail-drawer identity and coordinates, close the drawer, hover a scatter mark for its field/reservoir tooltip, and click a legend-bound group selection.
+- These browser checks are committed but remain pending an actual CI browser run. A dispatched renderer event verifies the production selection handler; it is not a substitute for pixel-coordinate hit-testing by a physical pointer on the WebGL canvas.
+
