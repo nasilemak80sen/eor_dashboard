@@ -373,6 +373,32 @@ try{
     flyToRecord(picked.properties);
   });
 
+  // Non-visual browser-test bridge. It dispatches the same renderer event used
+  // by OpenGlobus picking, allowing CI to target a specific entity deterministically.
+  window.__eorAtlasMapTest = Object.freeze({
+    markerCount: () => markerLayer ? markerLayer.getEntities().length : 0,
+    markerInfo: index => {
+      const entity = markerLayer && markerLayer.getEntities()[Number(index)];
+      if(!entity || !entity.properties) return null;
+      const record = entity.properties;
+      return {
+        name: record.name,
+        latitude: record.latitude,
+        longitude: record.longitude,
+        details: record.details || {}
+      };
+    },
+    pickMarker: index => {
+      if(!globe || !globe.renderer || !markerLayer) return false;
+      const entity = markerLayer.getEntities()[Number(index)];
+      if(!entity || !entity.properties || !entity.properties.name) return false;
+      const events = globe.renderer.events;
+      if(!events || typeof events.dispatch !== "function" || !events.lclick) return false;
+      events.dispatch(events.lclick,{pickingObject:entity});
+      return selectedRecord === entity.properties;
+    }
+  });
+
   initStage = "prepare reservoir marker layer";
   renderLayer();
 
