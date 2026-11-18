@@ -176,19 +176,6 @@ def _verify_candidate_scatter_interactions(page) -> None:
     relationship_heading = page.get_by_text("Relationship explorer", exact=True)
     relationship_heading.scroll_into_view_if_needed()
 
-    # The default Y axis is CR potential, which can be sparse when the source
-    # workbook has missing RF/STOIIP-derived values. Use two populated source
-    # engineering properties so this browser interaction checks real points.
-    for label, value in (
-        ("X-Axis Parameter", "Oil API"),
-        ("Y-Axis Parameter", "Avg Permeability (mD)"),
-    ):
-        control = page.get_by_role("combobox", name=label)
-        control.scroll_into_view_if_needed()
-        control.click()
-        page.get_by_text(value, exact=True).last.click(timeout=15_000)
-        page.wait_for_timeout(500)
-
     chart_frame = None
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
@@ -215,17 +202,21 @@ def _verify_candidate_scatter_interactions(page) -> None:
     marks.first.wait_for(state="visible", timeout=10_000)
 
     def _plotted_mark_count() -> int:
-        return svg.locator(".mark-symbol.role-mark").evaluate_all(
-            "(els) => els.reduce((total, el) => "
-            "total + ((el.getAttribute('d') || '').match(/[Mm]/g) || []).length, 0)"
-        )
+        # Vega groups the scatter points inside one role-mark <g> element.
+        # Each actual reservoir is a child <path>, not a separate mark group.
+        return svg.locator(".mark-symbol.role-mark path[role='graphics-symbol']").count()
 
     mark_count_before = _plotted_mark_count()
     if mark_count_before < 2:
         debug = {
             "body_text_tail": page.locator("body").inner_text()[-4000:],
-            "mark_selector_count": marks.count(),
-            "mark_paths": marks.evaluate_all(
+            "mark_group_count": marks.count(),
+            "mark_path_count": svg.locator(
+                ".mark-symbol.role-mark path[role='graphics-symbol']"
+            ).count(),
+            "mark_paths": svg.locator(
+                ".mark-symbol.role-mark path[role='graphics-symbol']"
+            ).evaluate_all(
                 "(els) => els.slice(0,8).map(el=>({html:el.outerHTML, "
                 "path:el.getAttribute('d'), className:el.getAttribute('class')}))"
             ),
@@ -258,9 +249,9 @@ def _verify_candidate_scatter_interactions(page) -> None:
             "return {x:r.x,y:r.y,width:r.width,height:r.height}})()})"
         ),
         "mark_count_before": mark_count_before,
-        "mark_path_details_before": marks.evaluate_all(
-            "(els) => els.map(el=>({pathLength:(el.getAttribute('d') || '').length, "
-            "moveCommands:((el.getAttribute('d') || '').match(/[Mm]/g) || []).length}))"
+        "mark_path_details_before": svg.locator('.mark-symbol.role-mark path[role="graphics-symbol"]').evaluate_all(
+            "(els) => els.slice(0,20).map(el=>({pathLength:(el.getAttribute('d') || '').length, "
+            "label:el.getAttribute('aria-label')}))"
         ),
     }
     legend_symbol.click(force=True)
@@ -268,9 +259,9 @@ def _verify_candidate_scatter_interactions(page) -> None:
     mark_count_after = _plotted_mark_count()
     debug.update({
         "mark_count_after": mark_count_after,
-        "mark_path_details_after": marks.evaluate_all(
-            "(els) => els.map(el=>({pathLength:(el.getAttribute('d') || '').length, "
-            "moveCommands:((el.getAttribute('d') || '').match(/[Mm]/g) || []).length}))"
+        "mark_path_details_after": svg.locator('.mark-symbol.role-mark path[role="graphics-symbol"]').evaluate_all(
+            "(els) => els.slice(0,20).map(el=>({pathLength:(el.getAttribute('d') || '').length, "
+            "label:el.getAttribute('aria-label')}))"
         ),
         "legend_symbol_after": legend_symbol.evaluate(
             "(el) => ({fill:el.getAttribute('fill'), stroke:el.getAttribute('stroke'), "
