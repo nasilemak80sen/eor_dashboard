@@ -24,5 +24,6 @@ def test_browser_validation_checks_distinct_marker_details_and_chart_interaction
     assert "window.__eorAtlasMapTest.pickMarker(index)" in source
     assert 'locator("#detailLatLon")' in source
     assert 'locator(".role-legend-entry")' in source
-    assert "did not narrow the plotted reservoir population" in source
+    assert "legend.click(force=True)" in source
+    assert "mark_count_after >= mark_count_before" in source
     assert 'locator(".role-legend-entry")' in source
