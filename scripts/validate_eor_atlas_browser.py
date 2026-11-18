@@ -200,10 +200,17 @@ def _verify_candidate_scatter_interactions(page) -> None:
     svg.wait_for(state="visible", timeout=15_000)
     marks = svg.locator(".mark-symbol.role-mark")
     marks.first.wait_for(state="visible", timeout=10_000)
-    mark_count_before = marks.count()
+
+    def _plotted_mark_count() -> int:
+        return svg.locator(".mark-symbol.role-mark").evaluate_all(
+            "(els) => els.reduce((total, el) => "
+            "total + ((el.getAttribute('d') || '').match(/[Mm]/g) || []).length, 0)"
+        )
+
+    mark_count_before = _plotted_mark_count()
     if mark_count_before < 2:
         raise AssertionError(
-            f"Candidates: scatter chart rendered only {mark_count_before} marks."
+            f"Candidates: scatter chart rendered only {mark_count_before} plotted points."
         )
 
     legend_symbol = svg.locator(".role-legend-symbol path").first
@@ -221,13 +228,20 @@ def _verify_candidate_scatter_interactions(page) -> None:
             "return {x:r.x,y:r.y,width:r.width,height:r.height}})()})"
         ),
         "mark_count_before": mark_count_before,
-        "mark_count_by_group_before": svg.locator(".mark-symbol.role-mark").count(),
+        "mark_path_details_before": marks.evaluate_all(
+            "(els) => els.map(el=>({pathLength:(el.getAttribute('d') || '').length, "
+            "moveCommands:((el.getAttribute('d') || '').match(/[Mm]/g) || []).length}))"
+        ),
     }
     legend_symbol.click(force=True)
     page.wait_for_timeout(800)
-    mark_count_after = svg.locator(".mark-symbol.role-mark").count()
+    mark_count_after = _plotted_mark_count()
     debug.update({
         "mark_count_after": mark_count_after,
+        "mark_path_details_after": marks.evaluate_all(
+            "(els) => els.map(el=>({pathLength:(el.getAttribute('d') || '').length, "
+            "moveCommands:((el.getAttribute('d') || '').match(/[Mm]/g) || []).length}))"
+        ),
         "legend_symbol_after": legend_symbol.evaluate(
             "(el) => ({fill:el.getAttribute('fill'), stroke:el.getAttribute('stroke'), "
             "opacity:getComputedStyle(el).opacity})"
