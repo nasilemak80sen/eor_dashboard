@@ -2,14 +2,13 @@
   "schema_version": 1,
   "cases": [
     {
-      "schema_version": 1,
       "source": {
         "file": "eor_latest.pdf",
         "page": 2,
         "pages_total": 8,
         "source_type": "Historical EOR Atlas / Power BI Desktop screenshot",
-        "source_created_at": "2026-08-28",
-        "scope": "Legacy screening snapshot. It is not an approved output baseline for the current Hybrid Intelligence pipeline."
+        "scope": "Legacy screening snapshot. It is not an approved output baseline for the current Hybrid Intelligence pipeline.",
+        "library_file_created_at": "2026-08-28"
       },
       "case_id": "legacy-sandstone-screening-snapshot",
       "formation": "Sandstone",
