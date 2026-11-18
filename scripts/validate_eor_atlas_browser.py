@@ -229,7 +229,7 @@ def _verify_candidate_scatter_interactions(page) -> None:
                 "(els) => els.slice(0,8).map(el=>({html:el.outerHTML, "
                 "path:el.getAttribute('d'), className:el.getAttribute('class')}))"
             ),
-            "svg_text": svg.inner_text(),
+            "svg_text": svg.evaluate("(el) => el.textContent"),
         }
         REPORTS.mkdir(exist_ok=True)
         (REPORTS / "candidate-chart-interaction-debug.json").write_text(
