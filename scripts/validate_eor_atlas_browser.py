@@ -99,6 +99,135 @@ def _verify_openglobus(page, label: str) -> None:
     bounds = canvas.bounding_box()
     if not bounds or bounds["width"] < 100 or bounds["height"] < 100:
         raise AssertionError(f"{label}: OpenGlobus canvas has no usable display area.")
+    return map_frame
+
+
+def _verify_candidate_marker_picking(map_frame) -> None:
+    """Exercise two individual entities through the renderer's production lclick path."""
+    bridge_ready = map_frame.evaluate(
+        "() => Boolean(window.__eorAtlasMapTest && window.__eorAtlasMapTest.markerCount() >= 2)"
+    )
+    if not bridge_ready:
+        raise AssertionError("Candidates: deterministic OpenGlobus marker test bridge is unavailable.")
+
+    marker_count = map_frame.evaluate("() => window.__eorAtlasMapTest.markerCount()")
+    first = map_frame.evaluate("() => window.__eorAtlasMapTest.markerInfo(0)")
+    second_index = None
+    second = None
+    for index in range(1, marker_count):
+        candidate = map_frame.evaluate(
+            "(index) => window.__eorAtlasMapTest.markerInfo(index)", index
+        )
+        if candidate and (
+            candidate.get("name") != first.get("name")
+            or candidate.get("latitude") != first.get("latitude")
+            or candidate.get("longitude") != first.get("longitude")
+            or candidate.get("details") != first.get("details")
+        ):
+            second_index, second = index, candidate
+            break
+    if not first or second is None or second_index is None:
+        raise AssertionError("Candidates: map did not expose two distinct reservoir markers.")
+
+    for index, expected in ((0, first), (second_index, second)):
+        picked = map_frame.evaluate(
+            "(index) => window.__eorAtlasMapTest.pickMarker(index)", index
+        )
+        if not picked:
+            raise AssertionError(
+                f"Candidates: OpenGlobus failed to dispatch marker pick for "
+                f"{expected.get('name')!r} at index {index}."
+            )
+
+        details = map_frame.locator("#details")
+        details.wait_for(state="visible", timeout=10_000)
+        actual_name = map_frame.locator("#detailName").inner_text()
+        if actual_name != expected["name"]:
+            raise AssertionError(
+                f"Marker pick selected {actual_name!r}; expected {expected['name']!r}."
+            )
+
+        actual_lat_lon = map_frame.locator("#detailLatLon").inner_text()
+        expected_lat_lon = (
+            f"{float(expected['latitude']):.4f} / "
+            f"{float(expected['longitude']):.4f}"
+        )
+        if actual_lat_lon != expected_lat_lon:
+            raise AssertionError(
+                f"Marker detail coordinates {actual_lat_lon!r}; "
+                f"expected {expected_lat_lon!r}."
+            )
+
+        field_value = (expected.get("details") or {}).get("Field")
+        if field_value:
+            detail_text = map_frame.locator("#detailRows").inner_text()
+            if str(field_value) not in detail_text:
+                raise AssertionError(
+                    f"Marker detail drawer did not show its source field {field_value!r}."
+                )
+
+    map_frame.locator("#closeDetails").click()
+    if map_frame.locator("#details.visible").count():
+        raise AssertionError("Candidates: marker detail drawer did not close after selection.")
+
+
+def _verify_candidate_scatter_interactions(page) -> None:
+    """Hover a real scatter mark and change the legend-bound group selection."""
+    relationship_heading = page.get_by_text("Relationship explorer", exact=True)
+    relationship_heading.scroll_into_view_if_needed()
+
+    chart_frame = None
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        for frame in page.frames:
+            try:
+                if frame.locator(".vega-embed").count():
+                    chart_frame = frame
+                    break
+            except Exception:
+                continue
+        if chart_frame is not None:
+            break
+        page.wait_for_timeout(250)
+
+    if chart_frame is None:
+        raise AssertionError(
+            "Candidates: interactive Altair scatter chart was not embedded; "
+            "the non-interactive fallback is not accepted for this check."
+        )
+
+    svg = chart_frame.locator(".vega-embed svg").first
+    svg.wait_for(state="visible", timeout=15_000)
+    marks = svg.locator(".mark-symbol")
+    marks.first.wait_for(state="visible", timeout=10_000)
+    mark_count_before = marks.count()
+    if mark_count_before < 2:
+        raise AssertionError(
+            f"Candidates: scatter chart rendered only {mark_count_before} marks."
+        )
+
+    marks.first.hover(force=True)
+    tooltip = chart_frame.locator(".vg-tooltip")
+    tooltip.wait_for(state="visible", timeout=10_000)
+    tooltip_text = tooltip.inner_text()
+    if not re.search(r"Field|Reservoir", tooltip_text, re.IGNORECASE):
+        raise AssertionError(
+            "Candidates: scatter mark tooltip did not expose field/reservoir context: "
+            + tooltip_text
+        )
+
+    legend = svg.locator(".role-legend-entry").first
+    legend.wait_for(state="visible", timeout=10_000)
+    legend.click(force=True)
+    page.wait_for_timeout(600)
+    mark_count_after = svg.locator(".mark-symbol").count()
+    if mark_count_after < 1 or mark_count_after > mark_count_before:
+        raise AssertionError(
+            "Candidates: legend-bound group selection left an invalid mark count "
+            f"({mark_count_before} -> {mark_count_after})."
+        )
+
+
 
 
 def _assert_report_reference(page, label: str) -> str:
@@ -213,8 +342,14 @@ def main() -> None:
             _navigate_sidebar(page, "Portfolio Explorer", "Candidates", "eor-atlas-candidates-return.png")
             page.locator("summary").filter(has_text=re.compile("Saved filters", re.IGNORECASE)).click()
             page.get_by_text("EOR Atlas CI smoke", exact=True).wait_for(timeout=20_000)
-            _verify_openglobus(page, "Candidates")
-            completed.append("Candidates: filters, save/apply, session persistence and OpenGlobus canvas")
+            candidate_map_frame = _verify_openglobus(page, "Candidates")
+            _verify_candidate_marker_picking(candidate_map_frame)
+            _verify_candidate_scatter_interactions(page)
+            completed.append(
+                "Candidates: filters, save/apply, session persistence, two individual "
+                "OpenGlobus marker picks, detail drawer selection/close, scatter tooltip "
+                "and legend-bound group selection"
+            )
 
             # Hybrid execution must keep the three result layers visible and persist model data.
             _navigate_sidebar(page, "Hybrid Intelligence", "Hybrid Intelligence", "eor-atlas-hybrid.png")
