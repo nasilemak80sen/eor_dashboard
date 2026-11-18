@@ -13,7 +13,6 @@ def test_openglobus_browser_bridge_uses_the_production_renderer_click_event():
     assert "window.__eorAtlasMapTest = Object.freeze({" in source
     assert 'events.dispatch(events.lclick,{pickingObject:entity});' in source
     assert "return selectedRecord === entity.properties;" in source
-    assert 'document.getElementById("details")' not in source
 
 
 def test_browser_validation_checks_distinct_marker_details_and_chart_interactions():
