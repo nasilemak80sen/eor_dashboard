@@ -10,6 +10,7 @@ def test_openglobus_browser_bridge_uses_the_production_renderer_click_event():
     source = (ROOT / "src" / "ui" / "openglobus.py").read_text(encoding="utf-8")
 
     assert 'globe.renderer.events.on("lclick",event=>' in source
+    assert "window.__EOR_ATLAS_TEST__ === true" in source
     assert "window.__eorAtlasMapTest = Object.freeze({" in source
     assert 'events.dispatch(events.lclick,{pickingObject:entity});' in source
     assert "return selectedRecord === entity.properties;" in source
