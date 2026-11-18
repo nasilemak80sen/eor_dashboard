@@ -275,6 +275,7 @@ def main() -> None:
             ],
         )
         page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        page.add_init_script("window.__EOR_ATLAS_TEST__ = true;")
         page.on("pageerror", lambda error: page_errors.append(str(error)))
 
         try:
