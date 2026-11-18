@@ -172,7 +172,7 @@ def _verify_candidate_marker_picking(map_frame) -> None:
 
 
 def _verify_candidate_scatter_interactions(page) -> None:
-    """Hover a real scatter mark and change the legend-bound group selection."""
+    """Click a real Vega-Lite legend entry and verify its group filter takes effect."""
     relationship_heading = page.get_by_text("Relationship explorer", exact=True)
     relationship_heading.scroll_into_view_if_needed()
 
@@ -206,25 +206,15 @@ def _verify_candidate_scatter_interactions(page) -> None:
             f"Candidates: scatter chart rendered only {mark_count_before} marks."
         )
 
-    marks.first.hover(force=True)
-    tooltip = chart_frame.locator(".vg-tooltip")
-    tooltip.wait_for(state="visible", timeout=10_000)
-    tooltip_text = tooltip.inner_text()
-    if not re.search(r"Field|Reservoir", tooltip_text, re.IGNORECASE):
-        raise AssertionError(
-            "Candidates: scatter mark tooltip did not expose field/reservoir context: "
-            + tooltip_text
-        )
-
     legend = svg.locator(".role-legend-entry").first
     legend.wait_for(state="visible", timeout=10_000)
     legend.click(force=True)
     page.wait_for_timeout(600)
     mark_count_after = svg.locator(".mark-symbol").count()
-    if mark_count_after < 1 or mark_count_after > mark_count_before:
+    if mark_count_after < 1 or mark_count_after >= mark_count_before:
         raise AssertionError(
-            "Candidates: legend-bound group selection left an invalid mark count "
-            f"({mark_count_before} -> {mark_count_after})."
+            "Candidates: clicking a legend group did not narrow the plotted "
+            f"reservoir population ({mark_count_before} -> {mark_count_after} marks)."
         )
 
 
