@@ -186,7 +186,7 @@ def _verify_candidate_scatter_interactions(page) -> None:
         control = page.get_by_role("combobox", name=label)
         control.scroll_into_view_if_needed()
         control.click()
-        page.get_by_role("option", name=value, exact=True).click()
+        page.get_by_text(value, exact=True).last.click(timeout=15_000)
         page.wait_for_timeout(500)
 
     chart_frame = None
