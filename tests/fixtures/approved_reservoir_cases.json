@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "schema_version": 1,
+      "source": {
+        "file": "eor_latest.pdf",
+        "page": 2,
+        "pages_total": 8,
+        "source_type": "Historical EOR Atlas / Power BI Desktop screenshot",
+        "source_created_at": "2026-08-28",
+        "scope": "Legacy screening snapshot. It is not an approved output baseline for the current Hybrid Intelligence pipeline."
+      },
+      "case_id": "legacy-sandstone-screening-snapshot",
+      "formation": "Sandstone",
+      "inputs": {
+        "api_deg": 39.4,
+        "viscosity_cp": 1,
+        "depth_ft": 4271,
+        "temperature_c": 103,
+        "permeability_md": 114,
+        "porosity_fraction": 0.2,
+        "reservoir_pressure_psia": 2078,
+        "ooip_mmstb": 111,
+        "base_recovery_factor_pct": 35,
+        "drive_mechanism": "Combination Drive",
+        "salinity_tds_ppm": null,
+        "hardness_ca_mg_ppm": null,
+        "initial_oil_saturation_pct_pv": null,
+        "gas_availability": null,
+        "oxygen_present": null
+      },
+      "reported_outputs": {
+        "methods_passing": 0,
+        "methods_failing": 0,
+        "total_methods": 9,
+        "recommended_method": "No methods pass",
+        "incremental_recovery_factor_pct": 16.5,
+        "incremental_cr_mmstb": 56.84
+      },
+      "comparison": {
+        "simple_ooip_times_incremental_rf_mmstb": 18.315,
+        "reported_cr_minus_simple_calculation_mmstb": 38.525,
+        "status": "REVIEW_REQUIRED",
+        "current_engine_parity": "NOT_COMPARABLE",
+        "blockers": [
+          "The screenshot does not expose all current Excel Gate inputs, including TDS, hardness, current oil saturation, gas availability and oxygen status.",
+          "The historical screenshot's 16.50% incremental recovery factor does not reconcile to 56.84 MMstb when multiplied by its displayed 111 MMstb OOIP (simple calculation: 18.315 MMstb).",
+          "The screenshot is a legacy Power BI view and does not provide technique-level result rows, CatBoost class probabilities or Decision Fusion outputs."
+        ]
+      }
+    }
+  ]
+}
