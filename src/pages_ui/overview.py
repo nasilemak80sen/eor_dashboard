@@ -1,11 +1,13 @@
-"""Executive Overview page."""
+"""Executive Overview page and visual benchmark for EOR Atlas."""
 
 from __future__ import annotations
+
+from html import escape
 
 import pandas as pd
 import streamlit as st
 
-from ui.components import insight_cards, kpi_cards, metric_cards, section_title
+from ui.components import kpi_cards, metric_cards, section_title
 
 
 def _find_column(df: pd.DataFrame, aliases: tuple[str, ...]) -> str | None:
@@ -57,42 +59,104 @@ def _map_summary(map_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return field_summary, method_table
 
 
-def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
+def _render_primary_kpis(
+    *,
+    fields: int,
+    reservoirs: int,
+    rf_gap_total: float | None,
+    mapped_fields: int,
+    eor_methods: int,
+) -> None:
+    """Establish the page's primary and supporting KPI hierarchy."""
     section_title(
-        "Portfolio Snapshot",
-        "Start with geography and concentration, then drill into field-level EOR evidence.",
+        "Portfolio at a glance",
+        "Start with the size of the screening universe, then use the map and opportunity signals to choose where to look closer.",
     )
+    kpi_cards(
+        [
+            ("Fields", fields, "Portfolio coverage"),
+            ("Reservoirs", reservoirs, "Screening universe"),
+            (
+                "RF Gap",
+                "—" if rf_gap_total is None else f"{rf_gap_total:,.1f}",
+                "Workbook aggregate; not a project-level forecast",
+            ),
+        ]
+    )
+
+    supporting_left, supporting_right = st.columns(2)
+    with supporting_left:
+        metric_cards(
+            [("Mapped fields", mapped_fields, "Coordinate-enriched field records")],
+            columns=1,
+            tone="blue",
+        )
+    with supporting_right:
+        metric_cards(
+            [("EOR methods", eor_methods, "Distinct methods in the field map")],
+            columns=1,
+            tone="accent",
+        )
+
+
+def _render_source_availability(workbook_ready: bool, map_ready: bool) -> None:
+    """Show only source availability states that are checked on this page."""
+    items = [
+        ("Portfolio workbook", workbook_ready),
+        ("Field coordinates", map_ready),
+    ]
+    html = []
+    for label, ready in items:
+        status = "Available" if ready else "Needs attention"
+        state_class = "ready" if ready else "warning"
+        html.append(
+            f'<div class="atlas-overview-status">'
+            f'<span class="atlas-overview-status-label">{escape(label)}</span>'
+            f'<span class="atlas-overview-status-value {state_class}">{status}</span>'
+            f"</div>"
+        )
+    st.markdown(
+        '<div class="atlas-overview-status-grid">' + "".join(html) + "</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
     fields, methods = _map_summary(map_df)
     if fields.empty:
-        st.warning("The workbook map sheet does not contain the expected field and coordinate structure.")
+        st.warning(
+            "The workbook map sheet does not contain the expected field and coordinate structure."
+        )
         return
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Mapped fields", len(fields))
-    c2.metric("EOR methods", int(methods["EOR Method"].nunique()) if not methods.empty else 0)
-    c3.metric("Mapped coordinates", int(map_df.shape[0]))
-
-    section_title("EOR Method Coverage", "Unique mapped fields associated with each method.")
-    if methods.empty:
-        st.info("No EOR method records are available.")
-    else:
-        coverage_cards = [
-            (
-                str(row["EOR Method"]),
-                int(row["Fields"]),
-                f'{float(row["Mapped Field Share (%)"]):.1f}% of mapped fields',
-            )
-            for _, row in methods.iterrows()
-        ]
-        metric_cards(coverage_cards, columns=min(4, len(coverage_cards)), tone="accent")
-
     section_title(
-        "Portfolio Geography",
-        "Explore the EOR field footprint directly on the interactive 3D Earth.",
+        "Portfolio geography",
+        "Explore the field footprint on the interactive 3D Earth. Select a field to focus the map, or leave the full portfolio in view.",
     )
+    focus_col, context_col = st.columns([1.05, 2.2], vertical_alignment="bottom")
     focus_options = ["All fields"] + sorted(fields["Field"].tolist(), key=str.casefold)
-    focus = st.selectbox("Field focus", focus_options, key="overview_spatial_focus")
+    with focus_col:
+        focus = st.selectbox(
+            "Field focus",
+            focus_options,
+            key="overview_spatial_focus",
+        )
     visible = fields if focus == "All fields" else fields.loc[fields["Field"] == focus].copy()
+
+    with context_col:
+        scope_label = (
+            "All mapped fields"
+            if focus == "All fields"
+            else f"Focused field: {focus}"
+        )
+        st.markdown(
+            f'<div class="atlas-overview-map-context">'
+            f'<span class="atlas-overview-map-context-label">CURRENT MAP SCOPE</span>'
+            f'<span class="atlas-overview-map-context-value">{escape(scope_label)}</span>'
+            f'<span class="atlas-overview-map-context-note">{len(visible):,} mapped fields · {int(map_df.shape[0]):,} map records</span>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
     if visible.empty:
         st.info("No mapped fields are available for the selected focus.")
@@ -107,6 +171,8 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
 
     from ui.openglobus import render_openglobus_map
 
+    # Keep the WebGL component visible in the page flow, never inside hidden tabs.
+    # Its field payload, details, camera height and rendering options are unchanged.
     render_openglobus_map(
         visible,
         latitude="Latitude",
@@ -131,9 +197,102 @@ def _render_spatial_snapshot(map_df: pd.DataFrame) -> None:
     )
 
 
+def _render_method_coverage(methods: pd.DataFrame) -> None:
+    section_title(
+        "EOR method coverage",
+        "Compare how many mapped fields are associated with each method. Coverage describes the source map, not engineering eligibility.",
+    )
+    if methods.empty:
+        st.info("No EOR method records are available.")
+        return
+
+    coverage_cards = [
+        (
+            str(row["EOR Method"]),
+            int(row["Fields"]),
+            f'{float(row["Mapped Field Share (%)"]):.1f}% of mapped fields',
+        )
+        for _, row in methods.iterrows()
+    ]
+    metric_cards(coverage_cards, columns=min(4, len(coverage_cards)), tone="accent")
+
+
+def _render_opportunity_concentration(df: pd.DataFrame | None) -> None:
+    section_title(
+        "Opportunity concentration",
+        "Field-level RF Gap aggregation is a portfolio prioritisation signal. Validate individual reservoirs through the Engineering Gate before making a technical recommendation.",
+    )
+    if isinstance(df, pd.DataFrame) and not df.empty and {"Field", "RF Gap"}.issubset(df.columns):
+        temp = df[["Field", "RF Gap"]].copy()
+        temp["RF Gap"] = pd.to_numeric(temp["RF Gap"], errors="coerce")
+        ranked = temp.dropna().groupby("Field")["RF Gap"].sum().sort_values(ascending=False).reset_index()
+        try:
+            import altair as alt
+            chart = alt.Chart(ranked.head(12)).mark_bar().encode(
+                x=alt.X("RF Gap:Q", title="Aggregate RF Gap"),
+                y=alt.Y("Field:N", sort="-x", title=None),
+                tooltip=["Field", alt.Tooltip("RF Gap:Q", format=",.1f")],
+            ).properties(height=440).interactive()
+            st.altair_chart(chart, use_container_width=True)
+        except Exception:
+            st.dataframe(ranked.head(12), use_container_width=True, hide_index=True)
+    else:
+        st.info("Field RF-gap data is unavailable.")
+
+
+def _navigate_to_page(page: str) -> None:
+    """Use the existing application route state for page-level shortcuts."""
+    st.session_state["atlas_page"] = page
+    st.rerun()
+
+
+def _render_workflow_shortcuts() -> None:
+    section_title(
+        "Continue the engineering workflow",
+        "Move from portfolio discovery to reservoir-level assessment. These shortcuts open existing pages and do not execute screening or model inference.",
+    )
+    actions = [
+        (
+            "01",
+            "Discover candidates",
+            "Filter the reservoir population and review field-level properties.",
+            "candidates",
+            "Explore candidates",
+        ),
+        (
+            "02",
+            "Run engineering screening",
+            "Evaluate a selected reservoir using the deterministic Excel Gate.",
+            "screening",
+            "Open screening",
+        ),
+        (
+            "03",
+            "Review hybrid intelligence",
+            "Inspect model-supported ranking after engineering feasibility is established.",
+            "intelligence",
+            "Open intelligence",
+        ),
+    ]
+    columns = st.columns(3)
+    for column, (step, title, description, page, button_label) in zip(columns, actions):
+        with column:
+            with st.container(border=True):
+                st.markdown(f'<div class="atlas-overview-action-step">{step}</div>', unsafe_allow_html=True)
+                st.markdown(f"**{title}**")
+                st.caption(description)
+                if st.button(
+                    button_label,
+                    key=f"overview_go_{page}",
+                    use_container_width=True,
+                ):
+                    _navigate_to_page(page)
+
+
 def render() -> None:
     import app_2 as _app
 
+    # Keep the established workbook source and field/reservoir calculations.
     workbook = _app.WorkbookRepository.load_workbook()
     df = workbook.get("PROP_updatedNov25_v2") if isinstance(workbook, dict) else None
     map_df = workbook.get("map") if isinstance(workbook, dict) else None
@@ -142,75 +301,32 @@ def render() -> None:
     rf_gap_total = pd.to_numeric(df["RF Gap"], errors="coerce").sum() if isinstance(df, pd.DataFrame) and "RF Gap" in df.columns else None
     mapped, methods = _map_summary(map_df) if isinstance(map_df, pd.DataFrame) else (pd.DataFrame(), pd.DataFrame())
 
-    kpi_cards([
-        ("Fields", fields, "Portfolio coverage"),
-        ("Reservoirs", reservoirs, "Screening universe"),
-        ("Mapped fields", len(mapped), "Coordinate-enriched map"),
-        ("EOR methods", int(methods["EOR Method"].nunique()) if not methods.empty else 0, "Mapped taxonomy"),
-        ("RF Gap", "—" if rf_gap_total is None else f"{rf_gap_total:,.1f}", "Workbook aggregate"),
-    ])
+    _render_primary_kpis(
+        fields=fields,
+        reservoirs=reservoirs,
+        rf_gap_total=rf_gap_total,
+        mapped_fields=len(mapped),
+        eor_methods=int(methods["EOR Method"].nunique()) if not methods.empty else 0,
+    )
 
-    readiness = [
-        ("Workbook", isinstance(workbook, dict), "Workbook is ready for portfolio review."),
-        ("Field map", isinstance(map_df, pd.DataFrame) and not map_df.empty, "Spatial view contains mapped coordinates."),
-        ("Decision flow", True, "Screening and hybrid intelligence remain available in the workflow."),
-    ]
-    cols = st.columns(3)
-    for col, (label, ready, note) in zip(cols, readiness):
-        with col:
-            state = "Ready" if ready else "Check"
-            tone = "ready" if ready else "warning"
-            st.markdown(
-                f'<div class="decision-summary-card"><div class="decision-summary-header"><div><div class="decision-summary-kicker">System</div><div class="decision-summary-title">{label}</div></div><span class="decision-summary-status {tone}">{state}</span></div><div class="decision-summary-subtitle">{note}</div></div>',
-                unsafe_allow_html=True,
-            )
+    workbook_ready = isinstance(workbook, dict)
+    map_source_available = isinstance(map_df, pd.DataFrame) and not map_df.empty
+    map_ready = not mapped.empty
+    _render_source_availability(workbook_ready, map_ready)
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
 
-    # Keep the WebGL component outside st.tabs. A visible, normal page
-    # container gives the WebGL iframe a stable size during initialization.
-    # The proven competency dashboard also renders its globe in a normal
-    # visible page container.
-    if isinstance(map_df, pd.DataFrame) and not map_df.empty:
+    # The WebGL map remains in a stable visible page container, outside tabs.
+    if map_source_available:
         _render_spatial_snapshot(map_df)
     else:
         st.info("The workbook map sheet is unavailable in this session.")
 
     st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
-    signals_tab, journey_tab = st.tabs(["Opportunity Signals", "Decision Journey"])
+    _render_method_coverage(methods)
 
-    with signals_tab:
-        left, right = st.columns([1.4, 1])
-        with left:
-            section_title("Opportunity Concentration", "Use field aggregation as a prioritisation signal, then validate at reservoir level.")
-            if isinstance(df, pd.DataFrame) and not df.empty and {"Field", "RF Gap"}.issubset(df.columns):
-                temp = df[["Field", "RF Gap"]].copy()
-                temp["RF Gap"] = pd.to_numeric(temp["RF Gap"], errors="coerce")
-                ranked = temp.dropna().groupby("Field")["RF Gap"].sum().sort_values(ascending=False).reset_index()
-                try:
-                    import altair as alt
-                    chart = alt.Chart(ranked.head(12)).mark_bar().encode(
-                        x=alt.X("RF Gap:Q", title="Aggregate RF Gap"),
-                        y=alt.Y("Field:N", sort="-x", title=None),
-                        tooltip=["Field", alt.Tooltip("RF Gap:Q", format=",.1f")],
-                    ).properties(height=440).interactive()
-                    st.altair_chart(chart, use_container_width=True)
-                except Exception:
-                    st.dataframe(ranked.head(12), use_container_width=True, hide_index=True)
-            else:
-                st.info("Field RF-gap data is unavailable.")
-        with right:
-            section_title("Decision Pulse", "The dashboard should always make the next decision step obvious.")
-            insight_cards([
-                ("01", "Discover", "Narrow candidate reservoirs and locate portfolio concentration."),
-                ("02", "Screen", "Run the deterministic engineering gate on a selected reservoir."),
-                ("03", "Decide", "Use hybrid intelligence only after engineering feasibility is established."),
-            ])
+    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    _render_opportunity_concentration(df)
 
-    with journey_tab:
-        section_title("Decision Journey", "A consistent evidence chain across the application.")
-        journey = pd.DataFrame({
-            "Stage": ["Portfolio", "Candidates", "Engineering Gate", "Hybrid Intelligence", "Insights"],
-            "What the user sees": ["Where opportunity sits", "Which reservoirs are worth review", "Why techniques pass or fail", "How ML changes the ranking", "What to do next"],
-        })
-        st.dataframe(journey, use_container_width=True, hide_index=True)
+    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    _render_workflow_shortcuts()

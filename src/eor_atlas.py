@@ -86,7 +86,7 @@ def main() -> None:
     initialize_ui()
     services = _safe_services()
     page = select_page(_system_state(services))
-    render_shell_header()
+    render_shell_header(services)
     kicker, title, subtitle = PAGE_META.get(page, PAGE_META["overview"])
     render_page_intro(kicker, title, subtitle)
     _render_page(page, services)

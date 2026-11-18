@@ -9,6 +9,8 @@ import streamlit as st
 from data.rd_lab_evidence import load_st_jos_ceor
 from data.baronia_wag_evidence import load_baronia_wag
 from data.ceor_evidence import load_ceor_evidence
+from ui.components import render_evidence_provenance
+
 from pages_ui.ceor import (
     _render_adsorption as _render_primary_adsorption,
     _render_coreflood as _render_primary_coreflood,
@@ -881,6 +883,16 @@ def _render_wag() -> None:
             st.exception(exc)
         return
 
+    metadata = data.get("metadata", {}) or {}
+    render_evidence_provenance(
+        source_name=metadata.get("workbook_name") or "Baronia WAG workbook",
+        worksheets=metadata.get("sheet_names") or metadata.get("sheets"),
+        evidence_scope="Baronia IWAG field and core evidence",
+        field_attribution="Source report and target reservoir as recorded in the workbook",
+        source_reference=metadata.get("workbook_sha256"),
+        note=f"Input mode: {metadata.get('workbook_source_kind', 'Not specified')} · Source report: {metadata.get('source_report', 'Not specified')}",
+    )
+
     field_name = _wag_lookup(data["summary_field"], "Field Name", key_col="Item", value_col="Value")
     target = _wag_lookup(data["summary_metrics"], "Target Reservoir", key_col="Metric", value_col="Value")
     stoiip = _wag_lookup(data["summary_metrics"], "STOIIP (RV2)", key_col="Metric", value_col="Value")
@@ -1179,6 +1191,16 @@ def _render_ceor() -> None:
         with st.expander("Technical detail"):
             st.exception(exc)
         return
+
+    metadata = data.get("metadata", {}) or {}
+    render_evidence_provenance(
+        source_name=metadata.get("workbook_name") or "EOR_Screening_Tool_2026.xlsx",
+        worksheets=metadata.get("sheets"),
+        evidence_scope="Field-tagged and shared CEOR experiments",
+        field_attribution="Explicit source tags only; unlabelled experiments remain shared evidence",
+        source_reference=metadata.get("workbook_sha256"),
+        note="The field selector does not infer attribution for shared Fluid–Fluid, Coreflood or Sor evidence.",
+    )
 
     field_names = list(data["metadata"].get("fields") or [])
     fields = _ceor_field_options(field_names)

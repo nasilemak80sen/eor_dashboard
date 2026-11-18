@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from html import escape
+import re
 from typing import Any, Iterable, Mapping
 
 import streamlit as st
@@ -192,3 +194,90 @@ def context_bar(field: str | None, reservoir: str | None, extra: Mapping[str, An
         f'<div class="context-bar"><div><div class="context-label">Selected Reservoir</div><div class="context-value">{escape(identity)}</div></div><div style="color:{MUTED};font-size:.76rem;">{escape(right)}</div></div>',
         unsafe_allow_html=True,
     )
+
+
+
+def render_detail_drawer(title: str, subtitle: str, details: Iterable[tuple[str, Any]], *, columns: int = 2) -> None:
+    """Render a reusable right-column detail drawer without changing source data."""
+    materialized = list(details)
+    with st.container(border=True):
+        st.markdown(f"#### {escape(title)}")
+        if subtitle:
+            st.caption(subtitle)
+        ncols = max(1, min(int(columns), 4))
+        cells = st.columns(ncols)
+        for index, (label, value) in enumerate(materialized):
+            with cells[index % ncols]:
+                st.markdown(
+                    f'<div class="atlas-detail-label">{escape(str(label))}</div>'
+                    f'<div class="atlas-detail-value">{_display(value)}</div>',
+                    unsafe_allow_html=True,
+                )
+
+
+def render_evidence_provenance(*, source_name: str, worksheets: Iterable[str] | str | None = None,
+                               evidence_scope: str | None = None, field_attribution: str | None = None,
+                               source_reference: str | None = None, note: str | None = None) -> None:
+    """Render source facts supplied by the loader; never infer missing provenance."""
+    sheet_values = [worksheets] if isinstance(worksheets, str) else list(worksheets or [])
+    sheet_text = ", ".join(str(item) for item in sheet_values if item) or "Not specified"
+    reference = str(source_reference).strip() if source_reference else ""
+    if reference:
+        reference = reference[:16] + ("…" if len(reference) > 16 else "")
+    with st.container(border=True):
+        st.markdown("**Evidence provenance**")
+        st.caption("Source metadata supplied by the active evidence loader.")
+        meta_cols = st.columns(2)
+        with meta_cols[0]:
+            st.markdown("**Source workbook**")
+            st.write(source_name or "Not specified")
+            st.markdown("**Worksheets**")
+            st.write(sheet_text)
+        with meta_cols[1]:
+            st.markdown("**Evidence scope**")
+            st.write(evidence_scope or "Not specified")
+            st.markdown("**Field attribution**")
+            st.write(field_attribution or "See source-level field tags")
+        if reference:
+            st.caption(f"Source SHA-256 prefix: {reference}")
+        if note:
+            st.info(note)
+
+
+def render_saved_filter_controls(scope: str, widget_keys: Iterable[str]) -> None:
+    """Manage named filter snapshots for this Streamlit session.
+
+    Phase 1 presets are session-scoped, not shared across users or durable
+    across a new session or server restart.
+    """
+    slug = re.sub(r"[^a-zA-Z0-9_]+", "_", str(scope)).strip("_").lower() or "default"
+    storage_key = f"atlas_saved_filters_{slug}"
+    presets = st.session_state.setdefault(storage_key, {})
+    keys = tuple(widget_keys)
+    with st.expander("Saved filters", expanded=False):
+        name = st.text_input("Preset name", key=f"{storage_key}_name", placeholder="e.g. Mature carbonate candidates")
+        if st.button("Save current filters", key=f"{storage_key}_save"):
+            snapshot = {key: deepcopy(st.session_state[key]) for key in keys if key in st.session_state}
+            if not name.strip():
+                st.warning("Enter a name for this filter preset.")
+            elif not snapshot:
+                st.warning("Set at least one filter before saving a preset.")
+            else:
+                presets[name.strip()] = snapshot
+                st.session_state[storage_key] = presets
+                st.success(f"Saved filter preset: {name.strip()}")
+        if presets:
+            selected_name = st.selectbox("Available presets", sorted(presets), key=f"{storage_key}_selected")
+            apply_col, delete_col = st.columns(2)
+            with apply_col:
+                if st.button("Apply preset", key=f"{storage_key}_apply", type="primary"):
+                    for key, value in presets[selected_name].items():
+                        st.session_state[key] = deepcopy(value)
+                    st.rerun()
+            with delete_col:
+                if st.button("Delete preset", key=f"{storage_key}_delete"):
+                    presets.pop(selected_name, None)
+                    st.session_state[storage_key] = presets
+                    st.rerun()
+        else:
+            st.caption("No presets saved in this session yet.")

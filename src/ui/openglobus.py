@@ -86,6 +86,31 @@ def _normalise_records(
     return records
 
 
+def _marker_node_capacity(
+    records: Iterable[Mapping[str, Any]],
+    minimum_capacity: int = 60,
+) -> int:
+    """Keep colocated records in one quadtree leaf to prevent infinite subdivision.
+
+    OpenGlobus 0.28.7 recursively subdivides a vector node while its entity count
+    exceeds nodeCapacity. Reservoir records may intentionally share field-level
+    coordinates, so the capacity must be at least the largest coordinate cluster.
+    Six decimal places groups sub-metre coordinate jitter without changing markers.
+    """
+    coordinate_counts: dict[tuple[float, float], int] = {}
+    max_multiplicity = 0
+    for record in records:
+        latitude = _safe_float(record.get("latitude"))
+        longitude = _safe_float(record.get("longitude"))
+        if latitude is None or longitude is None:
+            continue
+        key = (round(latitude, 6), round(longitude, 6))
+        count = coordinate_counts.get(key, 0) + 1
+        coordinate_counts[key] = count
+        max_multiplicity = max(max_multiplicity, count)
+    return max(int(minimum_capacity), max_multiplicity + 1)
+
+
 def _build_openglobus_html(
     records: Iterable[Mapping[str, Any]],
     *,
@@ -102,6 +127,7 @@ def _build_openglobus_html(
     payload = json.dumps(record_list, ensure_ascii=False, separators=(",", ":")).replace(
         "</", "<\\/"
     )
+    node_capacity = _marker_node_capacity(record_list)
 
     template = r"""<!doctype html>
 <html lang="en">
@@ -169,6 +195,8 @@ const detailRows = document.getElementById("detailRows");
 let globe = null;
 let markerLayer = null;
 let selectedRecord = null;
+let initStage = "module setup";
+let entityBuildIndex = -1;
 
 const center = {lat: __CENTER_LAT__, lon: __CENTER_LON__, height: __CAMERA_HEIGHT__};
 let webglCanvas = null;
@@ -224,7 +252,12 @@ function renderDetails(record){
 
 function renderLayer(){
   if(!markerLayer) return;
-  const entities = records.map(record => {
+  initStage = "build marker entities (" + records.length + " records)";
+  entityBuildIndex = -1;
+  const entities = [];
+  for(let index = 0; index < records.length; index++){
+    entityBuildIndex = index;
+    const record = records[index];
     const selected = selectedRecord &&
       selectedRecord.name === record.name &&
       selectedRecord.latitude === record.latitude &&
@@ -246,9 +279,11 @@ function renderLayer(){
         outline: 2
       };
     }
-    return new Entity(entityOptions);
-  });
+    entities.push(new Entity(entityOptions));
+  }
+  initStage = "Vector.setEntities (" + entities.length + " entities)";
   markerLayer.setEntities(entities);
+  initStage = "Vector.setEntities complete";
 }
 
 function flyToRecord(record){
@@ -284,6 +319,7 @@ const osm = new OpenStreetMap("OpenStreetMap",{
 });
 
 try{
+  initStage = "create OpenGlobus globe";
   globe = new Globe({
     target:"globus",
     name:"EOR Atlas",
@@ -300,6 +336,7 @@ try{
     navigation:{mode:"north",inertia:.18,zoomSpeed:1.15}
   });
 
+  initStage = "verify WebGL canvas";
   webglCanvas = document.querySelector("#globus canvas");
   if(!webglCanvas){
     throw new Error("OpenGlobus created no WebGL canvas.");
@@ -315,11 +352,14 @@ try{
     console.info("OpenGlobus WebGL context restored");
   });
 
+  initStage = "create vector layer";
   markerLayer = new Vector("EOR Atlas Records",{
     entities:[],
     pickingEnabled:true,
-    async:true
+    async:true,
+    nodeCapacity: __NODE_CAPACITY__
   });
+  initStage = "attach vector layer to planet";
   markerLayer.addTo(globe.planet);
 
   if(control.KeyboardNavigation){
@@ -333,8 +373,39 @@ try{
     flyToRecord(picked.properties);
   });
 
+  // Test-only bridge, enabled by Playwright before the iframe loads. It dispatches
+  // the same renderer event used by OpenGlobus picking, without exposing test hooks
+  // during normal dashboard sessions.
+  if(window.__EOR_ATLAS_TEST__ === true) {
+    window.__eorAtlasMapTest = Object.freeze({
+    markerCount: () => markerLayer ? markerLayer.getEntities().length : 0,
+    markerInfo: index => {
+      const entity = markerLayer && markerLayer.getEntities()[Number(index)];
+      if(!entity || !entity.properties) return null;
+      const record = entity.properties;
+      return {
+        name: record.name,
+        latitude: record.latitude,
+        longitude: record.longitude,
+        details: record.details || {}
+      };
+    },
+    pickMarker: index => {
+      if(!globe || !globe.renderer || !markerLayer) return false;
+      const entity = markerLayer.getEntities()[Number(index)];
+      if(!entity || !entity.properties || !entity.properties.name) return false;
+      const events = globe.renderer.events;
+      if(!events || typeof events.dispatch !== "function" || !events.lclick) return false;
+      events.dispatch(events.lclick,{pickingObject:entity});
+      return selectedRecord === entity.properties;
+    }
+    });
+  }
+
+  initStage = "prepare reservoir marker layer";
   renderLayer();
 
+  initStage = "verify marker count";
   if(markerLayer.getEntities().length !== records.length){
     throw new Error(
       "EOR Atlas vector layer entity count mismatch: " +
@@ -344,7 +415,9 @@ try{
 
   // OpenGlobus 0.28.7 does not activate the renderer by default.
   // Starting it explicitly is required for the planet and vector layer to draw.
+  initStage = "start OpenGlobus renderer";
   globe.start();
+  initStage = "schedule initial camera";
   const resizeRenderer = () => {
     if(globe && globe.renderer && globe.renderer.isInitialized()){
       globe.renderer.resize();
@@ -365,7 +438,9 @@ try{
     "<b>3D Earth could not be initialized</b><br>" +
     "<span style='font-size:11px'>" +
     escapeHtml(error && error.message ? error.message : String(error)) +
-    "</span>";
+    "</span><br><span style='font-size:10px'>Diagnostic: " +
+    escapeHtml(initStage) + " · entity index " + entityBuildIndex +
+    " · records " + records.length + "</span>";
 }
 </script>
 </body>
@@ -381,6 +456,7 @@ try{
         .replace("__CENTER_LON__", str(float(center_lon)))
         .replace("__CAMERA_HEIGHT__", str(float(camera_height)))
         .replace("__SHOW_LABELS__", "true" if show_labels else "false")
+        .replace("__NODE_CAPACITY__", str(node_capacity))
         .replace("__TITLE__", _safe_text(title, "EOR Atlas Globe"))
         .replace("__SUBTITLE__", _safe_text(subtitle, "Interactive OpenGlobus map"))
         .replace("__PAYLOAD__", payload)

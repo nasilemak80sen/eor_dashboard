@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from ui.components import insight_cards, reset_button, section_title
+from ui.components import page_header, reset_button
 
 
 
@@ -120,26 +120,22 @@ def render() -> None:
     import app_2 as _app
     from candidate_analytics import ui as candidate_ui
 
-    insight_cards([
-        ("FILTER", "Narrow the portfolio", "Filter by fluid, production state and engineering ranges; downstream visuals update from the same filtered set."),
-        ("RELATE", "Understand relationships", "Compare engineering properties with the interactive scatter plot and Field grouping."),
-        ("LOCATE", "See spatial concentration", "Use Heatmap for portfolio concentration or Scatter for reservoir-level location visibility."),
-    ])
-    st.markdown("<div class='atlas-divider'></div>", unsafe_allow_html=True)
+    page_header(
+        "WORKSPACE / PORTFOLIO",
+        "Candidates",
+        "Discover reservoir opportunities, compare property relationships and inspect field locations before entering an engineering decision workflow.",
+    )
+    action_col, _ = st.columns([1, 5])
+    with action_col:
+        reset_button(
+            "↺ Reset candidate filters",
+            prefixes="candidate_",
+            key="candidates_reset_explorer",
+        )
 
-    explore_tab, definitions_tab = st.tabs(["Candidate Explorer", "Data & Definitions"])
-    with explore_tab:
-        action_col, _ = st.columns([1, 4])
-        with action_col:
-            reset_button("↺ Reset explorer", prefixes="candidate_", key="candidates_reset_explorer")
-        section_title("Candidate Explorer", "Portfolio discovery only — no Excel Gate, fuzzy suitability or ML is executed here.")
-        try:
-            candidate_ui._render_candidate_map = _render_reactive_location_map
-            candidate_ui.render_field_reservoir_parameters_tab()
-        except Exception as exc:
-            _app.logger.exception("Candidate analytics failed")
-            st.error(f"Candidate analytics could not be rendered: {exc}")
-
-    with definitions_tab:
-        section_title("How to read this workspace", "Use this page to discover candidates and spatial patterns before engineering screening.")
-        st.markdown("**Filters** control the complete candidate population.\n\n**Relationship Explorer** compares engineering properties; marker size represents CR volume potential.\n\n**Candidate Location** uses longitude/latitude and offers a Heatmap or reservoir-level Scatter view.\n\n**Selected Reservoir Detail** is the hand-off point for reviewing a candidate before EOR Screening.")
+    try:
+        candidate_ui._render_candidate_map = _render_reactive_location_map
+        candidate_ui.render_field_reservoir_parameters_tab(show_header=False)
+    except Exception as exc:
+        _app.logger.exception("Candidate analytics failed")
+        st.error(f"Candidate analytics could not be rendered: {exc}")

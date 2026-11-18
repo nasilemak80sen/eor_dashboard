@@ -144,6 +144,33 @@ def inject_theme() -> None:
         .exec-kpi-card {{ background:#fff !important;border:1px solid var(--atlas-border);border-radius:16px;padding:1rem 1.05rem;min-height:112px;box-shadow:0 5px 18px rgba(16,24,40,.035);border-left:4px solid var(--petronas-green); }}
         .exec-kpi-label {{ color:#667085 !important;font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.45rem; }}
         .exec-kpi-value {{ color:#101828 !important;font-size:1.65rem;font-weight:700;line-height:1.05; }} .exec-kpi-subtext {{ color:#667085 !important;font-size:.74rem;margin-top:.42rem; }}
+        .nav-section-label {{ margin:.95rem .2rem .42rem;font-size:.64rem;font-weight:750;letter-spacing:.12em;text-transform:uppercase;color:rgba(234,247,246,.48); }}
+        .atlas-sidebar-caption {{ color:rgba(234,247,246,.48);font-size:.58rem;font-weight:700;letter-spacing:.11em;margin:-.6rem .25rem .7rem; }}
+        [data-testid="stSidebar"] div[data-testid="stButton"] > button {{ min-height:2.55rem;border-radius:10px;text-align:left !important;padding:.5rem .75rem;font-size:.82rem;font-weight:600; }}
+        .atlas-detail-label {{ color:#667085;font-size:.64rem;font-weight:750;letter-spacing:.06em;text-transform:uppercase;margin:.35rem 0 .12rem; }}
+        .atlas-detail-value {{ color:#172B33;font-size:.9rem;font-weight:650;line-height:1.35;overflow-wrap:anywhere; }}
+        @media(max-width:900px) {{
+            .atlas-brand-subtitle {{ font-size:.65rem; }}
+            [data-testid="stSidebar"] div[data-testid="stButton"] > button {{ min-height:2.35rem;font-size:.78rem; }}
+        }}
+        /* Executive Overview is the layout benchmark for subsequent workspace pages. */
+        .atlas-overview-status-grid {{ display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.65rem;margin:.8rem 0 1rem; }}
+        .atlas-overview-status {{ display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.68rem .82rem;background:#fff;border:1px solid var(--atlas-border);border-radius:12px; }}
+        .atlas-overview-status-label {{ color:#667085;font-size:.72rem;font-weight:650; }}
+        .atlas-overview-status-value {{ display:inline-flex;align-items:center;padding:.22rem .52rem;border-radius:999px;font-size:.65rem;font-weight:750;letter-spacing:.035em; }}
+        .atlas-overview-status-value.ready {{ color:#087443;background:#EAF7F0; }}
+        .atlas-overview-status-value.warning {{ color:#9A6700;background:#FFF6DF; }}
+        .atlas-overview-map-context {{ min-height:2.8rem;display:flex;align-items:center;gap:.65rem;flex-wrap:wrap;padding:.55rem .75rem;background:#fff;border:1px solid var(--atlas-border);border-radius:10px;margin-top:1.45rem; }}
+        .atlas-overview-map-context-label {{ color:#98A2B3;font-size:.6rem;font-weight:750;letter-spacing:.09em; }}
+        .atlas-overview-map-context-value {{ color:#18343D;font-size:.78rem;font-weight:700; }}
+        .atlas-overview-map-context-note {{ color:#667085;font-size:.7rem;margin-left:auto; }}
+        .atlas-overview-action-step {{ color:var(--petronas-green);font-size:.66rem;font-weight:800;letter-spacing:.12em;margin-bottom:.4rem; }}
+        .atlas-overview-primary .kpi-card {{ min-height:122px; }}
+        @media(max-width:900px) {{
+            .atlas-overview-status-grid {{ grid-template-columns:1fr; }}
+            .atlas-overview-map-context {{ margin-top:.2rem; }}
+            .atlas-overview-map-context-note {{ margin-left:0; }}
+        }}
         </style>
         """,
         unsafe_allow_html=True,
