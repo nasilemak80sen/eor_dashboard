@@ -140,6 +140,6 @@ Phase 1 presets are deliberately session-scoped to avoid introducing a new persi
 ### Browser interaction coverage
 
 - Added a non-visual test bridge in the OpenGlobus iframe that dispatches the same renderer `lclick` event used by the entity picker.
-- Expanded the Playwright browser check to select two distinct candidate reservoir entities, verify their individual detail-drawer identity and coordinates, close the drawer, hover a scatter mark for its field/reservoir tooltip, and click a legend-bound group selection.
+- Expanded the Playwright browser check to select two distinct candidate reservoir entities, verify their individual detail-drawer identity and coordinates, close the drawer, click a legend-bound group and verify that the plotted reservoir population is filtered.
 - These browser checks are committed but remain pending an actual CI browser run. A dispatched renderer event verifies the production selection handler; it is not a substitute for pixel-coordinate hit-testing by a physical pointer on the WebGL canvas.
 
