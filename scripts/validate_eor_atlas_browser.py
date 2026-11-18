@@ -206,44 +206,31 @@ def _verify_candidate_scatter_interactions(page) -> None:
             f"Candidates: scatter chart rendered only {mark_count_before} marks."
         )
 
-    legend = svg.locator(".role-legend-entry").first
-    legend.wait_for(state="visible", timeout=10_000)
+    legend_symbol = svg.locator(".role-legend-symbol path").first
+    legend_symbol.wait_for(state="visible", timeout=10_000)
+    legend_label = svg.locator(".role-legend-label text").first.inner_text()
     debug = {
         "frame_url": chart_frame.url,
         "embed_count": chart_frame.locator(".vega-embed").count(),
-        "legend_count": svg.locator(".role-legend-entry").count(),
-        "legend_before": legend.evaluate(
-            "(el) => ({tag:el.tagName, text:el.textContent, html:el.outerHTML, "
-            "className:el.getAttribute('class'), style:el.getAttribute('style'), "
+        "legend_symbol_count": svg.locator(".role-legend-symbol path").count(),
+        "legend_label": legend_label,
+        "legend_symbol_before": legend_symbol.evaluate(
+            "(el) => ({tag:el.tagName, className:el.parentElement.getAttribute('class'), "
+            "fill:el.getAttribute('fill'), stroke:el.getAttribute('stroke'), "
             "opacity:getComputedStyle(el).opacity, rect:(()=>{const r=el.getBoundingClientRect();"
             "return {x:r.x,y:r.y,width:r.width,height:r.height}})()})"
         ),
         "mark_count_before": mark_count_before,
-        "mark_sample_before": svg.locator(".mark-symbol").first.evaluate(
-            "(el) => ({tag:el.tagName, className:el.getAttribute('class'), "
-            "style:el.getAttribute('style'), opacity:getComputedStyle(el).opacity})"
-        ),
-        "legend_entries_before": svg.locator(".role-legend-entry").evaluate_all(
-            "(els) => els.slice(0,8).map(el=>({text:el.textContent, "
-            "opacity:getComputedStyle(el).opacity, style:el.getAttribute('style')}))"
-        ),
+        "mark_count_by_group_before": svg.locator(".mark-symbol.role-mark").count(),
     }
-    legend.click(force=True)
+    legend_symbol.click(force=True)
     page.wait_for_timeout(800)
-    mark_count_after = svg.locator(".mark-symbol").count()
+    mark_count_after = svg.locator(".mark-symbol.role-mark").count()
     debug.update({
         "mark_count_after": mark_count_after,
-        "legend_after": legend.evaluate(
-            "(el) => ({text:el.textContent, html:el.outerHTML, "
-            "opacity:getComputedStyle(el).opacity, style:el.getAttribute('style')})"
-        ),
-        "mark_sample_after": svg.locator(".mark-symbol").first.evaluate(
-            "(el) => ({className:el.getAttribute('class'), "
-            "style:el.getAttribute('style'), opacity:getComputedStyle(el).opacity})"
-        ),
-        "legend_entries_after": svg.locator(".role-legend-entry").evaluate_all(
-            "(els) => els.slice(0,8).map(el=>({text:el.textContent, "
-            "opacity:getComputedStyle(el).opacity, style:el.getAttribute('style')}))"
+        "legend_symbol_after": legend_symbol.evaluate(
+            "(el) => ({fill:el.getAttribute('fill'), stroke:el.getAttribute('stroke'), "
+            "opacity:getComputedStyle(el).opacity})"
         ),
     })
     REPORTS.mkdir(exist_ok=True)
