@@ -176,6 +176,19 @@ def _verify_candidate_scatter_interactions(page) -> None:
     relationship_heading = page.get_by_text("Relationship explorer", exact=True)
     relationship_heading.scroll_into_view_if_needed()
 
+    # The default Y axis is CR potential, which can be sparse when the source
+    # workbook has missing RF/STOIIP-derived values. Use two populated source
+    # engineering properties so this browser interaction checks real points.
+    for label, value in (
+        ("X-Axis Parameter", "Oil API"),
+        ("Y-Axis Parameter", "Avg Permeability (mD)"),
+    ):
+        control = page.get_by_role("combobox", name=label)
+        control.scroll_into_view_if_needed()
+        control.click()
+        page.get_by_role("option", name=value, exact=True).click()
+        page.wait_for_timeout(500)
+
     chart_frame = None
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline:
@@ -209,6 +222,23 @@ def _verify_candidate_scatter_interactions(page) -> None:
 
     mark_count_before = _plotted_mark_count()
     if mark_count_before < 2:
+        debug = {
+            "body_text_tail": page.locator("body").inner_text()[-4000:],
+            "mark_selector_count": marks.count(),
+            "mark_paths": marks.evaluate_all(
+                "(els) => els.slice(0,8).map(el=>({html:el.outerHTML, "
+                "path:el.getAttribute('d'), className:el.getAttribute('class')}))"
+            ),
+            "svg_text": svg.inner_text(),
+        }
+        REPORTS.mkdir(exist_ok=True)
+        (REPORTS / "candidate-chart-interaction-debug.json").write_text(
+            json.dumps(debug, indent=2), encoding="utf-8"
+        )
+        page.screenshot(
+            path=str(REPORTS / "eor-atlas-candidate-chart-interaction.png"),
+            full_page=False,
+        )
         raise AssertionError(
             f"Candidates: scatter chart rendered only {mark_count_before} plotted points."
         )
