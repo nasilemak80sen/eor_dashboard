@@ -251,7 +251,7 @@ def _verify_candidate_scatter_interactions(page) -> None:
         json.dumps(debug, indent=2), encoding="utf-8"
     )
     page.screenshot(
-        path=str(REPORTS / "candidate-chart-interaction.png"),
+        path=str(REPORTS / "eor-atlas-candidate-chart-interaction.png"),
         full_page=False,
     )
     if mark_count_after < 1 or mark_count_after >= mark_count_before:
