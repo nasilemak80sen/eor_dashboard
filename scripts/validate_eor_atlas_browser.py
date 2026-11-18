@@ -236,7 +236,7 @@ def _verify_candidate_scatter_interactions(page) -> None:
 
     legend_symbol = svg.locator(".role-legend-symbol path").first
     legend_symbol.wait_for(state="visible", timeout=10_000)
-    legend_label = svg.locator(".role-legend-label text").first.inner_text()
+    legend_label = svg.locator(".role-legend-label text").first.text_content() or ""
     debug = {
         "frame_url": chart_frame.url,
         "embed_count": chart_frame.locator(".vega-embed").count(),
