@@ -208,9 +208,52 @@ def _verify_candidate_scatter_interactions(page) -> None:
 
     legend = svg.locator(".role-legend-entry").first
     legend.wait_for(state="visible", timeout=10_000)
+    debug = {
+        "frame_url": chart_frame.url,
+        "embed_count": chart_frame.locator(".vega-embed").count(),
+        "legend_count": svg.locator(".role-legend-entry").count(),
+        "legend_before": legend.evaluate(
+            "(el) => ({tag:el.tagName, text:el.textContent, html:el.outerHTML, "
+            "className:el.getAttribute('class'), style:el.getAttribute('style'), "
+            "opacity:getComputedStyle(el).opacity, rect:(()=>{const r=el.getBoundingClientRect();"
+            "return {x:r.x,y:r.y,width:r.width,height:r.height}})()})"
+        ),
+        "mark_count_before": mark_count_before,
+        "mark_sample_before": svg.locator(".mark-symbol").first.evaluate(
+            "(el) => ({tag:el.tagName, className:el.getAttribute('class'), "
+            "style:el.getAttribute('style'), opacity:getComputedStyle(el).opacity})"
+        ),
+        "legend_entries_before": svg.locator(".role-legend-entry").evaluate_all(
+            "(els) => els.slice(0,8).map(el=>({text:el.textContent, "
+            "opacity:getComputedStyle(el).opacity, style:el.getAttribute('style')}))"
+        ),
+    }
     legend.click(force=True)
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(800)
     mark_count_after = svg.locator(".mark-symbol").count()
+    debug.update({
+        "mark_count_after": mark_count_after,
+        "legend_after": legend.evaluate(
+            "(el) => ({text:el.textContent, html:el.outerHTML, "
+            "opacity:getComputedStyle(el).opacity, style:el.getAttribute('style')})"
+        ),
+        "mark_sample_after": svg.locator(".mark-symbol").first.evaluate(
+            "(el) => ({className:el.getAttribute('class'), "
+            "style:el.getAttribute('style'), opacity:getComputedStyle(el).opacity})"
+        ),
+        "legend_entries_after": svg.locator(".role-legend-entry").evaluate_all(
+            "(els) => els.slice(0,8).map(el=>({text:el.textContent, "
+            "opacity:getComputedStyle(el).opacity, style:el.getAttribute('style')}))"
+        ),
+    })
+    REPORTS.mkdir(exist_ok=True)
+    (REPORTS / "candidate-chart-interaction-debug.json").write_text(
+        json.dumps(debug, indent=2), encoding="utf-8"
+    )
+    page.screenshot(
+        path=str(REPORTS / "candidate-chart-interaction.png"),
+        full_page=False,
+    )
     if mark_count_after < 1 or mark_count_after >= mark_count_before:
         raise AssertionError(
             "Candidates: clicking a legend group did not narrow the plotted "
